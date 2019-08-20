@@ -1,0 +1,13 @@
+[package]
+name = "base-rates"
+version = "0.1.0"
+authors = ["Simon Eskildsen <sirup@sirupsen.com>"]
+edition = "2018"
+
+[dev-dependencies]
+criterion = "0.2"
+byte-unit = "3.0"
+
+[[bench]]
+name = "base_rates"
+harness = false
