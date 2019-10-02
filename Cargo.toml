@@ -10,3 +10,4 @@ rand = { features = ["small_rng"], version = "0.7.0" }
 num-format = "0.4.0"
 failure = "*"
 page_size = "*"
+redis = "*"
