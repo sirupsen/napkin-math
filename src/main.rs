@@ -252,7 +252,7 @@ fn main() {
     disk_write_sequential_fsync();
 
     tcp_read_write();
-    redis_read_single_key();
+    // redis_read_single_key();
 }
 
 fn memory_write_sequential() {
