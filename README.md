@@ -9,6 +9,10 @@ Base rates are useful for determining the expected performance of a system.
 Run with `cargo run --release`. You won't get the right numbers when you're
 compiling in debug mode.
 
+[Slides from a talk on the
+subject](https://speakerdeck.com/sirupsen/advanced-napkin-math-estimating-systems-performance-from-first-principles).
+Video will appear in the README when it's available.
+
 ## TODO
 
 Lots more to add, feel free to help, for example... 
