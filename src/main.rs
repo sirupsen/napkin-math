@@ -409,6 +409,7 @@ fn disk_write_sequential_fsync() {
     let result = benchmark(
         || {
             let file = OpenOptions::new()
+                .create(true)
                 .write(true)
                 .truncate(true)
                 .open(file_name)
@@ -441,6 +442,7 @@ fn disk_write_sequential_no_fsync() {
     let result = benchmark(
         || {
             let file = OpenOptions::new()
+                .create(true)
                 .write(true)
                 .truncate(true)
                 .open(file_name)
