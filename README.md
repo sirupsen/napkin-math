@@ -40,3 +40,17 @@ rounded to make them more memorable.
 | Envoy/Nginx Overhead                   | ?       | ?          | ?      | ?      |
 | {JSON, Protobuf, ..} Serializee (?)    | ?       | ?          | ?      | ?      |
 | Cloud us-east to us-central            | ?       | ?          | ?      | ?      |
+
+
+## Cost Numbers
+
+Approximate numbers that should be consistent between Cloud providers.
+
+| What        | Amount | $ / Month |
+|-------------|--------|-----------|
+| CPU         | 1      | $10       |
+| Memory      | 1 GB   | $1        |
+| SSD         | 1 GB   | $0.1      |
+| Disk        | 1 GB   | $0.01     |
+| S3, GCS, .. | 1 GB   | $0.01     |
+| Network     | 1 GB   | $0.01     |
