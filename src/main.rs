@@ -252,7 +252,7 @@ fn main() {
     disk_write_sequential_fsync();
 
     tcp_read_write();
-    // redis_read_single_key();
+    //redis_read_single_key();
 }
 
 fn memory_write_sequential() {
@@ -504,10 +504,12 @@ fn disk_read_sequential() {
 }
 
 fn disk_read_random() {
+    const BUF_SIZE: usize = n_kib_bytes!(8) as usize;
+
     struct Test {
         rng: SmallRng,
         file_length: u64,
-        buffer: [u8; 64],
+        buffer: [u8; BUF_SIZE],
         pages: Vec<u64>,
         i: usize,
         file: std::fs::File,
@@ -537,7 +539,7 @@ fn disk_read_random() {
             }
             pages.shuffle(&mut thread_rng());
 
-            let buffer: [u8; 64] = [0; 64];
+            let buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
             let metadata = fs::metadata(file_name).unwrap();
 
             Test {
@@ -563,7 +565,7 @@ fn disk_read_random() {
     )
     .unwrap();
 
-    result.print_results("Random Disk Seek, No Page Cache <64b>", 64);
+    result.print_results("Random Disk Seek, No Page Cache <8KiB>", BUF_SIZE);
 }
 
 fn tcp_read_write() {
