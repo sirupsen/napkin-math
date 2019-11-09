@@ -45,7 +45,7 @@ rounded to make them more memorable.
 | {JSON, Protobuf, ..} Serializee (?)    | ?       | ?          | ?      | ?      |
 | Cloud us-east to us-central            | ?       | ?          | ?      | ?      |
 
-You can run this with `cargo run --release`. You won't get the right numbers
+You can run this with `RUSTFLAGS='-C target-cpu=native' cargo run --release`. You won't get the right numbers
 when you're compiling in debug mode. You can help this project by adding new
 suites and filling out the blanks.
 
