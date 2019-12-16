@@ -36,6 +36,8 @@ use std::io;
 #[allow(unused_imports)]
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::__rdtscp;
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
 
 // TODO: use this instead
 // from bencher::black_box, avoid compiler dead-code optimizations.
@@ -101,10 +103,10 @@ impl BenchmarkResult {
 
         // TODO handle less than 1ns
         let single_operation_nanoseconds =
-            Duration::from_nanos(self.duration.as_nanos() as u64 / self.iterations as u64);
+            Duration::from_nanos(self.iterations as u64 / self.duration.as_nanos() as u64);
 
         let time_unit = if single_operation_nanoseconds.as_nanos() <= 10 {
-            format!("{:.3} ns", self.duration.as_nanos() as f64 / self.iterations as f64)
+            format!("{:.3} ns",  self.iterations as f64 / self.duration.as_nanos() as f64)
         } else {
             self.get_appropriate_time_unit(single_operation_nanoseconds)
         };
@@ -278,19 +280,19 @@ fn memory_write_sequential() {
 }
 
 fn memory_read_sequential() {
-    let size_per_value = std::mem::size_of::<usize>();
-    let size_in_elements = (n_gib_bytes!(1) as usize / size_per_value) as usize;
+    let bytes_per_iteration = 64;
+    let size_in_elements = (n_gb_bytes!(1) as u64 / bytes_per_iteration) as u64;
 
     struct Test {
         i: usize,
-        vec: Vec<usize>,
+        vec: Vec<[u64; 8]>,
     }
 
     let result = benchmark(
         || {
-            let mut vec: Vec<usize> = Vec::new();
+            let mut vec: Vec<[u64; 8]> = Vec::new();
             for i in 0..size_in_elements {
-                vec.push(i)
+                vec.push([i, i, i, i, i, i, i, i])
             }
 
             Test { i: 0, vec }
@@ -309,7 +311,7 @@ fn memory_read_sequential() {
     )
     .unwrap();
 
-    result.print_results("Read Seq Vec<usize>", std::mem::size_of::<usize>());
+    result.print_results("Read Seq Vec<64 bytes>", bytes_per_iteration as usize);
 }
 
 // TODO: not sure how much this one matters now, def can't do the gen random.
@@ -660,6 +662,24 @@ fn tcp_read_write() {
     }).unwrap();
 
     result.print_results("Tcp Echo <64b>", 64);
+}
+
+#[derive(Clone, Copy)]
+#[allow(non_camel_case_types)]
+pub union i32simd {
+    vector: __m256i,
+    numbers: [u32; 8],
+}
+
+fn simd() {
+    unsafe {
+        let a = i32simd { vector: _mm256_set_epi32(1, 2, 3, 4, 5, 6, 7, 8) };
+        let b = i32simd { vector: _mm256_set_epi32(1, 2, 3, 4, 5, 6, 7, 8) };
+        let result = i32simd { vector: _mm256_mul_epi32(a.vector, b.vector) };
+        let result2 = i32simd { vector: _mm256_mullo_epi32(a.vector, b.vector) };
+        println!("{:?}", result.numbers);
+        println!("{:?}", result2.numbers);
+    }
 }
 
 fn redis_read_single_key() {
