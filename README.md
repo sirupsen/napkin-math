@@ -28,18 +28,17 @@ rounded to make them more memorable.
 
 | Operation                              | Latency | Throughput | 1 MiB  | 1 GiB  |
 |----------------------------------------|---------|------------|--------|--------|
-| Sequential Memory Read (64 bit)        | 1 ns    | 6 GiB/s    | 100 us | 100 ms |
-| Sequential Memory Writes (64 bit)      | 5 ns    | 1.5 GiB/s  | 500 us | 500 ms |
-| Random Memory Read (64 bit)            | 25 ns   | 300 MiB/s  | 3.5 ms | 3.5 s  |
+| Sequential Memory R/W (64 bytes)       | 5 ns    | 10 GiB/s   | 100 us | 100 ms |
+| Random Memory R/W (64 bytes)           | 50 ns   | 1 GiB/s    | 1 ms   | 1 s    |
+| Sequential SSD Read (8 KiB)            | 1 μs    | 4 GiB/s    | 200 us | 200 ms |
+| Sequential SSD write, -fsync (8KiB)    | 10 μs   | 1 GiB/s    | 1 ms   | 1 s    |
+| TCP Echo (TCP overhead) (64 bytes)     | 15 μs   | ?          | ?      | ?      |
+| Random SSD Seek (8 KiB)                | 100 μs  | 70 MiB/s   | 10 ms  | 15 s   |
+| Cloud us-east1 to us-east2             | 250 μs  | ?          | ?      | ?      |
+| Sequential SSD write, +fsync (8KiB)    | 5 ms    | 2 MiB/s    | 1 s    | 10 min |
 | Mutex Lock/Unlock                      | ?       | ?          | ?      | ?      |
-| Random Memory Write (64 bit)           | ?       | ?          | ?      | ?      |
-| Sequential SSD Read (8kb)              | 1 us    | 4 GiB/s    | 200 us | 200 ms |
-| TCP Echo (TCP overhead) (64 bytes)     | 15 us   | ?          | ?      | ?      |
-| Sequential SSD write, -fsync (16KiB)   | 30 us   | 2 MiB/s    | 500 ms | 10 min |
 | {Snappy, Gzip, ..} Compression (? KiB) | ?       | ?          | ?      | ?      |
 | Hashing (? bytes)                      | ?       | ?          | ?      | ?      |
-| Random SSD Seek (64 bytes)             | 100 us  | 70 MiB/s   | 10 ms  | 15 s   |
-| Cloud us-east1 to us-east2             | 250 us  | ?          | ?      | ?      |
 | {MySQL, Memcached, Redis, ..} Query    | ?       | ?          | ?      | ?      |
 | Envoy/Nginx Overhead                   | ?       | ?          | ?      | ?      |
 | {JSON, Protobuf, ..} Serializee (?)    | ?       | ?          | ?      | ?      |

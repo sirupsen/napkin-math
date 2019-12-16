@@ -103,10 +103,10 @@ impl BenchmarkResult {
 
         // TODO handle less than 1ns
         let single_operation_nanoseconds =
-            Duration::from_nanos(self.iterations as u64 / self.duration.as_nanos() as u64);
+            Duration::from_nanos(self.duration.as_nanos() as u64 / self.iterations as u64);
 
         let time_unit = if single_operation_nanoseconds.as_nanos() <= 10 {
-            format!("{:.3} ns",  self.iterations as f64 / self.duration.as_nanos() as f64)
+            format!("{:.3} ns",  self.duration.as_nanos() as f64 / self.iterations as f64)
         } else {
             self.get_appropriate_time_unit(single_operation_nanoseconds)
         };
@@ -242,41 +242,48 @@ fn benchmark<T, F: Fn() -> (T), V: FnMut(&mut T) -> bool>(
 
 // TODO: take args for how long to perform tests
 fn main() {
-    //TODO pass in size of heap + values
     memory_read_sequential();
     memory_write_sequential();
     memory_read_random();
     memory_write_random();
 
-    disk_read_sequential();
-    disk_read_random();
-    disk_write_sequential_no_fsync();
-    disk_write_sequential_fsync();
+    // disk_read_sequential();
+    // disk_read_random();
+    // disk_write_sequential_no_fsync();
+    // disk_write_sequential_fsync();
 
-    tcp_read_write();
+    // tcp_read_write();
+    simd();
     //redis_read_single_key();
 }
 
 fn memory_write_sequential() {
     struct Test {
         i: usize,
-        vec: Vec<usize>,
+        vec: Vec<[u64; 8]>,
     }
+    let bytes_per_iteration = 64;
+    let size_in_elements = (n_gb_bytes!(1) as u64 / bytes_per_iteration) as usize;
 
     let result = benchmark(
         || {
-            let vec: Vec<usize> = Vec::new();
+            let mut vec = Vec::new();
+            vec.resize(size_in_elements, [1, 2, 3, 4, 5, 6, 7, 8]);
             Test { i: 0, vec }
         },
         |test| {
-            test.vec.push(test.i);
+            test.vec[test.i] = [8, 7, 6, 5, 4, 3, 2, 1];
+            black_box(test.vec[test.i]);
             test.i += 1;
-            true
+            if test.i == test.vec.len() {
+                return false;
+            }
+            return true;
         },
     )
     .unwrap();
 
-    result.print_results("Write Seq Vec<usize>", std::mem::size_of::<usize>());
+    result.print_results("Write Seq Vec<64 bytes>", 64);
 }
 
 fn memory_read_sequential() {
@@ -300,10 +307,8 @@ fn memory_read_sequential() {
         |test| {
             black_box(test.vec[test.i]);
             test.i += 1;
-            // This is much faster than %
             if test.i == test.vec.len() {
                 return false
-                // test.i = 0;
             }
 
             true
@@ -314,80 +319,66 @@ fn memory_read_sequential() {
     result.print_results("Read Seq Vec<64 bytes>", bytes_per_iteration as usize);
 }
 
-// TODO: not sure how much this one matters now, def can't do the gen random.
 fn memory_write_random() {
     struct Test {
-        rng: SmallRng,
-        vec: Vec<usize>,
+        vec: Vec<[u64; 8]>,
+        order: Vec<usize>,
+        i: usize,
     }
 
-    let size_per_value = std::mem::size_of::<usize>();
-    let size_in_elements = (n_mib_bytes!(128) as usize / size_per_value) as usize;
+    let bytes_per_iteration = 64;
+    let size_in_elements = (n_gb_bytes!(1) as u64 / bytes_per_iteration) as usize;
 
     let result = benchmark(
         || {
-            let mut vec: Vec<usize> = (0..size_in_elements).collect();
-            vec.shuffle(&mut thread_rng());
-            let rng = SmallRng::from_entropy();
-            Test { rng, vec }
+            let mut vec = Vec::new();
+            vec.resize(size_in_elements, [1, 2, 3, 4, 5, 6, 7, 8]);
+
+            let mut order: Vec<usize> = (0..size_in_elements).collect();
+            order.shuffle(&mut thread_rng());
+            Test { vec, order, i: 0 }
         },
         |test| {
-            test.vec[test.rng.gen_range(0, size_in_elements)] = 1;
+            test.vec[test.order[test.i]] = [8, 7, 6, 5, 4, 3, 2, 1];
+            black_box(test.vec[test.order[test.i]]);
+            test.i += 1;
+            if test.i == test.vec.len() {
+                return false;
+            }
             true
         },
     )
     .unwrap();
 
     result.print_results(
-        "Real: Random Write Vec<usize>",
-        std::mem::size_of::<usize>(),
+        "Random Write Vec<64 bytes>",
+        bytes_per_iteration as usize
     );
 }
 
-// TODO: Benchmark this as L1/L2/L3 main memory, similar to what we do for a disk seek.
 fn memory_read_random() {
     struct Test {
-        vec: Vec<usize>,
+        vec: Vec<[u64; 8]>,
+        order: Vec<usize>,
         i: usize,
     }
 
-    //  - Would be cool to use rand::rngs::mock::StepRng to go across pages
-    let size_per_value = std::mem::size_of::<usize>();
-
-    // L1
-    // 1KiB: 0.95 / 2.68 cycles
-    // 8 KiB: 0.948 / 2.66 cycles
-    // 16 KiB: 0.92 ns / 2.61 cycles
-    //
-    // L2
-    // 32KiB: 0.95 ns / 2.67 cycles
-    // 64KiB: 1.0 ns / 2.80 cycles
-    // 128KiB: 1.0 ns / 2.93 cycles
-    // 256KiB: 1.1 ns / 3.15 cycles
-    //
-    // L3
-    // 512KiB: 1.6 ns / 4.71 cycles
-    // 1MiB: 1.8 ns / 5.0 cycles
-    // 3MiB: 2.0 ns / 5.7 cycles
-    // 6MiB: 7.5 ns / 21 cycles
-    //
-    // Main Memory
-    // 10MiB: 10.8 ns / 30 cycles
-    // 64MiB: 16 ns / 45 cycles
-    let size_in_elements = (n_gib_bytes!(1) as usize / size_per_value) as usize;
+    let bytes_per_iteration = 64;
+    let size_in_elements = (n_gb_bytes!(1) as u64 / bytes_per_iteration) as usize;
 
     let result = benchmark(
         || {
-            let mut vec: Vec<usize> = (0..size_in_elements).collect();
-            vec.shuffle(&mut thread_rng());
-            Test { vec, i: 0 }
+            let mut vec = Vec::new();
+            vec.resize(size_in_elements, [1, 2, 3, 4, 5, 6, 7, 8]);
+
+            let mut order: Vec<usize> = (0..size_in_elements).collect();
+            order.shuffle(&mut thread_rng());
+            Test { vec, order, i: 0 }
         },
         |test| {
-            black_box(test.vec[test.vec[test.i]]);
+            black_box(test.vec[test.order[test.i]]);
             test.i += 1;
             if test.i == test.vec.len() {
-                // test.i = 0;
-                // e.g. for main memory references, similar to disk seek.
                 return false;
             }
 
@@ -396,7 +387,7 @@ fn memory_read_random() {
     )
     .unwrap();
 
-    result.print_results("Random Read Vec<usize>", size_per_value);
+    result.print_results("Random Read Vec<64 bytes>", bytes_per_iteration as usize);
 }
 
 fn disk_write_sequential_fsync() {
@@ -406,7 +397,7 @@ fn disk_write_sequential_fsync() {
     }
 
     let file_name = "foo.txt";
-    let size_of_writes = n_kib_bytes!(16) as usize;
+    let size_of_writes = n_kib_bytes!(8) as usize;
 
     let result = benchmark(
         || {
@@ -428,7 +419,7 @@ fn disk_write_sequential_fsync() {
     )
     .unwrap();
 
-    result.print_results("Sequential Disk Write, Fsync <16KiB>", 64);
+    result.print_results("Sequential Disk Write, Fsync <8KiB>", size_of_writes);
 }
 
 fn disk_write_sequential_no_fsync() {
@@ -438,7 +429,7 @@ fn disk_write_sequential_no_fsync() {
     }
 
     let file_name = "foo.txt";
-    let size_of_writes = n_kib_bytes!(16) as usize;
+    let size_of_writes = n_kib_bytes!(8) as usize;
 
     let result = benchmark(
         || {
@@ -459,7 +450,7 @@ fn disk_write_sequential_no_fsync() {
     )
     .unwrap();
 
-    result.print_results("Sequential Disk Write, No Fsync <16KiB>", 64);
+    result.print_results("Sequential Disk Write, No Fsync <8KiB>", size_of_writes);
 }
 
 fn disk_read_sequential() {
@@ -556,6 +547,7 @@ fn disk_read_random() {
         |test| {
             test.file.seek(SeekFrom::Start(test.pages[test.i])).unwrap();
             test.file.read_exact(&mut test.buffer).unwrap();
+            black_box(test.buffer);
             test.i += 1;
 
             if test.i == test.pages.len() {
