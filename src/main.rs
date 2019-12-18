@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate byte_unit;
+extern crate clap;
 
 // https://ark.intel.com/content/www/us/en/ark/products/97185/intel-core-i7-7700hq-processor-6m-cache-up-to-3-80-ghz.html
 // https://en.wikichip.org/wiki/intel/core_i7/i7-7700hq
@@ -21,6 +22,7 @@ use rand::rngs::SmallRng;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng, SeedableRng};
 use std::fs;
+use clap::{Arg, App, SubCommand};
 use std::fs::{OpenOptions};
 use std::io::prelude::*;
 use std::io::SeekFrom;
@@ -242,18 +244,35 @@ fn benchmark<T, F: Fn() -> (T), V: FnMut(&mut T) -> bool>(
 
 // TODO: take args for how long to perform tests
 fn main() {
-    memory_read_sequential();
-    memory_write_sequential();
-    memory_read_random();
-    memory_write_random();
+    let matches = App::new("Napkin Math")
+        .version("0.1")
+        .author("Simon Eskildsen <simon@sirupsen.com>")
+        .about("Runs computing benchmarks to find numbers for napkin math.")
+        .arg(Arg::with_name("memory")
+            .long("memory")
+            .help("Run memory benchmarks"))
+        .arg(Arg::with_name("io")
+            .long("io")
+            .help("Run IO benchmarks"))
+        .get_matches();
 
-    // disk_read_sequential();
-    // disk_read_random();
-    // disk_write_sequential_no_fsync();
-    // disk_write_sequential_fsync();
+    if matches.occurrences_of("memory") > 0 {
+        memory_read_sequential();
+        memory_write_sequential();
+        memory_read_random();
+        memory_write_random();
 
+    }
+
+    if matches.occurrences_of("io") > 0 {
+        disk_read_sequential();
+        disk_read_random();
+        disk_write_sequential_no_fsync();
+        disk_write_sequential_fsync();
+    }
+
+    // simd();
     // tcp_read_write();
-    simd();
     //redis_read_single_key();
 }
 
