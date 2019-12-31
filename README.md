@@ -44,9 +44,9 @@ rounded to make them more memorable.
 | {JSON, Protobuf, ..} Serializee (?)    | ?       | ?          | ?      | ?      |
 | Cloud us-east to us-central            | ?       | ?          | ?      | ?      |
 
-You can run this with `RUSTFLAGS='-C target-cpu=native' cargo run --release -- -h`. You won't get the right numbers
-when you're compiling in debug mode. You can help this project by adding new
-suites and filling out the blanks.
+You can run this with `RUSTFLAGS='-C target-cpu=native' cargo run --release -- -h`. You won't get the right numbers when you're compiling in debug mode. You can help this project by adding new suites and filling out the blanks.  
+
+I am aware of some inefficiencies in this suite. I intend to improve my skills in this area, in order to ensure the numbers are the upper-bound of performance you may be able to squeeze out in production. I find it highly unlikely any of them will be more than 2-3x off, which shouldn't be a problem for most users.
 
 ## Cost Numbers
 
@@ -78,3 +78,34 @@ Approximate numbers that should be consistent between Cloud providers.
     for logging, you're going to want to know how big a log line is, how many of
     those you have per second, what that costs, and so on.
 
+## Resources
+
+* ["How to get consistent results when benchamrking on
+  Linux?"](https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux#2-disable-hyper-threading).
+  Great compilation of various Kernel and CPU features to toggle for reliable
+  bench-marking, e.g. CPU affinity, disabling turbo boost, etc. It also has
+  resources on proper statistical methods for benchmarking.
+* [LLVM benchmarking tips](https://www.llvm.org/docs/Benchmarking.html). Similar
+  to the above in terms of dedicating CPUs, disabling address space
+  randomization, etc.
+* [Top-Down performance analysis
+  methodology](https://easyperf.net/blog/2019/02/09/Top-Down-performance-analysis-methodology).
+  Useful post about using `toplev` to find the bottlenecks. This is particularly
+  useful for the benchmarking suite we have here, to ensure the programs are
+  correctly written (I have not taken them through this yet, but plan to).
+* [Godbolt's compiler explorer](https://gcc.godbolt.org/#). Fantastic resource
+  for comparing assembly between Rust and e.g. C with Clang/GCC.
+* [cargo-asm](https://github.com/gnzlbg/cargo-asm). Cargo extension to allow
+  disassembling functions. Unfortunately the support for closure is a bit
+  lacking, which requires some refactoring. It's also _very_ slow on even this
+  simple program.
+* [Agner's Assembly
+  Guide](https://www.agner.org/optimize/optimizing_assembly.pdf). An excellent
+  resource on writing optimum assembly, which will be useful to inspect the
+  various functions for inefficiencies in our suite.
+* [Agner's Instruction
+  Tables](https://www.agner.org/optimize/instruction_tables.pdf). Thorough
+  resource on the expected throughput for various instructions which is helpful
+  to inspect the assembly.
+* [halobates.de](http://halobates.de/). Useful resource for low-level
+  performance by the author of `toplev`.
