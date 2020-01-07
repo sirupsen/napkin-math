@@ -16,7 +16,7 @@ weeks to attack. It should only take you a few minutes to solve each one as your
 facility with these techniques improve.
 
 The archive of problems to practise with are
-[here](https://tinyletter.com/computer-napkins/archive). The solution will be in
+[here](https://buttondown.email/computer-napkins/archive). The solution will be in
 the following newsletter.
 
 ## Numbers
