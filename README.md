@@ -30,6 +30,7 @@ rounded to make them more memorable.
 |----------------------------------------|---------|------------|--------|--------|
 | Sequential Memory R/W (64 bytes)       | 5 ns    | 10 GiB/s   | 100 us | 100 ms |
 | Random Memory R/W (64 bytes)           | 50 ns   | 1 GiB/s    | 1 ms   | 1 s    |
+| System Call                            | 500 ns  | N/A        | N/A    | N/A    |
 | Sequential SSD Read (8 KiB)            | 1 μs    | 4 GiB/s    | 200 us | 200 ms |
 | Sequential SSD write, -fsync (8KiB)    | 10 μs   | 1 GiB/s    | 1 ms   | 1 s    |
 | TCP Echo (TCP overhead) (64 bytes)     | 15 μs   | ?          | ?      | ?      |
@@ -44,9 +45,14 @@ rounded to make them more memorable.
 | {JSON, Protobuf, ..} Serializee (?)    | ?       | ?          | ?      | ?      |
 | Cloud us-east to us-central            | ?       | ?          | ?      | ?      |
 
-You can run this with `RUSTFLAGS='-C target-cpu=native' cargo run --release -- -h`. You won't get the right numbers when you're compiling in debug mode. You can help this project by adding new suites and filling out the blanks.  
+You can run this with `RUSTFLAGS='-C target-cpu=native' cargo run --release --
+-h`. You won't get the right numbers when you're compiling in debug mode. You
+can help this project by adding new suites and filling out the blanks.
 
-I am aware of some inefficiencies in this suite. I intend to improve my skills in this area, in order to ensure the numbers are the upper-bound of performance you may be able to squeeze out in production. I find it highly unlikely any of them will be more than 2-3x off, which shouldn't be a problem for most users.
+I am aware of some inefficiencies in this suite. I intend to improve my skills
+in this area, in order to ensure the numbers are the upper-bound of performance
+you may be able to squeeze out in production. I find it highly unlikely any of
+them will be more than 2-3x off, which shouldn't be a problem for most users.
 
 ## Cost Numbers
 

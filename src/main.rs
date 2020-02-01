@@ -1,6 +1,26 @@
 #[macro_use]
 extern crate byte_unit;
 extern crate clap;
+extern crate regex;
+
+// use std::alloc::System;
+// #[global_allocator]
+// static A: System = System;
+
+extern crate libc;
+use libc::{c_int, c_long, madvise, size_t, timeval};
+
+#[cfg(target_os = "linux")]
+use libc::posix_fadvise;
+
+use regex::Regex;
+
+#[cfg(target_os = "linux")]
+use rio::{Rio, Uring};
+
+extern crate jemallocator;
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 // https://ark.intel.com/content/www/us/en/ark/products/97185/intel-core-i7-7700hq-processor-6m-cache-up-to-3-80-ghz.html
 // https://en.wikichip.org/wiki/intel/core_i7/i7-7700hq
@@ -16,24 +36,25 @@ extern crate clap;
 //
 // TODO: Would be cool to instrument branch misses etc. here
 use byte_unit::Byte;
+use clap::{App, Arg, SubCommand};
 use failure::Error;
 use num_format::{Locale, ToFormattedString};
+use page_size;
 use rand::rngs::SmallRng;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng, SeedableRng};
+use redis::{Client, Commands};
 use std::fs;
-use clap::{Arg, App, SubCommand};
-use std::fs::{OpenOptions};
+use std::fs::OpenOptions;
+use std::io;
 use std::io::prelude::*;
 use std::io::SeekFrom;
 use std::mem::forget;
-use std::ptr;
-use std::time::{Duration, Instant};
-use page_size;
-use redis::{Client,Commands};
 use std::net::{TcpListener, TcpStream};
+use std::os::unix::io::AsRawFd;
+use std::ptr;
 use std::thread;
-use std::io;
+use std::time::{Duration, Instant, SystemTime};
 
 #[allow(unused_imports)]
 #[cfg(target_arch = "x86_64")]
@@ -63,6 +84,16 @@ struct BenchmarkResult {
 
 impl BenchmarkResult {
     fn print_results(&self, name: &str, size_of_type: usize) {
+        let mut name = String::from(name);
+        if size_of_type > 0 {
+            name.push_str(&format!(
+                " <{}>",
+                Byte::from_bytes(size_of_type as u128)
+                    .get_appropriate_unit(true)
+                    .format(0)
+            ));
+        }
+
         println!(
             "\n[{}] Iterations in {} miliseconds, no overhead: {}",
             name,
@@ -78,46 +109,47 @@ impl BenchmarkResult {
                 .to_formatted_string(&Locale::en)
         );
 
-        println!(
-            "[{}] Bytes handled per iteration: {} bytes",
-            name, size_of_type
-        );
+        if size_of_type > 0 {
+            println!(
+                "[{}] Bytes handled per iteration: {} bytes",
+                name, size_of_type
+            );
 
-        let total_bytes_pushed = size_of_type * self.iterations;
-        println!(
-            "[{}] Total bytes processed: {}",
-            name,
-            Byte::from_bytes(total_bytes_pushed as u128)
-                .get_appropriate_unit(true)
-                .format(3)
-        );
+            let total_bytes_pushed = size_of_type * self.iterations;
+            println!(
+                "[{}] Total bytes processed: {}",
+                name,
+                Byte::from_bytes(total_bytes_pushed as u128)
+                    .get_appropriate_unit(true)
+                    .format(3)
+            );
 
-        let bytes_per_second =
-            ((total_bytes_pushed as f64) / self.duration.as_millis() as f64) * 1000.0;
-        println!(
-            "[{}] Throughput: {}/s",
-            name,
-            // TODO: Too hard to get right when values aren't just printed!
-            Byte::from_bytes(bytes_per_second as u128)
-                .get_appropriate_unit(true)
-                .format(3)
-        );
+            let bytes_per_second =
+                ((total_bytes_pushed as f64) / self.duration.as_millis() as f64) * 1000.0;
+            println!(
+                "[{}] Throughput: {}/s",
+                name,
+                // TODO: Too hard to get right when values aren't just printed!
+                Byte::from_bytes(bytes_per_second as u128)
+                    .get_appropriate_unit(true)
+                    .format(3)
+            );
+        }
 
         // TODO handle less than 1ns
         let single_operation_nanoseconds =
             Duration::from_nanos(self.duration.as_nanos() as u64 / self.iterations as u64);
 
         let time_unit = if single_operation_nanoseconds.as_nanos() <= 10 {
-            format!("{:.3} ns",  self.duration.as_nanos() as f64 / self.iterations as f64)
+            format!(
+                "{:.3} ns",
+                self.duration.as_nanos() as f64 / self.iterations as f64
+            )
         } else {
             self.get_appropriate_time_unit(single_operation_nanoseconds)
         };
 
-        println!(
-            "[{}] Avg single iteration: {}",
-            name,
-            time_unit
-        );
+        println!("[{}] Avg single iteration: {}", name, time_unit);
 
         let single_operation_cycles = self.cycles as f64 / (self.iterations as f64);
 
@@ -126,31 +158,36 @@ impl BenchmarkResult {
             name, single_operation_cycles,
         );
 
-        let single_op_nanos = self.duration.as_nanos() as f64 / self.iterations as f64;
-        let nanoseconds_per_byte = 1.0 / ((size_of_type as f64) / single_op_nanos);
-        let nanoseconds_per_mebibyte = nanoseconds_per_byte * n_mib_bytes!(1) as f64;
-        let duration_per_mebibyte = Duration::from_nanos(nanoseconds_per_mebibyte as u64);
+        if size_of_type > 0 {
+            let single_op_nanos = self.duration.as_nanos() as f64 / self.iterations as f64;
+            let nanoseconds_per_byte = 1.0 / ((size_of_type as f64) / single_op_nanos);
+            let nanoseconds_per_mebibyte = nanoseconds_per_byte * n_mib_bytes!(1) as f64;
+            let duration_per_mebibyte = Duration::from_nanos(nanoseconds_per_mebibyte as u64);
 
-        println!(
-            "[{}] Time to process 1 MiB: {}",
-            name, self.get_appropriate_time_unit(duration_per_mebibyte),
-        );
+            println!(
+                "[{}] Time to process 1 MiB: {}",
+                name,
+                self.get_appropriate_time_unit(duration_per_mebibyte),
+            );
 
-        let nanoseconds_per_gibibyte = nanoseconds_per_byte * n_gib_bytes!(1) as f64;
-        let duration_per_gibibyte = Duration::from_nanos(nanoseconds_per_gibibyte as u64);
+            let nanoseconds_per_gibibyte = nanoseconds_per_byte * n_gib_bytes!(1) as f64;
+            let duration_per_gibibyte = Duration::from_nanos(nanoseconds_per_gibibyte as u64);
 
-        println!(
-            "[{}] Time to process 1 GiB: {}",
-            name, self.get_appropriate_time_unit(duration_per_gibibyte),
-        );
+            println!(
+                "[{}] Time to process 1 GiB: {}",
+                name,
+                self.get_appropriate_time_unit(duration_per_gibibyte),
+            );
 
-        let nanoseconds_per_tibibyte = nanoseconds_per_byte * n_tib_bytes!(1) as f64;
-        let duration_per_tibibyte = Duration::from_nanos(nanoseconds_per_tibibyte as u64);
+            let nanoseconds_per_tibibyte = nanoseconds_per_byte * n_tib_bytes!(1) as f64;
+            let duration_per_tibibyte = Duration::from_nanos(nanoseconds_per_tibibyte as u64);
 
-        println!(
-            "[{}] Time to process 1 TiB: {}",
-            name, self.get_appropriate_time_unit(duration_per_tibibyte),
-        );
+            println!(
+                "[{}] Time to process 1 TiB: {}",
+                name,
+                self.get_appropriate_time_unit(duration_per_tibibyte),
+            );
+        }
     }
 
     // impl on duration
@@ -192,12 +229,12 @@ fn benchmark<T, F: Fn() -> (T), V: FnMut(&mut T) -> bool>(
             if !f(&mut val) {
                 done = true;
                 iterations_per_check = i;
-                break
+                break;
             }
         }
         iterations += iterations_per_check;
         if done {
-            break
+            break;
         }
     }
 
@@ -215,15 +252,16 @@ fn benchmark<T, F: Fn() -> (T), V: FnMut(&mut T) -> bool>(
     let mut done = false;
     while instant.elapsed() < intended_duration {
         for i in 0..iterations_per_check {
+            // unlikely branch
             if !f(&mut val) {
                 done = true;
                 iterations_per_check = i;
-                break
+                break;
             }
         }
         iterations += iterations_per_check;
         if done {
-            break
+            break;
         }
     }
     let actual_duration = instant.elapsed();
@@ -248,32 +286,53 @@ fn main() {
         .version("0.1")
         .author("Simon Eskildsen <simon@sirupsen.com>")
         .about("Runs computing benchmarks to find numbers for napkin math.")
-        .arg(Arg::with_name("memory")
-            .long("memory")
-            .help("Run memory benchmarks"))
-        .arg(Arg::with_name("io")
-            .long("io")
-            .help("Run IO benchmarks"))
+        .arg(
+            Arg::with_name("evaluate")
+                .long("evaluate")
+                .short("e")
+                .help("Run tests that match a regex")
+                .value_name("REGEX")
+                .takes_value(true),
+        )
         .get_matches();
 
-    if matches.occurrences_of("memory") > 0 {
-        memory_read_sequential();
-        memory_write_sequential();
-        memory_read_random();
-        memory_write_random();
+    let methods: [(&'static str, fn()); 16] = [
+        ("memory_read_sequential", memory_read_sequential),
+        ("memory_write_sequential", memory_write_sequential),
+        ("memory_read_random", memory_read_random),
+        ("memory_write_random", memory_write_random),
+        ("syscall_getpid", syscall_getpid),
+        ("syscall_time", syscall_time),
+        ("syscall_getrusage", syscall_getrusage),
+        ("syscall_stat", syscall_stat),
+        ("disk_read_sequential", disk_read_sequential),
+        ("disk_read_random", disk_read_random),
+        (
+            "disk_write_sequential_no_fsync",
+            disk_write_sequential_no_fsync,
+        ),
+        (
+            "disk_read_sequential_io_uring",
+            disk_read_sequential_io_uring,
+        ),
+        ("disk_write_sequential_fsync", disk_write_sequential_fsync),
+        ("tcp_read_write", tcp_read_write),
+        ("simd", simd),
+        ("redis_read_single_key", redis_read_single_key),
+    ];
 
+    if matches.occurrences_of("evaluate") > 0 {
+        let regex_argument = matches.value_of("evaluate").unwrap_or(".*");
+        println!("Matching tests with regex: {}", regex_argument);
+        let regex = Regex::new(regex_argument).unwrap();
+
+        for (name, func) in &methods {
+            if regex.is_match(name) {
+                println!("\nExecuting {}..", name);
+                func();
+            }
+        }
     }
-
-    if matches.occurrences_of("io") > 0 {
-        disk_read_sequential();
-        disk_read_random();
-        disk_write_sequential_no_fsync();
-        disk_write_sequential_fsync();
-    }
-
-    // simd();
-    // tcp_read_write();
-    //redis_read_single_key();
 }
 
 fn memory_write_sequential() {
@@ -291,7 +350,7 @@ fn memory_write_sequential() {
             Test { i: 0, vec }
         },
         |test| {
-            test.vec[test.i] = [8, 7, 6, 5, 4, 3, 2, 1];
+            test.vec[test.i] = [8, 7, 110694, 5, 4, 3, 2, 1];
             black_box(test.vec[test.i]);
             test.i += 1;
             if test.i == test.vec.len() {
@@ -302,7 +361,7 @@ fn memory_write_sequential() {
     )
     .unwrap();
 
-    result.print_results("Write Seq Vec<64 bytes>", 64);
+    result.print_results("Write Seq Vec", 64);
 }
 
 fn memory_read_sequential() {
@@ -314,6 +373,8 @@ fn memory_read_sequential() {
         vec: Vec<[u64; 8]>,
     }
 
+    // put these in separate functions so they can be disassembled.
+    // #[inline] is going to be important here.
     let result = benchmark(
         || {
             let mut vec: Vec<[u64; 8]> = Vec::new();
@@ -327,7 +388,7 @@ fn memory_read_sequential() {
             black_box(test.vec[test.i]);
             test.i += 1;
             if test.i == test.vec.len() {
-                return false
+                return false;
             }
 
             true
@@ -335,7 +396,7 @@ fn memory_read_sequential() {
     )
     .unwrap();
 
-    result.print_results("Read Seq Vec<64 bytes>", bytes_per_iteration as usize);
+    result.print_results("Read Seq Vec", bytes_per_iteration as usize);
 }
 
 fn memory_write_random() {
@@ -369,44 +430,47 @@ fn memory_write_random() {
     )
     .unwrap();
 
-    result.print_results(
-        "Random Write Vec<64 bytes>",
-        bytes_per_iteration as usize
-    );
+    result.print_results("Random Write Vec", bytes_per_iteration as usize);
+}
+
+struct MemoryReadTest {
+    vec: Vec<[u64; 8]>,
+    order: Vec<usize>,
+    i: usize,
 }
 
 fn memory_read_random() {
-    struct Test {
-        vec: Vec<[u64; 8]>,
-        order: Vec<usize>,
-        i: usize,
+    let result = benchmark(memory_read_random_setup, memory_read_random_iteration).unwrap();
+    result.print_results("Random Read Vec", 64 as usize);
+}
+
+fn memory_read_random_setup() -> MemoryReadTest {
+    let size_in_elements = (n_gb_bytes!(1) as u64 / 64) as usize;
+
+    let mut vec = Vec::new();
+    vec.resize(size_in_elements, [1, 2, 3, 4, 5, 6, 7, 8]);
+    unsafe {
+        let data = vec.as_mut_ptr() as *mut libc::c_void;
+        libc::madvise(data, size_in_elements, libc::MADV_RANDOM);
     }
 
-    let bytes_per_iteration = 64;
-    let size_in_elements = (n_gb_bytes!(1) as u64 / bytes_per_iteration) as usize;
+    let mut order: Vec<usize> = (0..size_in_elements).collect();
+    unsafe {
+        let data = order.as_mut_ptr() as *mut libc::c_void;
+        libc::madvise(data, size_in_elements, libc::MADV_SEQUENTIAL);
+    }
+    order.shuffle(&mut thread_rng());
+    MemoryReadTest { vec, order, i: 0 }
+}
 
-    let result = benchmark(
-        || {
-            let mut vec = Vec::new();
-            vec.resize(size_in_elements, [1, 2, 3, 4, 5, 6, 7, 8]);
-
-            let mut order: Vec<usize> = (0..size_in_elements).collect();
-            order.shuffle(&mut thread_rng());
-            Test { vec, order, i: 0 }
-        },
-        |test| {
-            black_box(test.vec[test.order[test.i]]);
-            test.i += 1;
-            if test.i == test.vec.len() {
-                return false;
-            }
-
-            true
-        },
-    )
-    .unwrap();
-
-    result.print_results("Random Read Vec<64 bytes>", bytes_per_iteration as usize);
+#[inline(always)]
+fn memory_read_random_iteration(test: &mut MemoryReadTest) -> bool {
+    black_box(test.vec[test.order[test.i]]);
+    test.i += 1;
+    if test.i == test.vec.len() {
+        return false;
+    }
+    true
 }
 
 fn disk_write_sequential_fsync() {
@@ -415,7 +479,7 @@ fn disk_write_sequential_fsync() {
         file: std::fs::File,
     }
 
-    let file_name = "foo.txt";
+    let file_name = "/tmp/napkin.txt";
     let size_of_writes = n_kib_bytes!(8) as usize;
 
     let result = benchmark(
@@ -437,8 +501,9 @@ fn disk_write_sequential_fsync() {
         },
     )
     .unwrap();
+    fs::remove_file(file_name);
 
-    result.print_results("Sequential Disk Write, Fsync <8KiB>", size_of_writes);
+    result.print_results("Sequential Disk Write, Fsync", size_of_writes);
 }
 
 fn disk_write_sequential_no_fsync() {
@@ -447,7 +512,7 @@ fn disk_write_sequential_no_fsync() {
         file: std::fs::File,
     }
 
-    let file_name = "foo.txt";
+    let file_name = "/tmp/napkin.txt";
     let size_of_writes = n_kib_bytes!(8) as usize;
 
     let result = benchmark(
@@ -468,22 +533,24 @@ fn disk_write_sequential_no_fsync() {
         },
     )
     .unwrap();
+    fs::remove_file(file_name);
 
-    result.print_results("Sequential Disk Write, No Fsync <8KiB>", size_of_writes);
+    result.print_results("Sequential Disk Write, No Fsync", size_of_writes);
 }
 
 fn disk_read_sequential() {
-    const BUF_SIZE: usize = n_kib_bytes!(8) as usize;
+    const BUF_SIZE: usize = n_kib_bytes!(64) as usize;
 
     struct Test {
         buffer: [u8; BUF_SIZE],
         file: fs::File,
     }
-    let file_name = "foo.txt";
+    let file_name = "/tmp/napkin.txt";
 
     let result = benchmark(
         || {
-            fs::remove_file(file_name).unwrap();
+            // flush page cache? prob not necessary since we re-create the file.
+            fs::remove_file(file_name);
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
@@ -497,13 +564,16 @@ fn disk_read_sequential() {
             let buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
             file.seek(SeekFrom::Start(0)).unwrap();
 
-            Test {
-                buffer,
-                file,
+            unsafe {
+                #[cfg(target_os = "linux")]
+                libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_SEQUENTIAL);
             }
+
+            Test { buffer, file }
         },
         |test| {
             let n = test.file.read(&mut test.buffer).unwrap();
+            // TODO: this is cheating...
             if n < BUF_SIZE {
                 test.file.seek(SeekFrom::Start(0)).unwrap();
             };
@@ -511,8 +581,98 @@ fn disk_read_sequential() {
         },
     )
     .unwrap();
+    fs::remove_file(file_name);
 
-    result.print_results("Sequential Disk Read <8kb>", BUF_SIZE);
+    result.print_results("Sequential Disk Read", BUF_SIZE);
+}
+
+#[cfg(target_os = "macos")]
+fn disk_read_sequential_io_uring() {
+    println!("only supported on linux");
+}
+
+#[cfg(target_os = "linux")]
+fn disk_read_sequential_io_uring() {
+    // https://github.com/axboe/liburing/blob/master/examples/io_uring-cp.c
+    const BUF_SIZE: usize = n_kib_bytes!(32) as usize;
+    let reads_per_iteration: isize = 64;
+
+    struct Test {
+        buffers: Vec<Vec<u8>>,
+        file: fs::File,
+        ring: rio::Rio,
+        size: usize,
+        offset: usize,
+    }
+    let file_name = "/tmp/napkin.txt";
+    use std::slice;
+
+    // TODO: checksum somehow
+
+    let result = benchmark(
+        || {
+            // flush page cache? prob not necessary since we re-create the file.
+            fs::remove_file(file_name);
+            let mut file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .read(true)
+                .open(file_name)
+                .unwrap();
+            let buffer = vec![0; n_gib_bytes!(1) as usize];
+            file.write_all(&buffer).unwrap();
+            file.sync_data().unwrap();
+            file.seek(SeekFrom::Start(0)).unwrap();
+
+            // flush page cache after this
+
+            unsafe {
+                #[cfg(target_os = "linux")]
+                libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_SEQUENTIAL);
+            }
+
+            let mut ring = rio::new().expect("create uring");
+            let mut buffers = vec![vec![0; BUF_SIZE]; reads_per_iteration as usize];
+            Test { buffers, file, ring, size: n_gib_bytes!(1) as usize, offset: 0 }
+        },
+        |test| {
+            let ptr = test.buffers.as_mut_ptr();
+            let mut completions = vec![];
+
+            for i in 0..reads_per_iteration {
+                if test.size <= 0 {
+                    println!("Stopping early");
+                    break
+                }
+
+                unsafe {
+                    let buf = &slice::from_raw_parts_mut(ptr.offset(i), 1)[0];
+                    completions.push(test.ring.read_at(&test.file, buf, test.offset as u64));
+                }
+
+                test.offset += BUF_SIZE;
+                test.size -= BUF_SIZE;
+            }
+
+            for completion in completions.into_iter() {
+                let read = completion.wait().unwrap();
+                if read < BUF_SIZE {
+                    println!("at end?");
+                }
+            }
+
+            if test.size <= 0 {
+                test.offset = 0;
+                test.size = n_gib_bytes!(1) as usize;
+            }
+
+            true
+        },
+    )
+    .unwrap();
+    fs::remove_file(file_name);
+
+    result.print_results("Io-uring Sequential Disk Read", BUF_SIZE * (reads_per_iteration as usize));
 }
 
 fn disk_read_random() {
@@ -526,12 +686,12 @@ fn disk_read_random() {
         i: usize,
         file: std::fs::File,
     }
-    let file_name = "foo.txt";
+    let file_name = "/tmp/napkin.txt";
     let page_size = page_size::get();
 
     let result = benchmark(
         || {
-            fs::remove_file(file_name).unwrap();
+            fs::remove_file(file_name);
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
@@ -550,6 +710,11 @@ fn disk_read_random() {
                 pages.push((i * page_size + 1) as u64);
             }
             pages.shuffle(&mut thread_rng());
+
+            unsafe {
+                #[cfg(target_os = "linux")]
+                libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_RANDOM);
+            }
 
             let buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
             let metadata = fs::metadata(file_name).unwrap();
@@ -570,15 +735,100 @@ fn disk_read_random() {
             test.i += 1;
 
             if test.i == test.pages.len() {
-                return false
+                return false;
             };
 
             true
         },
     )
     .unwrap();
+    fs::remove_file(file_name);
 
-    result.print_results("Random Disk Seek, No Page Cache <8KiB>", BUF_SIZE);
+    result.print_results("Random Disk Seek, No Page Cache", BUF_SIZE);
+}
+
+// this comes from the auxilirary vector on some OSes, making this not do a syscall.
+// on the linux kernel I've been testing on, it does do a syscall. on darwin, it doesn't.
+fn syscall_getpid() {
+    use std::process;
+
+    let result = benchmark(
+        || {},
+        |test| {
+            black_box(process::id());
+            true
+        },
+    )
+    .unwrap();
+    result.print_results("Sycall getpid(2)", 0);
+}
+
+// this is available in user-space memory (depending on libc) and often doesn't result in a sycall.
+fn syscall_time() {
+    let result = benchmark(
+        || {},
+        |test| {
+            black_box(SystemTime::now());
+            true
+        },
+    )
+    .unwrap();
+    result.print_results("Sycall gettimeofday(2)", 0);
+}
+
+// syscall, can't be optimized out
+fn syscall_getrusage() {
+    let time = libc::timeval {
+        tv_sec: 0,
+        tv_usec: 0,
+    };
+    let mut rusage = Box::new(libc::rusage {
+        ru_utime: time.clone(),
+        ru_stime: time.clone(),
+        ru_maxrss: 0,
+        ru_ixrss: 0,
+        ru_idrss: 0,
+        ru_isrss: 0,
+        ru_minflt: 0,
+        ru_majflt: 0,
+        ru_nswap: 0,
+        ru_inblock: 0,
+        ru_oublock: 0,
+        ru_msgsnd: 0,
+        ru_msgrcv: 0,
+        ru_nsignals: 0,
+        ru_nvcsw: 0,
+        ru_nivcsw: 0,
+    });
+    let ptr = Box::into_raw(rusage);
+
+    let result = benchmark(
+        || {},
+        |test| {
+            unsafe {
+                libc::getrusage(0, ptr);
+            }
+            true
+        },
+    )
+    .unwrap();
+    result.print_results("Sycall getrusage(2)", 0);
+}
+
+// syscall, can't be optimized out
+fn syscall_stat() {
+    let mut f = fs::File::open("/tmp").unwrap();
+
+    let result = benchmark(
+        || {},
+        |test| {
+            let metadata = f.metadata().unwrap();
+            black_box(metadata);
+            true
+        },
+    )
+    .unwrap();
+    result.print_results("Sycall stat(2)", 0);
 }
 
 fn tcp_read_write() {
@@ -590,8 +840,12 @@ fn tcp_read_write() {
 
             stream.set_nodelay(true).unwrap();
             stream.set_nonblocking(false).unwrap();
-            stream.set_read_timeout(Some(Duration::from_millis(1000))).unwrap();
-            stream.set_write_timeout(Some(Duration::from_millis(1000))).unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_millis(1000)))
+                .unwrap();
+            stream
+                .set_write_timeout(Some(Duration::from_millis(1000)))
+                .unwrap();
 
             let mut buffer: [u8; 64] = [0; 64];
             let mut i = 0;
@@ -600,27 +854,23 @@ fn tcp_read_write() {
                 match stream.read(&mut buffer) {
                     Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                         // println!("s{}: failed to read, err: {:?}..", i, e);
-                        continue
-                    },
+                        continue;
+                    }
                     Ok(n) => {
                         // println!("s{}: read: {}", i, n);
 
                         match stream.write(&buffer[..n]) {
                             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                                 // println!("s{}: failed to write", i);
-                                continue
-                            },
+                                continue;
+                            }
                             Ok(n) => {
                                 // println!("s{}: write: {}", i, n);
-                            },
-                            Err(e) => {
-                                panic!(e)
                             }
+                            Err(e) => panic!(e),
                         };
-                    },
-                    Err(e) => {
-                        panic!(e)
                     }
+                    Err(e) => panic!(e),
                 };
 
                 // i += 1;
@@ -635,44 +885,50 @@ fn tcp_read_write() {
     let mut stream = TcpStream::connect("127.0.0.1:8877").unwrap();
     stream.set_nodelay(true).unwrap();
     stream.set_nonblocking(false).unwrap();
-    stream.set_read_timeout(Some(Duration::from_millis(1000))).unwrap();
-    stream.set_write_timeout(Some(Duration::from_millis(1000))).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_millis(1000)))
+        .unwrap();
+    stream
+        .set_write_timeout(Some(Duration::from_millis(1000)))
+        .unwrap();
 
-    let result = benchmark(|| {
-    }, |_| {
-        match stream.write(&bytes) {
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                // println!("c: failed to write");
-                return true
-            },
-            Ok(n) => {
-                // println!("c: write: {}", n);
+    let result = benchmark(
+        || {},
+        |_| {
+            match stream.write(&bytes) {
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    // println!("c: failed to write");
+                    return true;
+                }
+                Ok(n) => {
+                    // println!("c: write: {}", n);
 
-                match stream.read(&mut buffer[0..n]) {
-                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                        // println!("c: failed to read, err: {:?}..", e);
-                        return true
-                    },
-                    Ok(_n) => {
-                        // println!("c: read: {}\n", n);
-                    },
-                    Err(e) => {
-                        // println!("omgs read! {:?}", e.raw_os_error());
-                        panic!(e)
-                    }
-                };
-            },
-            Err(e) => {
-                // println!("omgs write! {:?}", e.raw_os_error());
-                panic!(e)
-            }
-        };
+                    match stream.read(&mut buffer[0..n]) {
+                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                            // println!("c: failed to read, err: {:?}..", e);
+                            return true;
+                        }
+                        Ok(_n) => {
+                            // println!("c: read: {}\n", n);
+                        }
+                        Err(e) => {
+                            // println!("omgs read! {:?}", e.raw_os_error());
+                            panic!(e)
+                        }
+                    };
+                }
+                Err(e) => {
+                    // println!("omgs write! {:?}", e.raw_os_error());
+                    panic!(e)
+                }
+            };
 
+            true
+        },
+    )
+    .unwrap();
 
-        true
-    }).unwrap();
-
-    result.print_results("Tcp Echo <64b>", 64);
+    result.print_results("Tcp Echo", 64);
 }
 
 #[derive(Clone, Copy)]
@@ -684,10 +940,18 @@ pub union i32simd {
 
 fn simd() {
     unsafe {
-        let a = i32simd { vector: _mm256_set_epi32(1, 2, 3, 4, 5, 6, 7, 8) };
-        let b = i32simd { vector: _mm256_set_epi32(1, 2, 3, 4, 5, 6, 7, 8) };
-        let result = i32simd { vector: _mm256_mul_epi32(a.vector, b.vector) };
-        let result2 = i32simd { vector: _mm256_mullo_epi32(a.vector, b.vector) };
+        let a = i32simd {
+            vector: _mm256_set_epi32(1, 2, 3, 4, 5, 6, 7, 8),
+        };
+        let b = i32simd {
+            vector: _mm256_set_epi32(1, 2, 3, 4, 5, 6, 7, 8),
+        };
+        let result = i32simd {
+            vector: _mm256_mul_epi32(a.vector, b.vector),
+        };
+        let result2 = i32simd {
+            vector: _mm256_mullo_epi32(a.vector, b.vector),
+        };
         println!("{:?}", result.numbers);
         println!("{:?}", result2.numbers);
     }
@@ -696,15 +960,19 @@ fn simd() {
 fn redis_read_single_key() {
     let client = redis::Client::open("redis://127.0.0.1/").unwrap();
 
-    let result = benchmark(|| {
-        let mut con = client.get_connection().unwrap();
-        let bytes: Vec<u8> = (0..64).map(|_| rand::random::<u8>()).collect();
-        let _ : () = con.set("1", bytes).unwrap();
-        con
-    }, |con| {
-        let _ : Vec<u8> = con.get("1").unwrap();
-        true
-    }).unwrap();
+    let result = benchmark(
+        || {
+            let mut con = client.get_connection().unwrap();
+            let bytes: Vec<u8> = (0..64).map(|_| rand::random::<u8>()).collect();
+            let _: () = con.set("1", bytes).unwrap();
+            con
+        },
+        |con| {
+            let _: Vec<u8> = con.get("1").unwrap();
+            true
+        },
+    )
+    .unwrap();
 
-    result.print_results("Redis Read <64b>", 64);
+    result.print_results("Redis Read", 64);
 }
