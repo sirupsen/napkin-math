@@ -115,3 +115,4 @@ Approximate numbers that should be consistent between Cloud providers.
   to inspect the assembly.
 * [halobates.de](http://halobates.de/). Useful resource for low-level
   performance by the author of `toplev`.
+* [Systems Performance (book)](https://www.amazon.com/Systems-Performance-Enterprise-Brendan-Gregg/dp/0133390098/ref=sr_1_1?keywords=systems+performance&qid=1580733419&sr=8-1). Fantastic book about analyzing system performance, finding bottlenecks, and understanding operating systems.
