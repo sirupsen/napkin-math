@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["Simon Eskildsen <sirup@sirupsen.com>"]
 edition = "2018"
 
+[profile.release]
+debug = true
+
 [dependencies]
 byte-unit = "3.0"
 rand = { features = ["small_rng"], version = "0.7.0" }
