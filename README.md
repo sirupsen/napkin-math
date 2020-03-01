@@ -36,6 +36,7 @@ rounded to make them more memorable.
 | TCP Echo (TCP overhead) (64 bytes)     | 10 μs   | ?          | ?      | ?      |
 | Random SSD Seek (8 KiB)                | 100 μs  | 70 MiB/s   | 10 ms  | 15 s   |
 | Cloud us-east1 to us-east2             | 250 μs  | ?          | ?      | ?      |
+| Sorting                                | N/A     | 5 MiB/s    | 200 ms | 5 min  |
 | Sequential SSD write, +fsync (8KiB)    | 5 ms    | 2 MiB/s    | 1 s    | 10 min |
 | Mutex Lock/Unlock                      | ?       | ?          | ?      | ?      |
 | {Snappy, Gzip, ..} Compression (? KiB) | ?       | ?          | ?      | ?      |

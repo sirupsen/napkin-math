@@ -225,7 +225,7 @@ fn benchmark<T, F: Fn() -> (T), V: FnMut(&mut T) -> bool>(
     // make sure this never happens.
     let mut done = false;
     while instant.elapsed() < intended_duration {
-        for i in 0..iterations_per_check {
+        for i in 1..(iterations_per_check + 1) {
             if !f(&mut val) {
                 done = true;
                 iterations_per_check = i;
@@ -251,7 +251,7 @@ fn benchmark<T, F: Fn() -> (T), V: FnMut(&mut T) -> bool>(
 
     let mut done = false;
     while instant.elapsed() < intended_duration {
-        for i in 0..iterations_per_check {
+        for i in 1..(iterations_per_check + 1) {
             // unlikely branch
             if !f(&mut val) {
                 done = true;
@@ -296,7 +296,7 @@ fn main() {
         )
         .get_matches();
 
-    let methods: [(&'static str, fn()); 16] = [
+    let methods: [(&'static str, fn()); 17] = [
         ("memory_read_sequential", memory_read_sequential),
         ("memory_write_sequential", memory_write_sequential),
         ("memory_read_random", memory_read_random),
@@ -319,6 +319,7 @@ fn main() {
         ("tcp_read_write", tcp_read_write),
         ("simd", simd),
         ("redis_read_single_key", redis_read_single_key),
+        ("sort", sort),
     ];
 
     if matches.occurrences_of("evaluate") > 0 {
@@ -975,4 +976,24 @@ fn redis_read_single_key() {
     .unwrap();
 
     result.print_results("Redis Read", 64);
+}
+
+fn sort() {
+    const TOTAL_SIZE: usize = n_mib_bytes!(1) as usize;
+
+    let result = benchmark(
+        || {
+            let elements = TOTAL_SIZE / 8;
+            let mut bytes: Vec<u64> = (0..elements).map(|_| rand::random::<u64>()).collect();
+            bytes
+        },
+        |mut bytes| {
+            bytes.sort_unstable();
+            // TODO: enum to re-start with setup or stop entirely
+            false
+        },
+    )
+    .unwrap();
+
+    result.print_results("Sort", TOTAL_SIZE);
 }
