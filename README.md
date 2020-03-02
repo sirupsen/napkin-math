@@ -34,7 +34,7 @@ rounded to make them more memorable.
 | Sequential SSD Read (8 KiB)            | 1 μs    | 4 GiB/s    | 200 us | 200 ms |
 | Sequential SSD write, -fsync (8KiB)    | 10 μs   | 1 GiB/s    | 1 ms   | 1 s    |
 | TCP Echo (TCP overhead) (64 bytes)     | 10 μs   | ?          | ?      | ?      |
-| Sorting                                | N/A     | 200 MiB/s  | 5 ms   | 5 s    |
+| Sorting (64-bit integers)              | N/A     | 200 MiB/s  | 5 ms   | 5 s    |
 | Random SSD Seek (8 KiB)                | 100 μs  | 70 MiB/s   | 10 ms  | 15 s   |
 | Cloud us-east1 to us-east2             | 250 μs  | ?          | ?      | ?      |
 | Sequential SSD write, +fsync (8KiB)    | 5 ms    | 2 MiB/s    | 1 s    | 10 min |
