@@ -32,7 +32,7 @@ rounded to make them more memorable.
 | Random Memory R/W (64 bytes)           | 50 ns   | 1 GiB/s    | 1 ms   | 1 s    |
 | System Call                            | 500 ns  | N/A        | N/A    | N/A    |
 | Sequential SSD Read (8 KiB)            | 1 μs    | 4 GiB/s    | 200 us | 200 ms |
-| Context Switch [1]                     | 1 μs    | N/A        | N/A    | N/A    |
+| Context Switch `[1] [2]`               | 1 μs    | N/A        | N/A    | N/A    |
 | Sequential SSD write, -fsync (8KiB)    | 10 μs   | 1 GiB/s    | 1 ms   | 1 s    |
 | TCP Echo (TCP overhead) (64 bytes)     | 10 μs   | ?          | ?      | ?      |
 | Sorting (64-bit integers)              | N/A     | 200 MiB/s  | 5 ms   | 5 s    |
@@ -88,7 +88,8 @@ Approximate numbers that should be consistent between Cloud providers.
 
 ## Resources
 
-* [1]: https://eli.thegreenplace.net/2018/measuring-context-switching-and-memory-overheads-for-linux-threads/
+* `[1]`: https://eli.thegreenplace.net/2018/measuring-context-switching-and-memory-overheads-for-linux-threads/
+* `[2]`: https://blog.tsunanet.net/2010/11/how-long-does-it-take-to-make-context.html
 * ["How to get consistent results when benchamrking on
   Linux?"](https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux#2-disable-hyper-threading).
   Great compilation of various Kernel and CPU features to toggle for reliable
