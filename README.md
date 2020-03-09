@@ -32,7 +32,7 @@ rounded to make them more memorable.
 | Random Memory R/W (64 bytes)           | 50 ns   | 1 GiB/s    | 1 ms   | 1 s    |
 | System Call                            | 500 ns  | N/A        | N/A    | N/A    |
 | Sequential SSD Read (8 KiB)            | 1 μs    | 4 GiB/s    | 200 us | 200 ms |
-| Context Switch `[1] [2]`               | 1 μs    | N/A        | N/A    | N/A    |
+| Context Switch `[1] [2]`               | 10 μs   | N/A        | N/A    | N/A    |
 | Sequential SSD write, -fsync (8KiB)    | 10 μs   | 1 GiB/s    | 1 ms   | 1 s    |
 | TCP Echo (TCP overhead) (64 bytes)     | 10 μs   | ?          | ?      | ?      |
 | Sorting (64-bit integers)              | N/A     | 200 MiB/s  | 5 ms   | 5 s    |
