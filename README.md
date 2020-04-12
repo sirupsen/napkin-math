@@ -76,15 +76,15 @@ This is sourced from a few sources. `[3]` `[4]` `[5]` Note that compression spee
 generally not ratios) vary by an order of magnitude depending on the algorithm
 and the level of compression (which trades speed for compression).
 
-I typically ballpark that another x in compression ratio decreases performance
-by 10x. E.g. we can [get a 2x ratio on English
+I typically ballpark that another _x in compression ratio decreases performance
+by 10x_. E.g. we can [get a 2x ratio on English
 Wikipedia](https://quixdb.github.io/squash-benchmark/#results-table) at ~200
-MiB/s, and 3x at ~20MiB/s, and 4x at 1iMB/s.
+MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
 
 | What        | Compression Ratio |
 | ----------- | ----------------- |
 | HTML        | 2-3x              |
-| English     | 2-3x              |
+| English     | 2-4x              |
 | Source Code | 2-4x              |
 | Executables | 2-3x              |
 | RPC         | 5-10x             |
