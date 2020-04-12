@@ -26,26 +26,27 @@ run this on more platform. Note that all numbers don't line up as they've been
 rounded to make them more memorable.
 
 
-| Operation                              | Latency | Throughput | 1 MiB  | 1 GiB  |
-|----------------------------------------|---------|------------|--------|--------|
-| Sequential Memory R/W (64 bytes)       | 5 ns    | 10 GiB/s   | 100 us | 100 ms |
-| Random Memory R/W (64 bytes)           | 50 ns   | 1 GiB/s    | 1 ms   | 1 s    |
-| System Call                            | 500 ns  | N/A        | N/A    | N/A    |
-| Sequential SSD Read (8 KiB)            | 1 μs    | 4 GiB/s    | 200 us | 200 ms |
-| Context Switch `[1] [2]`               | 10 μs   | N/A        | N/A    | N/A    |
-| Sequential SSD write, -fsync (8KiB)    | 10 μs   | 1 GiB/s    | 1 ms   | 1 s    |
-| TCP Echo (TCP overhead) (64 bytes)     | 10 μs   | ?          | ?      | ?      |
-| Sorting (64-bit integers)              | N/A     | 200 MiB/s  | 5 ms   | 5 s    |
-| Random SSD Seek (8 KiB)                | 100 μs  | 70 MiB/s   | 10 ms  | 15 s   |
-| Cloud us-east1 to us-east2             | 250 μs  | ?          | ?      | ?      |
-| Sequential SSD write, +fsync (8KiB)    | 5 ms    | 2 MiB/s    | 1 s    | 10 min |
-| Mutex Lock/Unlock                      | ?       | ?          | ?      | ?      |
-| {Snappy, Gzip, ..} Compression (? KiB) | ?       | ?          | ?      | ?      |
-| Hashing (? bytes)                      | ?       | ?          | ?      | ?      |
-| {MySQL, Memcached, Redis, ..} Query    | ?       | ?          | ?      | ?      |
-| Envoy/Nginx Overhead                   | ?       | ?          | ?      | ?      |
-| {JSON, Protobuf, ..} Serializee (?)    | ?       | ?          | ?      | ?      |
-| Cloud us-east to us-central            | ?       | ?          | ?      | ?      |
+| Operation                           | Latency | Throughput | 1 MiB  | 1 GiB  |
+| ----------------------------------- | ------- | ---------- | ------ | ------ |
+| Sequential Memory R/W (64 bytes)    | 5 ns    | 10 GiB/s   | 100 us | 100 ms |
+| Random Memory R/W (64 bytes)        | 50 ns   | 1 GiB/s    | 1 ms   | 1 s    |
+| System Call                         | 500 ns  | N/A        | N/A    | N/A    |
+| Sequential SSD Read (8 KiB)         | 1 μs    | 4 GiB/s    | 200 us | 200 ms |
+| Context Switch `[1] [2]`            | 10 μs   | N/A        | N/A    | N/A    |
+| Sequential SSD write, -fsync (8KiB) | 10 μs   | 1 GiB/s    | 1 ms   | 1 s    |
+| TCP Echo (TCP overhead) (64 bytes)  | 10 μs   | ?          | ?      | ?      |
+| Sorting (64-bit integers)           | N/A     | 200 MiB/s  | 5 ms   | 5 s    |
+| Random SSD Seek (8 KiB)             | 100 μs  | 70 MiB/s   | 10 ms  | 15 s   |
+| Cloud us-east1 to us-east2          | 250 μs  | ?          | ?      | ?      |
+| Sequential SSD write, +fsync (8KiB) | 5 ms    | 2 MiB/s    | 1 s    | 10 min |
+| Mutex Lock/Unlock                   | ?       | ?          | ?      | ?      |
+| Compression `[3]`                   | N/A     | ?          | 10ms   | 10s    |
+| Decompression `[3]`                 | N/A     | ?          | 5ms    | 5s     |
+| Hashing (? bytes)                   | ?       | ?          | ?      | ?      |
+| {MySQL, Memcached, Redis, ..} Query | ?       | ?          | ?      | ?      |
+| Envoy/Nginx Overhead                | ?       | ?          | ?      | ?      |
+| {JSON, Protobuf, ..} Serializee (?) | ?       | ?          | ?      | ?      |
+| Cloud us-east to us-central         | ?       | ?          | ?      | ?      |
 
 You can run this with `RUSTFLAGS='-C target-cpu=native' cargo run --release --
 -h`. You won't get the right numbers when you're compiling in debug mode. You
@@ -59,15 +60,34 @@ them will be more than 2-3x off, which shouldn't be a problem for most users.
 ## Cost Numbers
 
 Approximate numbers that should be consistent between Cloud providers.
-
+  
 | What        | Amount | $ / Month |
-|-------------|--------|-----------|
+| ----------- | ------ | --------- |
 | CPU         | 1      | $10       |
 | Memory      | 1 GB   | $1        |
 | SSD         | 1 GB   | $0.1      |
 | Disk        | 1 GB   | $0.01     |
 | S3, GCS, .. | 1 GB   | $0.01     |
 | Network     | 1 GB   | $0.01     |
+
+## Compression Ratios
+
+This is sourced from a few sources. `[3]` `[4]` `[5]` Note that compression speeds (but
+generally not ratios) vary by an order of magnitude depending on the algorithm
+and the level of compression (which trades speed for compression).
+
+I typically ballpark that another x in compression ratio decreases performance
+by 10x. E.g. we can [get a 2x ratio on English
+Wikipedia](https://quixdb.github.io/squash-benchmark/#results-table) at ~200
+MiB/s, and 3x at ~20MiB/s, and 4x at 1iMB/s.
+
+| What        | Compression Ratio |
+| ----------- | ----------------- |
+| HTML        | 2-3x              |
+| English     | 2-3x              |
+| Source Code | 2-4x              |
+| Executables | 2-3x              |
+| RPC         | 5-10x             |
 
 ## Techniques
 
@@ -90,6 +110,9 @@ Approximate numbers that should be consistent between Cloud providers.
 
 * `[1]`: https://eli.thegreenplace.net/2018/measuring-context-switching-and-memory-overheads-for-linux-threads/
 * `[2]`: https://blog.tsunanet.net/2010/11/how-long-does-it-take-to-make-context.html
+* `[3]`: https://cran.r-project.org/web/packages/brotli/vignettes/brotli-2015-09-22.pdf
+* `[4]`: https://github.com/google/snappy
+* `[5]`: https://quixdb.github.io/squash-benchmark/
 * ["How to get consistent results when benchamrking on
   Linux?"](https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux#2-disable-hyper-threading).
   Great compilation of various Kernel and CPU features to toggle for reliable
