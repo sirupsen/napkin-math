@@ -8,7 +8,6 @@ extern crate regex;
 // static A: System = System;
 
 extern crate libc;
-use libc::{c_int, c_long, madvise, size_t, timeval};
 
 #[cfg(target_os = "linux")]
 use libc::posix_fadvise;
@@ -36,14 +35,13 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 //
 // TODO: Would be cool to instrument branch misses etc. here
 use byte_unit::Byte;
-use clap::{App, Arg, SubCommand};
+use clap::{App, Arg};
 use failure::Error;
 use num_format::{Locale, ToFormattedString};
 use page_size;
-use rand::rngs::SmallRng;
 use rand::seq::SliceRandom;
-use rand::{thread_rng, Rng, SeedableRng};
-use redis::{Client, Commands};
+use rand::thread_rng;
+use redis::Commands;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io;
@@ -51,10 +49,10 @@ use std::io::prelude::*;
 use std::io::SeekFrom;
 use std::mem::forget;
 use std::net::{TcpListener, TcpStream};
-use std::os::unix::io::AsRawFd;
 use std::ptr;
-use std::thread;
 use std::time::{Duration, Instant, SystemTime};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 #[allow(unused_imports)]
 #[cfg(target_arch = "x86_64")]
@@ -208,7 +206,7 @@ impl BenchmarkResult {
     }
 }
 
-fn benchmark<T, F: Fn() -> (T), V: FnMut(&mut T) -> bool>(
+fn benchmark<T, F: Fn() -> T, V: FnMut(&mut T) -> bool>(
     setup: F,
     mut f: V,
 ) -> Result<BenchmarkResult, Error> {
@@ -272,7 +270,7 @@ fn benchmark<T, F: Fn() -> (T), V: FnMut(&mut T) -> bool>(
     }
 
     Ok(BenchmarkResult {
-        iterations: iterations,
+        iterations,
         duration: actual_duration,
         // duration_ratio: intended_duration.as_nanos() as f64 / actual_duration.as_nanos() as f64,
         // intended_duration: intended_duration,
@@ -296,7 +294,7 @@ fn main() {
         )
         .get_matches();
 
-    let methods: [(&'static str, fn()); 17] = [
+    let methods: [(&'static str, fn()); 18] = [
         ("memory_read_sequential", memory_read_sequential),
         ("memory_write_sequential", memory_write_sequential),
         ("memory_read_random", memory_read_random),
@@ -320,6 +318,7 @@ fn main() {
         ("simd", simd),
         ("redis_read_single_key", redis_read_single_key),
         ("sort", sort),
+        ("mutex", mutex),
     ];
 
     if matches.occurrences_of("evaluate") > 0 {
@@ -502,7 +501,7 @@ fn disk_write_sequential_fsync() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name);
+    fs::remove_file(file_name).unwrap();
 
     result.print_results("Sequential Disk Write, Fsync", size_of_writes);
 }
@@ -534,7 +533,7 @@ fn disk_write_sequential_no_fsync() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name);
+    fs::remove_file(file_name).unwrap();
 
     result.print_results("Sequential Disk Write, No Fsync", size_of_writes);
 }
@@ -551,7 +550,7 @@ fn disk_read_sequential() {
     let result = benchmark(
         || {
             // flush page cache? prob not necessary since we re-create the file.
-            fs::remove_file(file_name);
+            fs::remove_file(file_name).unwrap();
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
@@ -565,10 +564,8 @@ fn disk_read_sequential() {
             let buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
             file.seek(SeekFrom::Start(0)).unwrap();
 
-            unsafe {
-                #[cfg(target_os = "linux")]
-                libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_SEQUENTIAL);
-            }
+            #[cfg(target_os = "linux")]
+            libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_SEQUENTIAL);
 
             Test { buffer, file }
         },
@@ -582,7 +579,7 @@ fn disk_read_sequential() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name);
+    fs::remove_file(file_name).unwrap();
 
     result.print_results("Sequential Disk Read", BUF_SIZE);
 }
@@ -680,8 +677,6 @@ fn disk_read_random() {
     const BUF_SIZE: usize = n_kib_bytes!(8) as usize;
 
     struct Test {
-        rng: SmallRng,
-        file_length: u64,
         buffer: [u8; BUF_SIZE],
         pages: Vec<u64>,
         i: usize,
@@ -692,7 +687,7 @@ fn disk_read_random() {
 
     let result = benchmark(
         || {
-            fs::remove_file(file_name);
+            fs::remove_file(file_name).unwrap();
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
@@ -712,18 +707,13 @@ fn disk_read_random() {
             }
             pages.shuffle(&mut thread_rng());
 
-            unsafe {
-                #[cfg(target_os = "linux")]
-                libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_RANDOM);
-            }
+            #[cfg(target_os = "linux")]
+            libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_RANDOM);
 
             let buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
-            let metadata = fs::metadata(file_name).unwrap();
 
             Test {
                 file,
-                file_length: metadata.len() - buffer.len() as u64,
-                rng: SmallRng::from_entropy(),
                 pages,
                 buffer,
                 i: 0,
@@ -743,7 +733,7 @@ fn disk_read_random() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name);
+    fs::remove_file(file_name).unwrap();
 
     result.print_results("Random Disk Seek, No Page Cache", BUF_SIZE);
 }
@@ -755,7 +745,7 @@ fn syscall_getpid() {
 
     let result = benchmark(
         || {},
-        |test| {
+        |_test| {
             black_box(process::id());
             true
         },
@@ -768,7 +758,7 @@ fn syscall_getpid() {
 fn syscall_time() {
     let result = benchmark(
         || {},
-        |test| {
+        |_test| {
             black_box(SystemTime::now());
             true
         },
@@ -783,7 +773,7 @@ fn syscall_getrusage() {
         tv_sec: 0,
         tv_usec: 0,
     };
-    let mut rusage = Box::new(libc::rusage {
+    let rusage = Box::new(libc::rusage {
         ru_utime: time.clone(),
         ru_stime: time.clone(),
         ru_maxrss: 0,
@@ -805,7 +795,7 @@ fn syscall_getrusage() {
 
     let result = benchmark(
         || {},
-        |test| {
+        |_test| {
             unsafe {
                 libc::getrusage(0, ptr);
             }
@@ -818,11 +808,11 @@ fn syscall_getrusage() {
 
 // syscall, can't be optimized out
 fn syscall_stat() {
-    let mut f = fs::File::open("/tmp").unwrap();
+    let f = fs::File::open("/tmp").unwrap();
 
     let result = benchmark(
         || {},
-        |test| {
+        |_test| {
             let metadata = f.metadata().unwrap();
             black_box(metadata);
             true
@@ -849,7 +839,6 @@ fn tcp_read_write() {
                 .unwrap();
 
             let mut buffer: [u8; 64] = [0; 64];
-            let mut i = 0;
 
             loop {
                 match stream.read(&mut buffer) {
@@ -865,7 +854,7 @@ fn tcp_read_write() {
                                 // println!("s{}: failed to write", i);
                                 continue;
                             }
-                            Ok(n) => {
+                            Ok(_n) => {
                                 // println!("s{}: write: {}", i, n);
                             }
                             Err(e) => panic!(e),
@@ -984,10 +973,10 @@ fn sort() {
     let result = benchmark(
         || {
             let elements = TOTAL_SIZE / 8;
-            let mut bytes: Vec<u64> = (0..elements).map(|_| rand::random::<u64>()).collect();
+            let bytes: Vec<u64> = (0..elements).map(|_| rand::random::<u64>()).collect();
             bytes
         },
-        |mut bytes| {
+        |bytes| {
             bytes.sort_unstable();
             // TODO: enum to re-start with setup or stop entirely
             false
@@ -996,4 +985,33 @@ fn sort() {
     .unwrap();
 
     result.print_results("Sort", TOTAL_SIZE);
+}
+
+fn mutex() {
+    let mutex = Arc::new(Mutex::new(0));
+
+    let result = benchmark(
+        || {
+            let t_mutex = mutex.clone();
+            thread::spawn(move || {
+                loop {
+                    let mut data = t_mutex.lock().unwrap();
+                    // let duration = time::Duration::from_micros(10);
+                    // thread::sleep(duration);
+                    *data += 10;
+                }
+            });
+
+            mutex.clone()
+        },
+        |mutex| {
+            let mut data = mutex.lock().unwrap();
+            *data += 10;
+            true
+        },
+    )
+    .unwrap();
+
+    println!("{}", mutex.lock().unwrap());
+    result.print_results("Mutex", 1);
 }

@@ -25,7 +25,6 @@ Here are the numbers from the program, run on my 2017 Macbook. The goal is to
 run this on more platform. Note that all numbers don't line up as they've been
 rounded to make them more memorable.
 
-
 | Operation                           | Latency | Throughput | 1 MiB  | 1 GiB  |
 | ----------------------------------- | ------- | ---------- | ------ | ------ |
 | Sequential Memory R/W (64 bytes)    | 5 ns    | 10 GiB/s   | 100 us | 100 ms |
@@ -145,3 +144,4 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
 * [Systems Performance (book)](https://www.amazon.com/Systems-Performance-Enterprise-Brendan-Gregg/dp/0133390098/ref=sr_1_1?keywords=systems+performance&qid=1580733419&sr=8-1). Fantastic book about analyzing system performance, finding bottlenecks, and understanding operating systems.
 * [io_uring](https://lwn.net/Articles/776703/). Best summary, it links to many
   resources.
+* [How Long Does It Takes To Make a Context Switch](https://blog.tsunanet.net/2010/11/how-long-does-it-take-to-make-context.html)
