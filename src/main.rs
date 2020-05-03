@@ -53,6 +53,7 @@ use std::ptr;
 use std::time::{Duration, Instant, SystemTime};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use sha2::{Sha256, Digest};
 
 #[allow(unused_imports)]
 #[cfg(target_arch = "x86_64")]
@@ -294,7 +295,7 @@ fn main() {
         )
         .get_matches();
 
-    let methods: [(&'static str, fn()); 18] = [
+    let methods: [(&'static str, fn()); 21] = [
         ("memory_read_sequential", memory_read_sequential),
         ("memory_write_sequential", memory_write_sequential),
         ("memory_read_random", memory_read_random),
@@ -319,6 +320,9 @@ fn main() {
         ("redis_read_single_key", redis_read_single_key),
         ("sort", sort),
         ("mutex", mutex),
+        ("hash_sha256", hash_sha256),
+        ("hash_crc32", hash_crc32),
+        ("hash_siphash", hash_siphash),
     ];
 
     if matches.occurrences_of("evaluate") > 0 {
@@ -1014,4 +1018,65 @@ fn mutex() {
 
     println!("{}", mutex.lock().unwrap());
     result.print_results("Mutex", 1);
+}
+
+fn hash_sha256() {
+    let size_of_writes = 64 as usize;
+
+    let result = benchmark(
+        || {
+            let bytes: Vec<u8> = (0..size_of_writes).map(|_| rand::random::<u8>()).collect();
+            bytes
+        },
+        |bytes| {
+            black_box(Sha256::digest(bytes));
+            true
+        },
+    )
+    .unwrap();
+
+    result.print_results("Sha256", size_of_writes);
+}
+
+fn hash_crc32() {
+    use crc32fast::Hasher;
+    let size_of_writes = 64 as usize;
+
+    let result = benchmark(
+        || {
+            let bytes: Vec<u8> = (0..size_of_writes).map(|_| rand::random::<u8>()).collect();
+            bytes
+        },
+        |bytes| {
+            let mut hasher = Hasher::new();
+            hasher.update(&bytes);
+            black_box(hasher.finalize());
+            true
+        },
+    )
+    .unwrap();
+
+    result.print_results("CRC32", size_of_writes);
+}
+
+fn hash_siphash() {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::Hasher;
+    let size_of_writes = 64 as usize;
+
+    let result = benchmark(
+        || {
+            let bytes: Vec<u8> = (0..size_of_writes).map(|_| rand::random::<u8>()).collect();
+            bytes
+        },
+        |bytes| {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(&bytes);
+            black_box(hasher.finish());
+            true
+        },
+    )
+    .unwrap();
+
+    result.print_results("SIPHash", size_of_writes);
 }

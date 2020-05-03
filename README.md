@@ -10,38 +10,42 @@ The best introduction to this skill is [through my talk at
 SRECON](https://www.youtube.com/watch?v=IxkSlnrRFqc).
 
 The best way to practise napkin math in the grand domain of computers is to work
-on your own problems. The second-best is to subscribe to [this
+on your own problems. The second-best is to **subscribe to [this
 newsletter](http://sirupsen.com/napkin) where you'll get a problem every few
-weeks to attack. It should only take you a few minutes to solve each one as your
+weeks to practise on**. It should only take you a few minutes to solve each one as your
 facility with these techniques improve.
 
 The archive of problems to practise with are
-[here](https://buttondown.email/computer-napkins/archive). The solution will be in
-the following newsletter.
+[here](https://sirupsen.com/napkin/). The solution will be in the following
+newsletter.
 
 ## Numbers
 
 Here are the numbers from the program, run on my 2017 Macbook. The goal is to
-run this on more platform. Note that all numbers don't line up as they've been
-rounded to make them more memorable.
+run this on more platform.
+
+**Note 1:** Numbers have been rounded, which means they don't line up perfectly.
+**Note 2:** Some throughput and latency numbers don't line up. Then the highest
+throughput achieved (with e.g. another input size) has been noted.
 
 | Operation                           | Latency | Throughput | 1 MiB  | 1 GiB  |
 | ----------------------------------- | ------- | ---------- | ------ | ------ |
 | Sequential Memory R/W (64 bytes)    | 5 ns    | 10 GiB/s   | 100 us | 100 ms |
+| Hashing, not crypto-safe (64 bytes) | 25 ns   | 2 GiB/s    | 500 us | 500 ms |
 | Random Memory R/W (64 bytes)        | 50 ns   | 1 GiB/s    | 1 ms   | 1 s    |
 | System Call                         | 500 ns  | N/A        | N/A    | N/A    |
+| Hashing, crypto-safe (64 bytes)     | 500 ns  | 200 MiB/s  | 10 ms  | 10s    |
 | Sequential SSD Read (8 KiB)         | 1 μs    | 4 GiB/s    | 200 us | 200 ms |
 | Context Switch `[1] [2]`            | 10 μs   | N/A        | N/A    | N/A    |
 | Sequential SSD write, -fsync (8KiB) | 10 μs   | 1 GiB/s    | 1 ms   | 1 s    |
 | TCP Echo (TCP overhead) (64 bytes)  | 10 μs   | ?          | ?      | ?      |
 | Sorting (64-bit integers)           | N/A     | 200 MiB/s  | 5 ms   | 5 s    |
+| Decompression `[3]`                 | N/A     | ?          | 5 ms   | 5s     |
 | Random SSD Seek (8 KiB)             | 100 μs  | 70 MiB/s   | 10 ms  | 15 s   |
+| Compression `[3]`                   | N/A     | ?          | 10 ms  | 10s    |
 | Cloud us-east1 to us-east2          | 250 μs  | ?          | ?      | ?      |
 | Sequential SSD write, +fsync (8KiB) | 5 ms    | 2 MiB/s    | 1 s    | 10 min |
 | Mutex Lock/Unlock                   | ?       | ?          | ?      | ?      |
-| Compression `[3]`                   | N/A     | ?          | 10ms   | 10s    |
-| Decompression `[3]`                 | N/A     | ?          | 5ms    | 5s     |
-| Hashing (? bytes)                   | ?       | ?          | ?      | ?      |
 | {MySQL, Memcached, Redis, ..} Query | ?       | ?          | ?      | ?      |
 | Envoy/Nginx Overhead                | ?       | ?          | ?      | ?      |
 | {JSON, Protobuf, ..} Serializee (?) | ?       | ?          | ?      | ?      |
