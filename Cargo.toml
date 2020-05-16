@@ -22,4 +22,4 @@ sha2 = "0.8"
 crc32fast = "*"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-rio = "0.9.2"
+rio = "0.9.3"
