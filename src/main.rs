@@ -24,6 +24,8 @@ extern crate jemallocator;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+static FILE_NAME: &'static str = "/tmp/napkin.txt";
+
 // https://ark.intel.com/content/www/us/en/ark/products/97185/intel-core-i7-7700hq-processor-6m-cache-up-to-3-80-ghz.html
 // https://en.wikichip.org/wiki/intel/core_i7/i7-7700hq
 //
@@ -486,15 +488,15 @@ fn disk_write_sequential_fsync() {
         file: std::fs::File,
     }
 
-    let file_name = "/tmp/napkin.txt";
     let size_of_writes = n_kib_bytes!(8) as usize;
 
     let result = benchmark(
         || {
             let file = OpenOptions::new()
+                .create(true)
                 .write(true)
                 .truncate(true)
-                .open(file_name)
+                .open(FILE_NAME)
                 .unwrap();
 
             let bytes: Vec<u8> = (0..size_of_writes).map(|_| rand::random::<u8>()).collect();
@@ -508,7 +510,7 @@ fn disk_write_sequential_fsync() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name).unwrap();
+    fs::remove_file(FILE_NAME).unwrap();
 
     result.print_results("Sequential Disk Write, Fsync", size_of_writes);
 }
@@ -519,15 +521,15 @@ fn disk_write_sequential_no_fsync() {
         file: std::fs::File,
     }
 
-    let file_name = "/tmp/napkin.txt";
     let size_of_writes = n_kib_bytes!(8) as usize;
 
     let result = benchmark(
         || {
             let file = OpenOptions::new()
+                .create(true)
                 .write(true)
                 .truncate(true)
-                .open(file_name)
+                .open(FILE_NAME)
                 .unwrap();
 
             let bytes: Vec<u8> = (0..size_of_writes).map(|_| rand::random::<u8>()).collect();
@@ -540,7 +542,7 @@ fn disk_write_sequential_no_fsync() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name).unwrap();
+    fs::remove_file(FILE_NAME).unwrap();
 
     result.print_results("Sequential Disk Write, No Fsync", size_of_writes);
 }
@@ -552,17 +554,16 @@ fn disk_read_sequential() {
         buffer: [u8; BUF_SIZE],
         file: fs::File,
     }
-    let file_name = "/tmp/napkin.txt";
 
     let result = benchmark(
         || {
             // flush page cache? prob not necessary since we re-create the file.
-            fs::remove_file(file_name).unwrap();
+            let _ = fs::remove_file(FILE_NAME);
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .read(true)
-                .open(file_name)
+                .open(FILE_NAME)
                 .unwrap();
             let buffer = vec![0; n_gib_bytes!(1) as usize];
             file.write_all(&buffer).unwrap();
@@ -588,7 +589,7 @@ fn disk_read_sequential() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name).unwrap();
+    fs::remove_file(FILE_NAME).unwrap();
 
     result.print_results("Sequential Disk Read", BUF_SIZE);
 }
@@ -611,7 +612,6 @@ fn disk_read_sequential_io_uring() {
         size: usize,
         offset: usize,
     }
-    let file_name = "/tmp/napkin.txt";
     use std::slice;
 
     // TODO: checksum somehow
@@ -619,12 +619,12 @@ fn disk_read_sequential_io_uring() {
     let result = benchmark(
         || {
             // flush page cache? prob not necessary since we re-create the file.
-            fs::remove_file(file_name);
+            let _ = fs::remove_file(FILE_NAME);
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .read(true)
-                .open(file_name)
+                .open(FILE_NAME)
                 .unwrap();
             let buffer = vec![0; n_gib_bytes!(1) as usize];
             file.write_all(&buffer).unwrap();
@@ -677,7 +677,7 @@ fn disk_read_sequential_io_uring() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name);
+    let _ = fs::remove_file(FILE_NAME);
 
     result.print_results("Io-uring Sequential Disk Read", BUF_SIZE * (reads_per_iteration as usize));
 }
@@ -691,17 +691,16 @@ fn disk_read_random() {
         i: usize,
         file: std::fs::File,
     }
-    let file_name = "/tmp/napkin.txt";
     let page_size = page_size::get();
 
     let result = benchmark(
         || {
-            fs::remove_file(file_name).unwrap();
+            let _ = fs::remove_file(FILE_NAME);
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .read(true)
-                .open(file_name)
+                .open(FILE_NAME)
                 .unwrap();
             let buffer = vec![0; n_gib_bytes!(8) as usize];
             file.write_all(&buffer).unwrap();
@@ -744,7 +743,7 @@ fn disk_read_random() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name).unwrap();
+    fs::remove_file(FILE_NAME).unwrap();
 
     result.print_results("Random Disk Seek, No Page Cache", BUF_SIZE);
 }
