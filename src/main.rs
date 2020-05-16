@@ -17,6 +17,9 @@ use regex::Regex;
 #[cfg(target_os = "linux")]
 use rio::{Rio, Uring};
 
+#[cfg(target_os = "linux")]
+use std::os::unix::io::*;
+
 extern crate jemallocator;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
@@ -568,8 +571,10 @@ fn disk_read_sequential() {
             let buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
             file.seek(SeekFrom::Start(0)).unwrap();
 
-            #[cfg(target_os = "linux")]
-            libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_SEQUENTIAL);
+            unsafe {
+                #[cfg(target_os = "linux")]
+                libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_SEQUENTIAL);
+            }
 
             Test { buffer, file }
         },
@@ -711,8 +716,10 @@ fn disk_read_random() {
             }
             pages.shuffle(&mut thread_rng());
 
-            #[cfg(target_os = "linux")]
-            libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_RANDOM);
+            unsafe { 
+                #[cfg(target_os = "linux")]
+                libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_RANDOM);
+            }
 
             let buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
