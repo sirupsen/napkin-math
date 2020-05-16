@@ -50,6 +50,7 @@ use redis::Commands;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io;
+use std::io::ErrorKind;
 use std::io::prelude::*;
 use std::io::SeekFrom;
 use std::mem::forget;
@@ -882,53 +883,63 @@ fn tcp_read_write() {
     let mut buffer: [u8; 64] = [0; 64];
 
     // This is done outside the setup block to avoid having to deal with a shutdown signal..
-    let mut stream = TcpStream::connect("127.0.0.1:8877").unwrap();
-    stream.set_nodelay(true).unwrap();
-    stream.set_nonblocking(false).unwrap();
-    stream
-        .set_read_timeout(Some(Duration::from_millis(1000)))
-        .unwrap();
-    stream
-        .set_write_timeout(Some(Duration::from_millis(1000)))
-        .unwrap();
+    loop {
+        match TcpStream::connect("127.0.0.1:8877") {
+            Err(err) => { match err.kind() {
+                ErrorKind::ConnectionRefused => { continue; },
+                kind => panic!("Error occurred: {:?}", kind),
+            }; },
+            Ok(mut stream) => {
+                stream.set_nodelay(true).unwrap();
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_millis(1000)))
+                    .unwrap();
+                stream
+                    .set_write_timeout(Some(Duration::from_millis(1000)))
+                    .unwrap();
 
-    let result = benchmark(
-        || {},
-        |_| {
-            match stream.write(&bytes) {
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    // println!("c: failed to write");
-                    return true;
-                }
-                Ok(n) => {
-                    // println!("c: write: {}", n);
+                let result = benchmark(
+                    || {},
+                    |_| {
+                        match stream.write(&bytes) {
+                            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                                // println!("c: failed to write");
+                                return true;
+                            }
+                            Ok(n) => {
+                                // println!("c: write: {}", n);
 
-                    match stream.read(&mut buffer[0..n]) {
-                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                            // println!("c: failed to read, err: {:?}..", e);
-                            return true;
-                        }
-                        Ok(_n) => {
-                            // println!("c: read: {}\n", n);
-                        }
-                        Err(e) => {
-                            // println!("omgs read! {:?}", e.raw_os_error());
-                            panic!(e)
-                        }
-                    };
-                }
-                Err(e) => {
-                    // println!("omgs write! {:?}", e.raw_os_error());
-                    panic!(e)
-                }
-            };
+                                match stream.read(&mut buffer[0..n]) {
+                                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                                        // println!("c: failed to read, err: {:?}..", e);
+                                        return true;
+                                    }
+                                    Ok(_n) => {
+                                        // println!("c: read: {}\n", n);
+                                    }
+                                    Err(e) => {
+                                        // println!("omgs read! {:?}", e.raw_os_error());
+                                        panic!(e)
+                                    }
+                                };
+                            }
+                            Err(e) => {
+                                // println!("omgs write! {:?}", e.raw_os_error());
+                                panic!(e)
+                            }
+                        };
 
-            true
-        },
-    )
-    .unwrap();
+                        true
+                    },
+                )
+                .unwrap();
 
-    result.print_results("Tcp Echo", 64);
+                result.print_results("Tcp Echo", 64);
+                break;
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
