@@ -638,8 +638,8 @@ fn disk_read_sequential_io_uring() {
                 libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_SEQUENTIAL);
             }
 
-            let mut ring = rio::new().expect("create uring");
-            let mut buffers = vec![vec![0; BUF_SIZE]; reads_per_iteration as usize];
+            let ring = rio::new().expect("create uring");
+            let buffers = vec![vec![0; BUF_SIZE]; reads_per_iteration as usize];
             Test { buffers, file, ring, size: n_gib_bytes!(1) as usize, offset: 0 }
         },
         |test| {
