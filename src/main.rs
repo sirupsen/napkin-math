@@ -24,6 +24,8 @@ extern crate jemallocator;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+static FILE_NAME: &'static str = "/tmp/napkin.txt";
+
 // https://ark.intel.com/content/www/us/en/ark/products/97185/intel-core-i7-7700hq-processor-6m-cache-up-to-3-80-ghz.html
 // https://en.wikichip.org/wiki/intel/core_i7/i7-7700hq
 //
@@ -48,6 +50,7 @@ use redis::Commands;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io;
+use std::io::ErrorKind;
 use std::io::prelude::*;
 use std::io::SeekFrom;
 use std::mem::forget;
@@ -486,15 +489,15 @@ fn disk_write_sequential_fsync() {
         file: std::fs::File,
     }
 
-    let file_name = "/tmp/napkin.txt";
     let size_of_writes = n_kib_bytes!(8) as usize;
 
     let result = benchmark(
         || {
             let file = OpenOptions::new()
+                .create(true)
                 .write(true)
                 .truncate(true)
-                .open(file_name)
+                .open(FILE_NAME)
                 .unwrap();
 
             let bytes: Vec<u8> = (0..size_of_writes).map(|_| rand::random::<u8>()).collect();
@@ -508,7 +511,7 @@ fn disk_write_sequential_fsync() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name).unwrap();
+    fs::remove_file(FILE_NAME).unwrap();
 
     result.print_results("Sequential Disk Write, Fsync", size_of_writes);
 }
@@ -519,15 +522,15 @@ fn disk_write_sequential_no_fsync() {
         file: std::fs::File,
     }
 
-    let file_name = "/tmp/napkin.txt";
     let size_of_writes = n_kib_bytes!(8) as usize;
 
     let result = benchmark(
         || {
             let file = OpenOptions::new()
+                .create(true)
                 .write(true)
                 .truncate(true)
-                .open(file_name)
+                .open(FILE_NAME)
                 .unwrap();
 
             let bytes: Vec<u8> = (0..size_of_writes).map(|_| rand::random::<u8>()).collect();
@@ -540,7 +543,7 @@ fn disk_write_sequential_no_fsync() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name).unwrap();
+    fs::remove_file(FILE_NAME).unwrap();
 
     result.print_results("Sequential Disk Write, No Fsync", size_of_writes);
 }
@@ -552,17 +555,16 @@ fn disk_read_sequential() {
         buffer: [u8; BUF_SIZE],
         file: fs::File,
     }
-    let file_name = "/tmp/napkin.txt";
 
     let result = benchmark(
         || {
             // flush page cache? prob not necessary since we re-create the file.
-            fs::remove_file(file_name).unwrap();
+            let _ = fs::remove_file(FILE_NAME);
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .read(true)
-                .open(file_name)
+                .open(FILE_NAME)
                 .unwrap();
             let buffer = vec![0; n_gib_bytes!(1) as usize];
             file.write_all(&buffer).unwrap();
@@ -588,7 +590,7 @@ fn disk_read_sequential() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name).unwrap();
+    fs::remove_file(FILE_NAME).unwrap();
 
     result.print_results("Sequential Disk Read", BUF_SIZE);
 }
@@ -611,7 +613,6 @@ fn disk_read_sequential_io_uring() {
         size: usize,
         offset: usize,
     }
-    let file_name = "/tmp/napkin.txt";
     use std::slice;
 
     // TODO: checksum somehow
@@ -619,12 +620,12 @@ fn disk_read_sequential_io_uring() {
     let result = benchmark(
         || {
             // flush page cache? prob not necessary since we re-create the file.
-            fs::remove_file(file_name);
+            let _ = fs::remove_file(FILE_NAME);
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .read(true)
-                .open(file_name)
+                .open(FILE_NAME)
                 .unwrap();
             let buffer = vec![0; n_gib_bytes!(1) as usize];
             file.write_all(&buffer).unwrap();
@@ -638,8 +639,8 @@ fn disk_read_sequential_io_uring() {
                 libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_SEQUENTIAL);
             }
 
-            let mut ring = rio::new().expect("create uring");
-            let mut buffers = vec![vec![0; BUF_SIZE]; reads_per_iteration as usize];
+            let ring = rio::new().expect("create uring");
+            let buffers = vec![vec![0; BUF_SIZE]; reads_per_iteration as usize];
             Test { buffers, file, ring, size: n_gib_bytes!(1) as usize, offset: 0 }
         },
         |test| {
@@ -677,7 +678,7 @@ fn disk_read_sequential_io_uring() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name);
+    let _ = fs::remove_file(FILE_NAME);
 
     result.print_results("Io-uring Sequential Disk Read", BUF_SIZE * (reads_per_iteration as usize));
 }
@@ -691,17 +692,16 @@ fn disk_read_random() {
         i: usize,
         file: std::fs::File,
     }
-    let file_name = "/tmp/napkin.txt";
     let page_size = page_size::get();
 
     let result = benchmark(
         || {
-            fs::remove_file(file_name).unwrap();
+            let _ = fs::remove_file(FILE_NAME);
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .read(true)
-                .open(file_name)
+                .open(FILE_NAME)
                 .unwrap();
             let buffer = vec![0; n_gib_bytes!(8) as usize];
             file.write_all(&buffer).unwrap();
@@ -744,7 +744,7 @@ fn disk_read_random() {
         },
     )
     .unwrap();
-    fs::remove_file(file_name).unwrap();
+    fs::remove_file(FILE_NAME).unwrap();
 
     result.print_results("Random Disk Seek, No Page Cache", BUF_SIZE);
 }
@@ -883,53 +883,63 @@ fn tcp_read_write() {
     let mut buffer: [u8; 64] = [0; 64];
 
     // This is done outside the setup block to avoid having to deal with a shutdown signal..
-    let mut stream = TcpStream::connect("127.0.0.1:8877").unwrap();
-    stream.set_nodelay(true).unwrap();
-    stream.set_nonblocking(false).unwrap();
-    stream
-        .set_read_timeout(Some(Duration::from_millis(1000)))
-        .unwrap();
-    stream
-        .set_write_timeout(Some(Duration::from_millis(1000)))
-        .unwrap();
+    loop {
+        match TcpStream::connect("127.0.0.1:8877") {
+            Err(err) => { match err.kind() {
+                ErrorKind::ConnectionRefused => { continue; },
+                kind => panic!("Error occurred: {:?}", kind),
+            }; },
+            Ok(mut stream) => {
+                stream.set_nodelay(true).unwrap();
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_millis(1000)))
+                    .unwrap();
+                stream
+                    .set_write_timeout(Some(Duration::from_millis(1000)))
+                    .unwrap();
 
-    let result = benchmark(
-        || {},
-        |_| {
-            match stream.write(&bytes) {
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    // println!("c: failed to write");
-                    return true;
-                }
-                Ok(n) => {
-                    // println!("c: write: {}", n);
+                let result = benchmark(
+                    || {},
+                    |_| {
+                        match stream.write(&bytes) {
+                            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                                // println!("c: failed to write");
+                                return true;
+                            }
+                            Ok(n) => {
+                                // println!("c: write: {}", n);
 
-                    match stream.read(&mut buffer[0..n]) {
-                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                            // println!("c: failed to read, err: {:?}..", e);
-                            return true;
-                        }
-                        Ok(_n) => {
-                            // println!("c: read: {}\n", n);
-                        }
-                        Err(e) => {
-                            // println!("omgs read! {:?}", e.raw_os_error());
-                            panic!(e)
-                        }
-                    };
-                }
-                Err(e) => {
-                    // println!("omgs write! {:?}", e.raw_os_error());
-                    panic!(e)
-                }
-            };
+                                match stream.read(&mut buffer[0..n]) {
+                                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                                        // println!("c: failed to read, err: {:?}..", e);
+                                        return true;
+                                    }
+                                    Ok(_n) => {
+                                        // println!("c: read: {}\n", n);
+                                    }
+                                    Err(e) => {
+                                        // println!("omgs read! {:?}", e.raw_os_error());
+                                        panic!(e)
+                                    }
+                                };
+                            }
+                            Err(e) => {
+                                // println!("omgs write! {:?}", e.raw_os_error());
+                                panic!(e)
+                            }
+                        };
 
-            true
-        },
-    )
-    .unwrap();
+                        true
+                    },
+                )
+                .unwrap();
 
-    result.print_results("Tcp Echo", 64);
+                result.print_results("Tcp Echo", 64);
+                break;
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
