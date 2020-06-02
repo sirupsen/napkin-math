@@ -149,3 +149,4 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
 * [io_uring](https://lwn.net/Articles/776703/). Best summary, it links to many
   resources.
 * [How Long Does It Takes To Make a Context Switch](https://blog.tsunanet.net/2010/11/how-long-does-it-take-to-make-context.html)
+* [Integer Compression Comparisons](https://github.com/powturbo/TurboPFor-Integer-Compression)
