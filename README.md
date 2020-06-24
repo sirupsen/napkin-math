@@ -4,7 +4,7 @@ The goal of this project is to collect software, numbers, and techniques to
 quickly estimate the expected performance of systems from first-principles. For
 example, how quickly can you read 1 GB of memory? By composing these resources
 you should be able to answer interesting questions like: how much storage cost
-should you expect to pay for a cloud application with 100,000 RPS?
+should you expect to pay for logging for an application with 100,000 RPS?
 
 The best introduction to this skill is [through my talk at
 SRECON](https://www.youtube.com/watch?v=IxkSlnrRFqc).
