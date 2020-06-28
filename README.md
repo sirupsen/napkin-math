@@ -21,12 +21,14 @@ newsletter.
 
 ## Numbers
 
-Here are the numbers from the program, run on my 2017 Macbook. The goal is to
-run this on more platform.
+Below are numbers that are rounded from runs on a [GCP `c2-standard-4`][9] (Intel
+Cascade) and 2017 Macbook (2.8GHz, quad-core).
+
+[9]: https://gist.github.com/sirupsen/766f266eebf6bdf2525bdbb309e17a41
 
 **Note 1:** Numbers have been rounded, which means they don't line up perfectly.
-**Note 2:** Some throughput and latency numbers don't line up. Then the highest
-throughput achieved (with e.g. another input size) has been noted.
+**Note 2:** Some throughput and latency numbers don't line up (for ease of
+calculations see exact results e.g. [here][9]).
 
 | Operation                           | Latency | Throughput | 1 MiB  | 1 GiB  |
 | ----------------------------------- | ------- | ---------- | ------ | ------ |
