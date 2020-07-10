@@ -40,7 +40,7 @@ calculations see exact results e.g. [here][9]).
 | Sequential SSD Read (8 KiB)         | 1 μs    | 4 GiB/s    | 200 us | 200 ms |
 | Context Switch `[1] [2]`            | 10 μs   | N/A        | N/A    | N/A    |
 | Sequential SSD write, -fsync (8KiB) | 10 μs   | 1 GiB/s    | 1 ms   | 1 s    |
-| TCP Echo (TCP overhead) (64 bytes)  | 10 μs   | ?          | ?      | ?      |
+| TCP Echo Server (32 KiB)            | 10 μs   | 4 GiB/s    | 200 us | 200 ms |
 | Sorting (64-bit integers)           | N/A     | 200 MiB/s  | 5 ms   | 5 s    |
 | Decompression `[3]`                 | N/A     | ?          | 5 ms   | 5s     |
 | Random SSD Seek (8 KiB)             | 100 μs  | 70 MiB/s   | 10 ms  | 15 s   |
