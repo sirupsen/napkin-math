@@ -41,25 +41,27 @@ static FILE_NAME: &'static str = "/tmp/napkin.txt";
 // TODO: Would be cool to instrument branch misses etc. here
 use byte_unit::Byte;
 use clap::{App, Arg};
-use failure::Error;
+// use failure::Error;
+use mysql::prelude::*;
+use mysql::*;
 use num_format::{Locale, ToFormattedString};
 use page_size;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use redis::Commands;
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::fs::OpenOptions;
 use std::io;
-use std::io::ErrorKind;
 use std::io::prelude::*;
+use std::io::ErrorKind;
 use std::io::SeekFrom;
 use std::mem::forget;
 use std::net::{TcpListener, TcpStream};
 use std::ptr;
-use std::time::{Duration, Instant, SystemTime};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use sha2::{Sha256, Digest};
+use std::time::{Duration, Instant, SystemTime};
 
 #[allow(unused_imports)]
 #[cfg(target_arch = "x86_64")]
@@ -216,7 +218,7 @@ impl BenchmarkResult {
 fn benchmark<T, F: Fn() -> T, V: FnMut(&mut T) -> bool>(
     setup: F,
     mut f: V,
-) -> Result<BenchmarkResult, Error> {
+) -> Result<BenchmarkResult> {
     // warmup run
     let mut val = setup();
     let intended_duration = Duration::from_millis(100);
@@ -243,6 +245,8 @@ fn benchmark<T, F: Fn() -> T, V: FnMut(&mut T) -> bool>(
         }
     }
 
+    let duration = Duration::from_secs(1);
+    thread::sleep(duration);
     // real run
     let mut val = setup();
     let rdtsc_before: u64;
@@ -301,7 +305,7 @@ fn main() {
         )
         .get_matches();
 
-    let methods: [(&'static str, fn()); 21] = [
+    let methods: [(&'static str, fn()); 22] = [
         ("memory_read_sequential", memory_read_sequential),
         ("memory_write_sequential", memory_write_sequential),
         ("memory_read_random", memory_read_random),
@@ -324,6 +328,7 @@ fn main() {
         ("tcp_read_write", tcp_read_write),
         ("simd", simd),
         ("redis_read_single_key", redis_read_single_key),
+        ("mysql_write", mysql_write),
         ("sort", sort),
         ("mutex", mutex),
         ("hash_sha256", hash_sha256),
@@ -573,10 +578,8 @@ fn disk_read_sequential() {
             let buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
             file.seek(SeekFrom::Start(0)).unwrap();
 
-            unsafe {
-                #[cfg(target_os = "linux")]
-                libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_SEQUENTIAL);
-            }
+            #[cfg(target_os = "linux")]
+            libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_SEQUENTIAL);
 
             Test { buffer, file }
         },
@@ -641,7 +644,13 @@ fn disk_read_sequential_io_uring() {
 
             let ring = rio::new().expect("create uring");
             let buffers = vec![vec![0; BUF_SIZE]; reads_per_iteration as usize];
-            Test { buffers, file, ring, size: n_gib_bytes!(1) as usize, offset: 0 }
+            Test {
+                buffers,
+                file,
+                ring,
+                size: n_gib_bytes!(1) as usize,
+                offset: 0,
+            }
         },
         |test| {
             let ptr = test.buffers.as_mut_ptr();
@@ -650,7 +659,7 @@ fn disk_read_sequential_io_uring() {
             for i in 0..reads_per_iteration {
                 if test.size <= 0 {
                     println!("Stopping early");
-                    break
+                    break;
                 }
 
                 unsafe {
@@ -680,7 +689,10 @@ fn disk_read_sequential_io_uring() {
     .unwrap();
     let _ = fs::remove_file(FILE_NAME);
 
-    result.print_results("Io-uring Sequential Disk Read", BUF_SIZE * (reads_per_iteration as usize));
+    result.print_results(
+        "Io-uring Sequential Disk Read",
+        BUF_SIZE * (reads_per_iteration as usize),
+    );
 }
 
 fn disk_read_random() {
@@ -716,10 +728,8 @@ fn disk_read_random() {
             }
             pages.shuffle(&mut thread_rng());
 
-            unsafe { 
-                #[cfg(target_os = "linux")]
-                libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_RANDOM);
-            }
+            #[cfg(target_os = "linux")]
+            libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_RANDOM);
 
             let buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
@@ -834,6 +844,8 @@ fn syscall_stat() {
 }
 
 fn tcp_read_write() {
+    const BUF_SIZE: usize = n_kib_bytes!(64) as usize;
+
     // This server doesn't support multiple clients.
     thread::spawn(move || {
         let listener = TcpListener::bind("127.0.0.1:8877").unwrap();
@@ -849,7 +861,7 @@ fn tcp_read_write() {
                 .set_write_timeout(Some(Duration::from_millis(1000)))
                 .unwrap();
 
-            let mut buffer: [u8; 64] = [0; 64];
+            let mut buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
             loop {
                 match stream.read(&mut buffer) {
@@ -879,16 +891,20 @@ fn tcp_read_write() {
         }
     });
 
-    let bytes: Vec<u8> = (0..64).map(|_| rand::random::<u8>()).collect();
-    let mut buffer: [u8; 64] = [0; 64];
+    let bytes: Vec<u8> = (0..BUF_SIZE).map(|_| rand::random::<u8>()).collect();
+    let mut buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
     // This is done outside the setup block to avoid having to deal with a shutdown signal..
     loop {
         match TcpStream::connect("127.0.0.1:8877") {
-            Err(err) => { match err.kind() {
-                ErrorKind::ConnectionRefused => { continue; },
-                kind => panic!("Error occurred: {:?}", kind),
-            }; },
+            Err(err) => {
+                match err.kind() {
+                    ErrorKind::ConnectionRefused => {
+                        continue;
+                    }
+                    kind => panic!("Error occurred: {:?}", kind),
+                };
+            }
             Ok(mut stream) => {
                 stream.set_nodelay(true).unwrap();
                 stream.set_nonblocking(false).unwrap();
@@ -935,7 +951,7 @@ fn tcp_read_write() {
                 )
                 .unwrap();
 
-                result.print_results("Tcp Echo", 64);
+                result.print_results("Tcp Echo", BUF_SIZE);
                 break;
             }
         }
@@ -1096,4 +1112,127 @@ fn hash_siphash() {
     .unwrap();
 
     result.print_results("SIPHash", size_of_writes);
+}
+
+fn mysql_write() {
+    let url = "mysql://root:@localhost:3306/napkin";
+
+    // struct Product {
+    //     id: i64,
+    //     shop_id: i64,
+    //     title: Option<String>,
+    //     body_html: Option<String>,
+    //     vendor: Option<String>,
+    //     created_at: SystemTime,
+    //     updated_at: SystemTime,
+    // }
+
+    // https://mydbops.wordpress.com/2018/07/27/innodb-physical-files-on-mysql-8-0/
+    // 0x5 => 5 => ib_logfile0: REDO LOG
+    // 0x1C => 28 => binlog: BIN LOG
+    // 0x9 => 9 => ibdata: SHARED TABLESPACE
+    // 0x20 => 32 => products.ibd: TABLE ITSELF
+    // 0xD => 13 => undo
+    // 0x19 => temp_5.ibt
+    // 
+    // I think some are slow, some fast, due to filesystem batching?
+    // https://www.kernel.org/doc/Documentation/filesystems/ext4.txt
+    //
+    // This is an `strace` for a MYSQL insert. Notice the huge variability in elapsed time (in
+    // microseconds). You can see the 2PC, then the later stages (after the transaction returns) to
+    // update InnoDB (table, double-write buffer, etc.)
+    //
+    // Is the variability due to EXT4 batching? max_batch_time / min_batch_time mounting options
+    // (defaults are 0..15ms)
+    // https://www.kernel.org/doc/Documentation/filesystems/ext4.txt
+    // If we trace the kernel here for a backtrace in the fsync path in ext4
+    // (http://www.brendangregg.com/blog/2016-01-18/ebpf-stack-trace-hack.html) we would likely get
+    // this.
+    //
+    // PID/THRD        RELATIVE  ELAPSD    CPU SYSCALL(args)         
+    // 4020/0x15e84b:  43494372    5536     99 fsync(0x5, 0x0, 0x0)   // PREPARE, SLOW
+    // 4020/0xa145e6:    535406     267     93 fsync(0x1C, 0x0, 0x0)  // PREPARE, FAST
+    // 4020/0x15e84b:  43494492     238     87 fsync(0x5, 0x0, 0x0)   // ?, FAST
+    // 4020/0x15e84b:  43495108    2796    129 fsync(0x5, 0x0, 0x0)   // COMMIT, SLOW
+    //
+    // I think all this happens after client has returned..?
+    //
+    // 4020/0x15e7a7:  14185246    5577    147 fsync(0x9, 0x0, 0x0)  // ?
+    // 4020/0x15e7a3:     81974     277     92 fsync(0x9, 0x0, 0x0)  // ?
+    // 4020/0x15e7a3:     82035     216     52 fsync(0x20, 0x0, 0x0) // FLUSH
+    // 4020/0x15e7a3:     82116     231     61 fsync(0xD, 0x0, 0x0)  // ?
+    // 4020/0x15e84b:  43495999     249     86 fsync(0x5, 0x0, 0x0)  // ?
+    // 4020/0x15e848:  130442427     195     37 fsync(0x5, 0x0, 0x0) // ?
+    // 4020/0x15e7a7:  14185565    5626     89 fsync(0x9, 0x0, 0x0)  // ?
+    // 4020/0x15e7a3:     82274     359     90 fsync(0x19, 0x0, 0x0) //
+    // 4020/0x15e848:  130444415     277    110 fsync(0x5, 0x0, 0x0) 
+    let result = benchmark(
+        || {
+            let pool = Pool::new(url).unwrap();
+            let mut conn = pool.get_conn().unwrap();
+            conn.query_drop(
+                r"
+                DROP TABLE products;
+            ",
+            )
+            .unwrap();
+
+            conn.query_drop(
+                r"
+                CREATE TABLE IF NOT EXISTS `products` (
+                  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+                  `shop_id` bigint(20) DEFAULT NULL,
+                  `title` varchar(255) DEFAULT NULL,
+                  `body_html` mediumtext,
+                  `vendor` varchar(255) DEFAULT NULL,
+                  `created_at` datetime DEFAULT NULL,
+                  `updated_at` datetime DEFAULT NULL,
+                  PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=utf8mb4 ROW_FORMAT=DYNAMIC
+            ",
+            )
+            .unwrap();
+            pool
+        },
+        |pool| {
+            let mut handles = vec![];
+
+            // Why is this faster than fsync(2)?
+            //
+            // (1) Concurrent fsyncs to multiple disks...?
+            // (2) Group Commit?
+            //
+            // For some reason, some of these fsyncs are taking < 1ms, wheras in my benchmarks they
+            // typically take 5ms (which also does happen). Extremely variable.
+            for i in 0..16 {
+                println!("thread: {}", i);
+                handles.push(thread::spawn({
+                    let pool = pool.clone();
+                    move || {
+                        let mut conn = pool.get_conn().unwrap();
+                        for _ in 0..1000 {
+                            conn.exec_drop(
+                                r"INSERT INTO products (shop_id, title) VALUES (:shop_id, :title)",
+                                params! { "shop_id" => 123, "title" => "aerodynamic chair" },
+                            )
+                            .unwrap();
+                        }
+                    }
+                }));
+            }
+            // Expected 'naive' fsyncs to the binlog: 16 * 1,000 => 16,000
+            // 
+            // Actual as per `sudo dtruss -e -n mysql -t fsync 2>&1 | grep "fsync(0x1C"`:
+            //
+            // 71 entries!
+
+            for handle in handles {
+                handle.join().unwrap();
+            }
+            false
+        },
+    )
+    .unwrap();
+
+    result.print_results("MySQL Write", 8 + 17);
 }
