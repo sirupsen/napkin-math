@@ -579,7 +579,9 @@ fn disk_read_sequential() {
             file.seek(SeekFrom::Start(0)).unwrap();
 
             #[cfg(target_os = "linux")]
-            libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_SEQUENTIAL);
+            unsafe {
+                libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_SEQUENTIAL);
+            }
 
             Test { buffer, file }
         },
@@ -729,7 +731,9 @@ fn disk_read_random() {
             pages.shuffle(&mut thread_rng());
 
             #[cfg(target_os = "linux")]
-            libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_RANDOM);
+            unsafe {
+                libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_RANDOM);
+            }
 
             let buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
 
