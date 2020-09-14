@@ -118,7 +118,7 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
 * `[3]`: https://cran.r-project.org/web/packages/brotli/vignettes/brotli-2015-09-22.pdf
 * `[4]`: https://github.com/google/snappy
 * `[5]`: https://quixdb.github.io/squash-benchmark/
-* ["How to get consistent results when benchamrking on
+* ["How to get consistent results when benchmarking on
   Linux?"](https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux#2-disable-hyper-threading).
   Great compilation of various Kernel and CPU features to toggle for reliable
   bench-marking, e.g. CPU affinity, disabling turbo boost, etc. It also has
