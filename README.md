@@ -49,6 +49,7 @@ calculations see exact results e.g. [here][9]).
 | Cloud us-east1 to us-east2          | 250 μs  | ?          | ?      | ?      |
 | Mutex Lock/Unlock                   | ?       | ?          | ?      | ?      |
 | {MySQL, Memcached, Redis, ..} Query | ?       | ?          | ?      | ?      |
+| ProxySQL overhead.                  | 30 μs.  |            |        |        |
 | Envoy/Nginx Overhead                | ?       | ?          | ?      | ?      |
 | {JSON, Protobuf, ..} Serializee (?) | ?       | ?          | ?      | ?      |
 | Cloud us-east to us-central         | ?       | ?          | ?      | ?      |
