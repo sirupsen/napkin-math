@@ -65,15 +65,15 @@ them will be more than 2-3x off, which shouldn't be a problem for most users.
 ## Cost Numbers
 
 Approximate numbers that should be consistent between Cloud providers.
-  
-| What        | Amount | $ / Month |
-| ----------- | ------ | --------- |
-| CPU         | 1      | $10       |
-| Memory      | 1 GB   | $1        |
-| SSD         | 1 GB   | $0.1      |
-| Disk        | 1 GB   | $0.01     |
-| S3, GCS, .. | 1 GB   | $0.01     |
-| Network     | 1 GB   | $0.01     |
+
+| What        | Amount | $ / Month | $ / Hour |
+| ----------- | ------ | --------- | -------- |
+| CPU         | 1      | $10       | $0.02    |
+| Memory      | 1 GB   | $1        |          |
+| SSD         | 1 GB   | $0.1      |          |
+| Disk        | 1 GB   | $0.01     |          |
+| S3, GCS, .. | 1 GB   | $0.01     |          |
+| Network     | 1 GB   | $0.01     |          |
 
 ## Compression Ratios
 
