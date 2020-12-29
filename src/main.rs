@@ -1176,7 +1176,7 @@ fn mysql_write() {
             let mut conn = pool.get_conn().unwrap();
             conn.query_drop(
                 r"
-                DROP TABLE products;
+                DROP TABLE IF EXISTS products;
             ",
             )
             .unwrap();
