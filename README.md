@@ -30,28 +30,34 @@ Cascade) and 2017 Macbook (2.8GHz, quad-core).
 **Note 2:** Some throughput and latency numbers don't line up (for ease of
 calculations see exact results e.g. [here][9]).
 
-| Operation                           | Latency | Throughput | 1 MiB  | 1 GiB  |
-| ----------------------------------- | ------- | ---------- | ------ | ------ |
-| Sequential Memory R/W (64 bytes)    | 5 ns    | 10 GiB/s   | 100 us | 100 ms |
-| Hashing, not crypto-safe (64 bytes) | 25 ns   | 2 GiB/s    | 500 us | 500 ms |
-| Random Memory R/W (64 bytes)        | 50 ns   | 1 GiB/s    | 1 ms   | 1 s    |
-| System Call                         | 500 ns  | N/A        | N/A    | N/A    |
-| Hashing, crypto-safe (64 bytes)     | 500 ns  | 200 MiB/s  | 10 ms  | 10s    |
-| Sequential SSD Read (8 KiB)         | 1 μs    | 4 GiB/s    | 200 us | 200 ms |
-| Context Switch `[1] [2]`            | 10 μs   | N/A        | N/A    | N/A    |
-| Sequential SSD write, -fsync (8KiB) | 10 μs   | 1 GiB/s    | 1 ms   | 1 s    |
-| TCP Echo Server (32 KiB)            | 10 μs   | 4 GiB/s    | 200 us | 200 ms |
-| Sequential SSD write, +fsync (8KiB) | 1 ms    | 10 MiB/s   | 100 ms | 2 min  |
-| Sorting (64-bit integers)           | N/A     | 200 MiB/s  | 5 ms   | 5 s    |
-| Decompression `[3]`                 | N/A     | ?          | 5 ms   | 5s     |
-| Random SSD Seek (8 KiB)             | 100 μs  | 70 MiB/s   | 10 ms  | 15 s   |
-| Compression `[3]`                   | N/A     | ?          | 10 ms  | 10s    |
-| Cloud us-east1 to us-east2          | 250 μs  | ?          | ?      | ?      |
-| Mutex Lock/Unlock                   | ?       | ?          | ?      | ?      |
-| {MySQL, Memcached, Redis, ..} Query | ?       | ?          | ?      | ?      |
-| Envoy/Nginx Overhead                | ?       | ?          | ?      | ?      |
-| {JSON, Protobuf, ..} Serializee (?) | ?       | ?          | ?      | ?      |
-| Cloud us-east to us-central         | ?       | ?          | ?      | ?      |
+| Operation                           | Latency     | Throughput | 1 MiB  | 1 GiB  |
+| ----------------------------------- | -------     | ---------- | ------ | ------ |
+| Sequential Memory R/W (64 bytes)    | 5 ns        | 10 GiB/s   | 100 us | 100 ms |
+| Hashing, not crypto-safe (64 bytes) | 25 ns       | 2 GiB/s    | 500 us | 500 ms |
+| Random Memory R/W (64 bytes)        | 50 ns       | 1 GiB/s    | 1 ms   | 1 s    |
+| System Call                         | 500 ns      | N/A        | N/A    | N/A    |
+| Hashing, crypto-safe (64 bytes)     | 500 ns      | 200 MiB/s  | 10 ms  | 10s    |
+| Sequential SSD read (8 KiB)         | 1 μs        | 4 GiB/s    | 200 us | 200 ms |
+| Context Switch `[1] [2]`            | 10 μs       | N/A        | N/A    | N/A    |
+| Sequential SSD write, -fsync (8KiB) | 10 μs       | 1 GiB/s    | 1 ms   | 1 s    |
+| TCP Echo Server (32 KiB)            | 10 μs       | 4 GiB/s    | 200 us | 200 ms |
+| Sequential SSD write, +fsync (8KiB) | 1 ms        | 10 MiB/s   | 100 ms | 2 min  |
+| Sorting (64-bit integers)           | N/A         | 200 MiB/s  | 5 ms   | 5 s    |
+| Decompression `[3]`                 | N/A         | 200 MiB/s  | 5 ms   | 5s     |
+| Random SSD Seek (8 KiB)             | 100 μs      | 70 MiB/s   | 15 ms  | 15 s   |
+| Compression `[3]`                   | N/A         | 100 MiB/s  | 10 ms  | 10s    |
+| Envoy/Nginx Overhead                | 100 μs      | ?          | ?      | ?      |
+| Network within same region `[6]`    | 250 μs      | 100 MiB/s  | 10 ms  | 10s    |
+| {MySQL, Memcached, Redis, ..} Query | 500 μs      | ?          | ?      | ?      |
+| Network between regions `[6]`       | [Varies][9] | 25 MiB/s   | 40 ms  | 40s    |
+| Network NA East <-> West            | 60ms        | 25 MiB/s   | 40 ms  | 40s    |
+| Network EU West <-> NA East         | 80ms        | 25 MiB/s   | 40 ms  | 40s    |
+| Network NA West <-> Singapore       | 180ms       | 25 MiB/s   | 40 ms  | 40s    |
+| Network EU West <-> Singapore       | 160ms       | 25 MiB/s   | 40 ms  | 40s    |
+| Mutex Lock/Unlock                   | ?           | ?          | ?      | ?      |
+| {JSON, Protobuf, ..} Serializee (?) | ?           | ?          | ?      | ?      |
+
+[i]: https://www.cloudping.co/grid#
 
 You can run this with `RUSTFLAGS='-C target-cpu=native' cargo run --release --
 -h`. You won't get the right numbers when you're compiling in debug mode. You
@@ -118,6 +124,7 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
 * `[3]`: https://cran.r-project.org/web/packages/brotli/vignettes/brotli-2015-09-22.pdf
 * `[4]`: https://github.com/google/snappy
 * `[5]`: https://quixdb.github.io/squash-benchmark/
+* `[6]`: https://dl.acm.org/doi/10.1145/1879141.1879143
 * ["How to get consistent results when benchmarking on
   Linux?"](https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux#2-disable-hyper-threading).
   Great compilation of various Kernel and CPU features to toggle for reliable
@@ -152,3 +159,4 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
   resources.
 * [How Long Does It Takes To Make a Context Switch](https://blog.tsunanet.net/2010/11/how-long-does-it-take-to-make-context.html)
 * [Integer Compression Comparisons](https://github.com/powturbo/TurboPFor-Integer-Compression)
+
