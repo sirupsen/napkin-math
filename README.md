@@ -46,7 +46,7 @@ calculations see exact results e.g. [here][9]).
 | Decompression `[3]`                 | N/A         | 200 MiB/s  | 5 ms   | 5s     |
 | Random SSD Seek (8 KiB)             | 100 μs      | 70 MiB/s   | 15 ms  | 15 s   |
 | Compression `[3]`                   | N/A         | 100 MiB/s  | 10 ms  | 10s    |
-| Envoy/Nginx Overhead                | 100 μs      | ?          | ?      | ?      |
+| Proxy: Envoy/ProxySQL/Nginx/HAProxy | 50 μs       | ?          | ?      | ?      |
 | Network within same region `[6]`    | 250 μs      | 100 MiB/s  | 10 ms  | 10s    |
 | {MySQL, Memcached, Redis, ..} Query | 500 μs      | ?          | ?      | ?      |
 | Network between regions `[6]`       | [Varies][i] | 25 MiB/s   | 40 ms  | 40s    |
