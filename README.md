@@ -49,7 +49,7 @@ calculations see exact results e.g. [here][9]).
 | Envoy/Nginx Overhead                | 100 μs      | ?          | ?      | ?      |
 | Network within same region `[6]`    | 250 μs      | 100 MiB/s  | 10 ms  | 10s    |
 | {MySQL, Memcached, Redis, ..} Query | 500 μs      | ?          | ?      | ?      |
-| Network between regions `[6]`       | [Varies][9] | 25 MiB/s   | 40 ms  | 40s    |
+| Network between regions `[6]`       | [Varies][i] | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA East <-> West            | 60ms        | 25 MiB/s   | 40 ms  | 40s    |
 | Network EU West <-> NA East         | 80ms        | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA West <-> Singapore       | 180ms       | 25 MiB/s   | 40 ms  | 40s    |
