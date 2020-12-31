@@ -43,9 +43,11 @@ calculations see exact results e.g. [here][9]).
 | TCP Echo Server (32 KiB)            | 10 μs       | 4 GiB/s    | 200 μs | 200 ms |
 | Sequential SSD write, +fsync (8KiB) | 1 ms        | 10 MiB/s   | 100 ms | 2 min  |
 | Sorting (64-bit integers)           | N/A         | 200 MiB/s  | 5 ms   | 5 s    |
-| Decompression `[3]`                 | N/A         | 200 MiB/s  | 5 ms   | 5s     |
 | Random SSD Seek (8 KiB)             | 100 μs      | 70 MiB/s   | 15 ms  | 15 s   |
 | Compression `[3]`                   | N/A         | 100 MiB/s  | 10 ms  | 10s    |
+| Decompression `[3]`                 | N/A         | 200 MiB/s  | 5 ms   | 5s     |
+| Serialization `[8]` `[9]`           | N/A         | 100 MiB/s  | 10 ms  | 10s    |
+| Deserialization `[8]` `[9]`         | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Proxy: Envoy/ProxySQL/Nginx/HAProxy | 50 μs       | ?          | ?      | ?      |
 | Network within same region `[6]`    | 250 μs      | 100 MiB/s  | 10 ms  | 10s    |
 | {MySQL, Memcached, Redis, ..} Query | 500 μs      | ?          | ?      | ?      |
@@ -55,8 +57,6 @@ calculations see exact results e.g. [here][9]).
 | Network EU West <-> NA East         | 80 ms       | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA West <-> Singapore       | 180 ms      | 25 MiB/s   | 40 ms  | 40s    |
 | Network EU West <-> Singapore       | 160 ms      | 25 MiB/s   | 40 ms  | 40s    |
-| Mutex Lock/Unlock                   | ?           | ?          | ?      | ?      |
-| {JSON, Protobuf, ..} Serializee (?) | ?           | ?          | ?      | ?      |
 
 [i]: https://www.cloudping.co/grid#
 
@@ -127,6 +127,8 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
 * `[5]`: https://quixdb.github.io/squash-benchmark/
 * `[6]`: https://dl.acm.org/doi/10.1145/1879141.1879143
 * `[7]`: https://en.wikipedia.org/wiki/Hard_disk_drive_performance_characteristics#Seek_times_&_characteristics
+* `[8]`: https://github.com/simdjson/simdjson#performance-results
+* `[9]`: https://github.com/protocolbuffers/protobuf/blob/master/docs/performance.md
 * ["How to get consistent results when benchmarking on
   Linux?"](https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux#2-disable-hyper-threading).
   Great compilation of various Kernel and CPU features to toggle for reliable
