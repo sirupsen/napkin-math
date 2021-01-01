@@ -35,6 +35,8 @@ calculations see exact results e.g. [here][9]).
 | Sequential Memory R/W (64 bytes)    | 5 ns        | 10 GiB/s   | 100 μs | 100 ms |
 | Hashing, not crypto-safe (64 bytes) | 25 ns       | 2 GiB/s    | 500 μs | 500 ms |
 | Random Memory R/W (64 bytes)        | 50 ns       | 1 GiB/s    | 1 ms   | 1 s    |
+| Fast Serialization `[8]` `[9]` †    | N/A         | 1 GiB/s    | 1 ms   | 1s     |
+| Fast Deserialization `[8]` `[9]` †  | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | System Call                         | 500 ns      | N/A        | N/A    | N/A    |
 | Hashing, crypto-safe (64 bytes)     | 500 ns      | 200 MiB/s  | 10 ms  | 10s    |
 | Sequential SSD read (8 KiB)         | 1 μs        | 4 GiB/s    | 200 μs | 200 ms |
@@ -46,8 +48,8 @@ calculations see exact results e.g. [here][9]).
 | Random SSD Seek (8 KiB)             | 100 μs      | 70 MiB/s   | 15 ms  | 15 s   |
 | Compression `[3]`                   | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Decompression `[3]`                 | N/A         | 200 MiB/s  | 5 ms   | 5s     |
-| Serialization `[8]` `[9]`           | N/A         | 100 MiB/s  | 10 ms  | 10s    |
-| Deserialization `[8]` `[9]`         | N/A         | 100 MiB/s  | 10 ms  | 10s    |
+| Serialization `[8]` `[9]` †         | N/A         | 100 MiB/s  | 10 ms  | 10s    |
+| Deserialization `[8]` `[9]` †       | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Proxy: Envoy/ProxySQL/Nginx/HAProxy | 50 μs       | ?          | ?      | ?      |
 | Network within same region `[6]`    | 250 μs      | 100 MiB/s  | 10 ms  | 10s    |
 | {MySQL, Memcached, Redis, ..} Query | 500 μs      | ?          | ?      | ?      |
@@ -59,6 +61,12 @@ calculations see exact results e.g. [here][9]).
 | Network EU West <-> Singapore       | 160 ms      | 25 MiB/s   | 40 ms  | 40s    |
 
 [i]: https://www.cloudping.co/grid#
+
+**†:** "Fast serialization/deserialization" is typically a simple wire-protocol
+that just dumps bytes, or a very efficient environment. Typically standard
+serialization such as e.g. JSON will be of the slower kind. We include both here
+as serialization/deserialization is a very, very broad topic with extremely
+different performance characteristics depending on data and implementation.
 
 You can run this with `RUSTFLAGS='-C target-cpu=native' cargo run --release --
 -h`. You won't get the right numbers when you're compiling in debug mode. You
