@@ -1,5 +1,6 @@
 require 'mysql2'
 require 'time'
+require 'socket'
 
 client_a = Mysql2::Client.new(host: "localhost", username: "root", database: 'napkin')
 # client_b = Mysql2::Client.new(host: "localhost", username: "root", database: 'napkin')
@@ -13,43 +14,43 @@ max_id_from_last_batch = 0
 
 queries = []
 
-# queries << ["iteration_1", <<~SQL
-#   SELECT *
-#   FROM `table`
-#   ORDER BY id ASC
-#   LIMIT %{limit}
-#   OFFSET %{offset}
-# SQL
-# ]
+queries << ["iteration_1", <<~SQL
+  SELECT *
+  FROM `table`
+  ORDER BY id ASC
+  LIMIT %{limit}
+  OFFSET %{offset}
+SQL
+]
 
-# queries << ["iteration_2", <<~SQL
-#   SELECT * FROM `table`
-#   WHERE id <= (SELECT id FROM `table` LIMIT 1 OFFSET %{offset})
-#   ORDER BY id ASC
-#   LIMIT %{limit}
-# SQL
-# ]
+queries << ["iteration_2", <<~SQL
+  SELECT * FROM `table`
+  WHERE id <= (SELECT id FROM `table` LIMIT 1 OFFSET %{offset})
+  ORDER BY id ASC
+  LIMIT %{limit}
+SQL
+]
 
-# queries << ["iteration_4", <<~SQL
-#   SELECT * FROM `table`
-#   WHERE id > %{max_id_from_last_batch}
-#   ORDER BY id ASC
-#   LIMIT %{limit}
-# SQL
-# ]
+queries << ["iteration_4", <<~SQL
+  SELECT * FROM `table`
+  WHERE id > %{max_id_from_last_batch}
+  ORDER BY id ASC
+  LIMIT %{limit}
+SQL
+]
 
-# queries << ["iteration_5", <<~SQL
-# SELECT max(id) as id, MD5(CONCAT(
-#   MD5(GROUP_CONCAT(UNHEX(MD5(COALESCE(t.id))))),
-#   MD5(GROUP_CONCAT(UNHEX(MD5(COALESCE(t.updated_at)))))
-# )) as checksum
-# FROM (
-#    SELECT id, updated_at FROM `table`
-#    WHERE id > %{max_id_from_last_batch}
-#    LIMIT %{limit}
-# ) t
-# SQL
-# ]
+queries << ["iteration_5", <<~SQL
+SELECT max(id) as id, MD5(CONCAT(
+  MD5(GROUP_CONCAT(UNHEX(MD5(COALESCE(t.id))))),
+  MD5(GROUP_CONCAT(UNHEX(MD5(COALESCE(t.updated_at)))))
+)) as checksum
+FROM (
+   SELECT id, updated_at FROM `table`
+   WHERE id > %{max_id_from_last_batch}
+   LIMIT %{limit}
+) t
+SQL
+]
 
 queries << ["iteration_6", <<~SQL
 SELECT max(id) as id, SUM(UNIX_TIMESTAMP(updated_at)) as checksum
@@ -59,25 +60,25 @@ WHERE id < (SELECT id FROM `table` WHERE id > %{max_id_from_last_batch} LIMIT 1 
 SQL
 ]
 
-def render_plot(title:, xlabel: "Batch", ylabel: "Time in ms", output:, input:)
-  plot_script = <<~GNUPLOT
-    set title '%{title}'
-    set ylabel '%{ylabel}'
-    set xlabel '%{xlabel}'
-    set grid # Show the grid
-    set term png
-    set output '%{output}'
-    plot '%{input}' title ''
-  GNUPLOT
-
-  plot_script = plot_script % { input: input, output: output, title: title, xlabel: xlabel, ylabel: ylabel }
-  plot_script_name = "#{title}.gnuplot"
-  File.open(plot_script_name, "w+") { |f| f.write(plot_script) }
-  system("gnuplot #{plot_script_name}")
-end
 
 queries.each do |(name, sql)|
+  10.times { GC.start }
+  sleep(0.1)
+  system("sudo purge") # clear disk cache
+  system("mysql.server restart") # restart mysql to flush buffer pools
   csv_file = "#{name}.csv"
+
+  loop do
+    begin
+      TCPSocket.open("localhost", 3306)
+      break
+    rescue Errno::ECONNREFUSED
+      retry
+    end
+  end
+
+  client_a = Mysql2::Client.new(host: "localhost", username: "root", database: 'napkin')
+
   file = File.open(csv_file, "w+")
 
   (1..iterations).each do |i|
@@ -98,5 +99,32 @@ queries.each do |(name, sql)|
     max_id_from_last_batch = res_a.last["id"]
   end
   file.close
-  render_plot(input: csv_file, output: "#{name}.png", title: name)
 end
+
+def render_plot(title: "Checksum performance", xlabel: "Batch", ylabel: "Time in ms", output:, input: [])
+  plot_script = <<~GNUPLOT
+    set title '%{title}'
+    set ylabel '%{ylabel}'
+    set xlabel '%{xlabel}'
+    set grid # Show the grid
+    set term png
+    set output '%{output}'
+    plot \\
+  GNUPLOT
+
+  plot_script = plot_script % { output: output, title: title, xlabel: xlabel, ylabel: ylabel }
+  plot_script += input.map { |input| "'#{input}' title \"#{input.chomp(".csv")}\"" }.join(", ")
+
+  puts plot_script
+
+  plot_script_name = "#{input.last.chomp(".csv")}.gnuplot"
+
+  File.open(plot_script_name, "w+") { |f| f.write(plot_script) }
+  system("gnuplot #{plot_script_name}")
+end
+
+render_plot(output: "iteration_1.png", input: ["iteration_1.csv"])
+render_plot(output: "iteration_2.png", input: ["iteration_1.csv", "iteration_2.csv"])
+render_plot(output: "iteration_4.png", input: ["iteration_1.csv", "iteration_2.csv", "iteration_4.csv"])
+render_plot(output: "iteration_5.png", input: ["iteration_1.csv", "iteration_2.csv", "iteration_4.csv", "iteration_5.csv"])
+render_plot(output: "iteration_6.png", input: ["iteration_1.csv", "iteration_2.csv", "iteration_4.csv", "iteration_5.csv", "iteration_6.csv"])
