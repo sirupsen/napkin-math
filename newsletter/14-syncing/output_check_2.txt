@@ -1,0 +1,12 @@
+batch=1/10000 batch_time=41.0ms limit=10000 offset=0
+[{"max_id"=>100008001}]
+batch=2/10000 batch_time=79.8ms limit=20000 offset=10000
+[{"max_id"=>100008001}]
+batch=3/10000 batch_time=116.0ms limit=30000 offset=20000
+[{"max_id"=>100008001}]
+batch=4/10000 batch_time=154.2ms limit=40000 offset=30000
+[{"max_id"=>100008001}]
+batch=5/10000 batch_time=195.3ms limit=50000 offset=40000
+[{"max_id"=>100008001}]
+batch=6/10000 batch_time=237.9ms limit=60000 offset=50000
+[{"max_id"=>100008001}]
