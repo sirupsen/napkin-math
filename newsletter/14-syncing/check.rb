@@ -41,14 +41,16 @@ SQL
 
 queries << ["iteration_5", <<~SQL
 SELECT max(id) as id, MD5(CONCAT(
-  MD5(GROUP_CONCAT(UNHEX(MD5(COALESCE(t.id))))),
-  MD5(GROUP_CONCAT(UNHEX(MD5(COALESCE(t.updated_at)))))
+  MD5(GROUP_CONCAT(UNHEX(MD5(COALESCE(id))))),
+  MD5(GROUP_CONCAT(UNHEX(MD5(COALESCE(data1))))),
+  MD5(GROUP_CONCAT(UNHEX(MD5(COALESCE(data2))))),
+  MD5(GROUP_CONCAT(UNHEX(MD5(COALESCE(data3))))),
+  MD5(GROUP_CONCAT(UNHEX(MD5(COALESCE(data4))))),
+  MD5(GROUP_CONCAT(UNHEX(MD5(COALESCE(updated_at)))))
 )) as checksum
-FROM (
-   SELECT id, updated_at FROM `table`
-   WHERE id > %{max_id_from_last_batch}
-   LIMIT %{limit}
-) t
+FROM `table`
+WHERE id < (SELECT id FROM `table` WHERE id > %{max_id_from_last_batch} LIMIT 1 OFFSET 10000)
+  AND id > %{max_id_from_last_batch}
 SQL
 ]
 
@@ -56,6 +58,15 @@ queries << ["iteration_6", <<~SQL
 SELECT max(id) as id, SUM(UNIX_TIMESTAMP(updated_at)) as checksum
 FROM `table`
 WHERE id < (SELECT id FROM `table` WHERE id > %{max_id_from_last_batch} LIMIT 1 OFFSET 10000)
+  AND id > %{max_id_from_last_batch}
+SQL
+]
+
+queries << ["iteration_7", <<~SQL
+SELECT max(id) as id, SUM(UNIX_TIMESTAMP(updated_at)) as checksum
+FROM `table`
+FORCE INDEX (index_table_id_updated_at)
+WHERE id < (SELECT id FROM `table` FORCE INDEX (index_table_id) WHERE id > %{max_id_from_last_batch} LIMIT 1 OFFSET 10000)
   AND id > %{max_id_from_last_batch}
 SQL
 ]
@@ -101,7 +112,7 @@ queries.each do |(name, sql)|
   file.close
 end
 
-def render_plot(title: "Checksum performance", xlabel: "Batch", ylabel: "Time in ms", output:, input: [])
+def render_plot(title: "Checksum performance (lower is better)", xlabel: "Batch", ylabel: "Time in ms", output:, input: [], plot: [], expectation:)
   plot_script = <<~GNUPLOT
     set title '%{title}'
     set ylabel '%{ylabel}'
@@ -113,7 +124,10 @@ def render_plot(title: "Checksum performance", xlabel: "Batch", ylabel: "Time in
   GNUPLOT
 
   plot_script = plot_script % { output: output, title: title, xlabel: xlabel, ylabel: ylabel }
+
   plot_script += input.map { |input| "'#{input}' title \"#{input.chomp(".csv")}\"" }.join(", ")
+
+  plot_script += ", #{expectation} title 'Napkin math lower bound #{input.last.chomp("csv")}' lw 3 lc 'red'"
 
   puts plot_script
 
@@ -123,8 +137,13 @@ def render_plot(title: "Checksum performance", xlabel: "Batch", ylabel: "Time in
   system("gnuplot #{plot_script_name}")
 end
 
-render_plot(output: "iteration_1.png", input: ["iteration_1.csv"])
-render_plot(output: "iteration_2.png", input: ["iteration_1.csv", "iteration_2.csv"])
-render_plot(output: "iteration_4.png", input: ["iteration_1.csv", "iteration_2.csv", "iteration_4.csv"])
-render_plot(output: "iteration_5.png", input: ["iteration_1.csv", "iteration_2.csv", "iteration_4.csv", "iteration_5.csv"])
-render_plot(output: "iteration_6.png", input: ["iteration_1.csv", "iteration_2.csv", "iteration_4.csv", "iteration_5.csv", "iteration_6.csv"])
+render_plot(output: "iteration_1.png", input: ["iteration_1.csv"], expectation: 100)
+render_plot(output: "iteration_2.png", input: ["iteration_1.csv", "iteration_2.csv"], expectation: 100)
+render_plot(output: "iteration_4.png", input: ["iteration_1.csv", "iteration_2.csv", "iteration_4.csv"], expectation: 100)
+render_plot(output: "iteration_5.png", input: ["iteration_1.csv", "iteration_2.csv", "iteration_4.csv", "iteration_5.csv"], expectation: 50)
+
+render_plot(output: "iteration_6.png", input: ["iteration_1.csv", "iteration_2.csv", "iteration_4.csv", "iteration_5.csv", "iteration_6.csv"], expectation: 3)
+render_plot(output: "iteration_6_no_1.png", input: ["iteration_2.csv", "iteration_4.csv", "iteration_5.csv", "iteration_6.csv"], plot: ["0x + 5 title 'Napkin Math'"], expectation: 3)
+
+render_plot(output: "iteration_7.png", input: ["iteration_2.csv", "iteration_4.csv", "iteration_5.csv", "iteration_6.csv", "iteration_7.csv"], expectation: 3)
+render_plot(output: "iteration_7-1.png", input: ["iteration_6.csv", "iteration_7.csv"], expectation: 3)
