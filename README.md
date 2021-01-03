@@ -171,4 +171,4 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
   resources.
 * [How Long Does It Takes To Make a Context Switch](https://blog.tsunanet.net/2010/11/how-long-does-it-take-to-make-context.html)
 * [Integer Compression Comparisons](https://github.com/powturbo/TurboPFor-Integer-Compression)
-
+* [Files are hard](https://danluu.com/file-consistency/)
