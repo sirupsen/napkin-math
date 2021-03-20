@@ -54,7 +54,7 @@ calculations see exact results e.g. [here][9]).
 | Network within same region `[6]`    | 250 μs      | 100 MiB/s  | 10 ms  | 10s    |
 | {MySQL, Memcached, Redis, ..} Query | 500 μs      | ?          | ?      | ?      |
 | Random HDD Seek (8 KiB)             | 10 ms       | 70 MiB/s   | 15 ms  | 15 s   |
-| Network between regions `[6]`       | [Varies][i] | 25 MiB/s   | 40 ms  | 40s    |
+| Network between regions `[6]`       | [<10ms][i]  | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA East <-> West            | 60 ms       | 25 MiB/s   | 40 ms  | 40s    |
 | Network EU West <-> NA East         | 80 ms       | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA West <-> Singapore       | 180 ms      | 25 MiB/s   | 40 ms  | 40s    |
