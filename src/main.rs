@@ -249,14 +249,18 @@ fn benchmark<T, F: Fn() -> T, V: FnMut(&mut T) -> bool>(
     thread::sleep(duration);
     // real run
     let mut val = setup();
-    let rdtsc_before: u64;
     let intended_duration = Duration::from_millis(5000);
     let mut iterations_per_check = iterations;
     let mut iterations: usize = 0;
     let instant = Instant::now();
-    unsafe {
-        rdtsc_before = core::arch::x86_64::_rdtsc();
-    }
+    // let mut cycles = 0;
+
+    // if cfg!(target_arch = "x86_64") {
+    //     let rdtsc_before: u64;
+    //     unsafe {
+    //         rdtsc_before = core::arch::x86_64::_rdtsc();
+    //     }
+    // }
 
     let mut done = false;
     while instant.elapsed() < intended_duration {
@@ -275,17 +279,21 @@ fn benchmark<T, F: Fn() -> T, V: FnMut(&mut T) -> bool>(
     }
     let actual_duration = instant.elapsed();
 
-    let rdtsc_after: u64;
-    unsafe {
-        rdtsc_after = core::arch::x86_64::_rdtsc();
-    }
+    // if cfg!(target_arch = "x86_64") {
+    //     let rdtsc_after: u64;
+    //     unsafe {
+    //         rdtsc_after = core::arch::x86_64::_rdtsc();
+    //     }
+
+    //     cycles = rdtsc_after - rdtsc_before
+    // }
 
     Ok(BenchmarkResult {
         iterations,
         duration: actual_duration,
         // duration_ratio: intended_duration.as_nanos() as f64 / actual_duration.as_nanos() as f64,
         // intended_duration: intended_duration,
-        cycles: rdtsc_after - rdtsc_before,
+        cycles: 0,
     })
 }
 
@@ -305,7 +313,7 @@ fn main() {
         )
         .get_matches();
 
-    let methods: [(&'static str, fn()); 22] = [
+    let methods: [(&'static str, fn()); 21] = [
         ("memory_read_sequential", memory_read_sequential),
         ("memory_write_sequential", memory_write_sequential),
         ("memory_read_random", memory_read_random),
@@ -326,7 +334,7 @@ fn main() {
         ),
         ("disk_write_sequential_fsync", disk_write_sequential_fsync),
         ("tcp_read_write", tcp_read_write),
-        ("simd", simd),
+        // ("simd", simd),
         ("redis_read_single_key", redis_read_single_key),
         ("mysql_write", mysql_write),
         ("sort", sort),
@@ -884,10 +892,10 @@ fn tcp_read_write() {
                             Ok(_n) => {
                                 // println!("s{}: write: {}", i, n);
                             }
-                            Err(e) => panic!(e),
+                            Err(e) => panic!("{}", e),
                         };
                     }
-                    Err(e) => panic!(e),
+                    Err(e) => panic!("{}", e),
                 };
 
                 // i += 1;
@@ -940,13 +948,13 @@ fn tcp_read_write() {
                                     }
                                     Err(e) => {
                                         // println!("omgs read! {:?}", e.raw_os_error());
-                                        panic!(e)
+                                        panic!("{}", e)
                                     }
                                 };
                             }
                             Err(e) => {
                                 // println!("omgs write! {:?}", e.raw_os_error());
-                                panic!(e)
+                                panic!("{}", e)
                             }
                         };
 
@@ -962,31 +970,31 @@ fn tcp_read_write() {
     }
 }
 
-#[derive(Clone, Copy)]
-#[allow(non_camel_case_types)]
-pub union i32simd {
-    vector: __m256i,
-    numbers: [u32; 8],
-}
+// #[derive(Clone, Copy)]
+// #[allow(non_camel_case_types)]
+// pub union i32simd {
+//     vector: __m256i,
+//     numbers: [u32; 8],
+// }
 
-fn simd() {
-    unsafe {
-        let a = i32simd {
-            vector: _mm256_set_epi32(1, 2, 3, 4, 5, 6, 7, 8),
-        };
-        let b = i32simd {
-            vector: _mm256_set_epi32(1, 2, 3, 4, 5, 6, 7, 8),
-        };
-        let result = i32simd {
-            vector: _mm256_mul_epi32(a.vector, b.vector),
-        };
-        let result2 = i32simd {
-            vector: _mm256_mullo_epi32(a.vector, b.vector),
-        };
-        println!("{:?}", result.numbers);
-        println!("{:?}", result2.numbers);
-    }
-}
+// fn simd() {
+//     unsafe {
+//         let a = i32simd {
+//             vector: _mm256_set_epi32(1, 2, 3, 4, 5, 6, 7, 8),
+//         };
+//         let b = i32simd {
+//             vector: _mm256_set_epi32(1, 2, 3, 4, 5, 6, 7, 8),
+//         };
+//         let result = i32simd {
+//             vector: _mm256_mul_epi32(a.vector, b.vector),
+//         };
+//         let result2 = i32simd {
+//             vector: _mm256_mullo_epi32(a.vector, b.vector),
+//         };
+//         println!("{:?}", result.numbers);
+//         println!("{:?}", result2.numbers);
+//     }
+// }
 
 fn redis_read_single_key() {
     let client = redis::Client::open("redis://127.0.0.1/").unwrap();
@@ -1138,7 +1146,7 @@ fn mysql_write() {
     // 0x20 => 32 => products.ibd: TABLE ITSELF
     // 0xD => 13 => undo
     // 0x19 => temp_5.ibt
-    // 
+    //
     // I think some are slow, some fast, due to filesystem batching?
     // https://www.kernel.org/doc/Documentation/filesystems/ext4.txt
     //
@@ -1153,7 +1161,7 @@ fn mysql_write() {
     // (http://www.brendangregg.com/blog/2016-01-18/ebpf-stack-trace-hack.html) we would likely get
     // this.
     //
-    // PID/THRD        RELATIVE  ELAPSD    CPU SYSCALL(args)         
+    // PID/THRD        RELATIVE  ELAPSD    CPU SYSCALL(args)
     // 4020/0x15e84b:  43494372    5536     99 fsync(0x5, 0x0, 0x0)   // PREPARE, SLOW
     // 4020/0xa145e6:    535406     267     93 fsync(0x1C, 0x0, 0x0)  // PREPARE, FAST
     // 4020/0x15e84b:  43494492     238     87 fsync(0x5, 0x0, 0x0)   // ?, FAST
@@ -1169,7 +1177,7 @@ fn mysql_write() {
     // 4020/0x15e848:  130442427     195     37 fsync(0x5, 0x0, 0x0) // ?
     // 4020/0x15e7a7:  14185565    5626     89 fsync(0x9, 0x0, 0x0)  // ?
     // 4020/0x15e7a3:     82274     359     90 fsync(0x19, 0x0, 0x0) //
-    // 4020/0x15e848:  130444415     277    110 fsync(0x5, 0x0, 0x0) 
+    // 4020/0x15e848:  130444415     277    110 fsync(0x5, 0x0, 0x0)
     let result = benchmark(
         || {
             let pool = Pool::new(url).unwrap();
@@ -1225,7 +1233,7 @@ fn mysql_write() {
                 }));
             }
             // Expected 'naive' fsyncs to the binlog: 16 * 1,000 => 16,000
-            // 
+            //
             // Actual as per `sudo dtruss -e -n mysql -t fsync 2>&1 | grep "fsync(0x1C"`:
             //
             // 71 entries!
