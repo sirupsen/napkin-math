@@ -45,7 +45,7 @@ use byte_unit::Byte;
 use clap::{App, Arg};
 // use failure::Error;
 use mysql::prelude::*;
-use mysql::*;
+use mysql::{params, Opts, Pool, Result};
 use num_format::{Locale, ToFormattedString};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
@@ -389,13 +389,13 @@ fn memory_write_sequential() {
 }
 
 fn memory_read_sequential() {
-    let bytes_per_iteration = 64;
-    let size_in_elements = (n_gb_bytes!(1) as u64 / bytes_per_iteration) as u64;
-
     struct Test {
         i: usize,
         vec: Vec<[u64; 8]>,
     }
+
+    let bytes_per_iteration = 64;
+    let size_in_elements = (n_gb_bytes!(1) as u64 / bytes_per_iteration) as u64;
 
     // put these in separate functions so they can be disassembled.
     // #[inline] is going to be important here.
@@ -403,7 +403,7 @@ fn memory_read_sequential() {
         || {
             let mut vec: Vec<[u64; 8]> = Vec::new();
             for i in 0..size_in_elements {
-                vec.push([i, i, i, i, i, i, i, i])
+                vec.push([i, i, i, i, i, i, i, i]);
             }
 
             Test { i: 0, vec }
@@ -573,7 +573,7 @@ fn disk_read_sequential() {
     let result = benchmark(
         || {
             // flush page cache? prob not necessary since we re-create the file.
-            let _ = fs::remove_file(FILE_NAME);
+            std::mem::drop(fs::remove_file(FILE_NAME));
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
@@ -719,7 +719,7 @@ fn disk_read_random() {
 
     let result = benchmark(
         || {
-            let _ = fs::remove_file(FILE_NAME);
+            std::mem::drop(fs::remove_file(FILE_NAME));
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
@@ -949,13 +949,13 @@ fn tcp_read_write() {
                                     }
                                     Err(e) => {
                                         // println!("omgs read! {:?}", e.raw_os_error());
-                                        panic!("{}", e)
+                                        panic!("{}", e);
                                     }
                                 };
                             }
                             Err(e) => {
                                 // println!("omgs write! {:?}", e.raw_os_error());
-                                panic!("{}", e)
+                                panic!("{}", e);
                             }
                         };
 
@@ -1004,11 +1004,11 @@ fn redis_read_single_key() {
         || {
             let mut con = client.get_connection().unwrap();
             let bytes: Vec<u8> = (0..64).map(|_| rand::random::<u8>()).collect();
-            let _: () = con.set("1", bytes).unwrap();
+            con.set::<&str, Vec<u8>, ()>("1", bytes).unwrap();
             con
         },
         |con| {
-            let _: Vec<u8> = con.get("1").unwrap();
+            std::mem::drop::<Vec<u8>>(con.get("1").unwrap());
             true
         },
     )
