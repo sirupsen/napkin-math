@@ -1180,7 +1180,8 @@ fn mysql_write() {
     // 4020/0x15e848:  130444415     277    110 fsync(0x5, 0x0, 0x0)
     let result = benchmark(
         || {
-            let pool = Pool::new(url).unwrap();
+            let opts = Opts::from_url(url).unwrap();
+            let pool = Pool::new(opts).unwrap();
             let mut conn = pool.get_conn().unwrap();
             conn.query_drop(
                 r"
