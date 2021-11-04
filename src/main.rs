@@ -1,3 +1,5 @@
+#![deny(clippy::all)]
+
 #[macro_use]
 extern crate byte_unit;
 extern crate clap;
@@ -24,7 +26,7 @@ extern crate jemallocator;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-static FILE_NAME: &'static str = "/tmp/napkin.txt";
+static FILE_NAME: &str = "/tmp/napkin.txt";
 
 // https://ark.intel.com/content/www/us/en/ark/products/97185/intel-core-i7-7700hq-processor-6m-cache-up-to-3-80-ghz.html
 // https://en.wikichip.org/wiki/intel/core_i7/i7-7700hq
@@ -45,7 +47,6 @@ use clap::{App, Arg};
 use mysql::prelude::*;
 use mysql::*;
 use num_format::{Locale, ToFormattedString};
-use page_size;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use redis::Commands;
@@ -373,13 +374,13 @@ fn memory_write_sequential() {
             Test { i: 0, vec }
         },
         |test| {
-            test.vec[test.i] = [8, 7, 110694, 5, 4, 3, 2, 1];
+            test.vec[test.i] = [8, 7, 110_694, 5, 4, 3, 2, 1];
             black_box(test.vec[test.i]);
             test.i += 1;
             if test.i == test.vec.len() {
                 return false;
             }
-            return true;
+            true
         },
     )
     .unwrap();
@@ -464,7 +465,7 @@ struct MemoryReadTest {
 
 fn memory_read_random() {
     let result = benchmark(memory_read_random_setup, memory_read_random_iteration).unwrap();
-    result.print_results("Random Read Vec", 64 as usize);
+    result.print_results("Random Read Vec", 64);
 }
 
 fn memory_read_random_setup() -> MemoryReadTest {
@@ -807,8 +808,8 @@ fn syscall_getrusage() {
         tv_usec: 0,
     };
     let rusage = Box::new(libc::rusage {
-        ru_utime: time.clone(),
-        ru_stime: time.clone(),
+        ru_utime: time,
+        ru_stime: time,
         ru_maxrss: 0,
         ru_ixrss: 0,
         ru_idrss: 0,
@@ -1066,7 +1067,7 @@ fn mutex() {
 }
 
 fn hash_sha256() {
-    let size_of_writes = 64 as usize;
+    let size_of_writes = 64;
 
     let result = benchmark(
         || {
@@ -1085,7 +1086,7 @@ fn hash_sha256() {
 
 fn hash_crc32() {
     use crc32fast::Hasher;
-    let size_of_writes = 64 as usize;
+    let size_of_writes = 64;
 
     let result = benchmark(
         || {
@@ -1094,7 +1095,7 @@ fn hash_crc32() {
         },
         |bytes| {
             let mut hasher = Hasher::new();
-            hasher.update(&bytes);
+            hasher.update(bytes);
             black_box(hasher.finalize());
             true
         },
@@ -1107,7 +1108,7 @@ fn hash_crc32() {
 fn hash_siphash() {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::Hasher;
-    let size_of_writes = 64 as usize;
+    let size_of_writes = 64;
 
     let result = benchmark(
         || {
@@ -1116,7 +1117,7 @@ fn hash_siphash() {
         },
         |bytes| {
             let mut hasher = DefaultHasher::new();
-            hasher.write(&bytes);
+            hasher.write(bytes);
             black_box(hasher.finish());
             true
         },
