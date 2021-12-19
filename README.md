@@ -108,6 +108,7 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
 | Source Code | 2-4x              |
 | Executables | 2-3x              |
 | RPC         | 5-10x             |
+| SSL         | -2% `[10]`        |
 
 ## Techniques
 
@@ -137,6 +138,7 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
 * `[7]`: https://en.wikipedia.org/wiki/Hard_disk_drive_performance_characteristics#Seek_times_&_characteristics
 * `[8]`: https://github.com/simdjson/simdjson#performance-results
 * `[9]`: https://github.com/protocolbuffers/protobuf/blob/master/docs/performance.md
+* `[10]`: https://www.imperialviolet.org/2010/06/25/overclocking-ssl.html
 * ["How to get consistent results when benchmarking on
   Linux?"](https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux#2-disable-hyper-threading).
   Great compilation of various Kernel and CPU features to toggle for reliable
