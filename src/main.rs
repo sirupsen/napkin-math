@@ -1,3 +1,5 @@
+#![deny(clippy::all)]
+
 #[macro_use]
 extern crate byte_unit;
 extern crate clap;
@@ -24,7 +26,7 @@ extern crate jemallocator;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-static FILE_NAME: &'static str = "/tmp/napkin.txt";
+static FILE_NAME: &str = "/tmp/napkin.txt";
 
 // https://ark.intel.com/content/www/us/en/ark/products/97185/intel-core-i7-7700hq-processor-6m-cache-up-to-3-80-ghz.html
 // https://en.wikichip.org/wiki/intel/core_i7/i7-7700hq
@@ -43,9 +45,8 @@ use byte_unit::Byte;
 use clap::{App, Arg};
 // use failure::Error;
 use mysql::prelude::*;
-use mysql::*;
+use mysql::{params, Opts, Pool, Result};
 use num_format::{Locale, ToFormattedString};
-use page_size;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use redis::Commands;
@@ -373,13 +374,13 @@ fn memory_write_sequential() {
             Test { i: 0, vec }
         },
         |test| {
-            test.vec[test.i] = [8, 7, 110694, 5, 4, 3, 2, 1];
+            test.vec[test.i] = [8, 7, 110_694, 5, 4, 3, 2, 1];
             black_box(test.vec[test.i]);
             test.i += 1;
             if test.i == test.vec.len() {
                 return false;
             }
-            return true;
+            true
         },
     )
     .unwrap();
@@ -388,13 +389,13 @@ fn memory_write_sequential() {
 }
 
 fn memory_read_sequential() {
-    let bytes_per_iteration = 64;
-    let size_in_elements = (n_gb_bytes!(1) as u64 / bytes_per_iteration) as u64;
-
     struct Test {
         i: usize,
         vec: Vec<[u64; 8]>,
     }
+
+    let bytes_per_iteration = 64;
+    let size_in_elements = (n_gb_bytes!(1) as u64 / bytes_per_iteration) as u64;
 
     // put these in separate functions so they can be disassembled.
     // #[inline] is going to be important here.
@@ -402,7 +403,7 @@ fn memory_read_sequential() {
         || {
             let mut vec: Vec<[u64; 8]> = Vec::new();
             for i in 0..size_in_elements {
-                vec.push([i, i, i, i, i, i, i, i])
+                vec.push([i, i, i, i, i, i, i, i]);
             }
 
             Test { i: 0, vec }
@@ -464,7 +465,7 @@ struct MemoryReadTest {
 
 fn memory_read_random() {
     let result = benchmark(memory_read_random_setup, memory_read_random_iteration).unwrap();
-    result.print_results("Random Read Vec", 64 as usize);
+    result.print_results("Random Read Vec", 64);
 }
 
 fn memory_read_random_setup() -> MemoryReadTest {
@@ -572,7 +573,7 @@ fn disk_read_sequential() {
     let result = benchmark(
         || {
             // flush page cache? prob not necessary since we re-create the file.
-            let _ = fs::remove_file(FILE_NAME);
+            std::mem::drop(fs::remove_file(FILE_NAME));
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
@@ -718,7 +719,7 @@ fn disk_read_random() {
 
     let result = benchmark(
         || {
-            let _ = fs::remove_file(FILE_NAME);
+            std::mem::drop(fs::remove_file(FILE_NAME));
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
@@ -807,8 +808,8 @@ fn syscall_getrusage() {
         tv_usec: 0,
     };
     let rusage = Box::new(libc::rusage {
-        ru_utime: time.clone(),
-        ru_stime: time.clone(),
+        ru_utime: time,
+        ru_stime: time,
         ru_maxrss: 0,
         ru_ixrss: 0,
         ru_idrss: 0,
@@ -948,13 +949,13 @@ fn tcp_read_write() {
                                     }
                                     Err(e) => {
                                         // println!("omgs read! {:?}", e.raw_os_error());
-                                        panic!("{}", e)
+                                        panic!("{}", e);
                                     }
                                 };
                             }
                             Err(e) => {
                                 // println!("omgs write! {:?}", e.raw_os_error());
-                                panic!("{}", e)
+                                panic!("{}", e);
                             }
                         };
 
@@ -1003,11 +1004,11 @@ fn redis_read_single_key() {
         || {
             let mut con = client.get_connection().unwrap();
             let bytes: Vec<u8> = (0..64).map(|_| rand::random::<u8>()).collect();
-            let _: () = con.set("1", bytes).unwrap();
+            con.set::<&str, Vec<u8>, ()>("1", bytes).unwrap();
             con
         },
         |con| {
-            let _: Vec<u8> = con.get("1").unwrap();
+            std::mem::drop::<Vec<u8>>(con.get("1").unwrap());
             true
         },
     )
@@ -1066,7 +1067,7 @@ fn mutex() {
 }
 
 fn hash_sha256() {
-    let size_of_writes = 64 as usize;
+    let size_of_writes = 64;
 
     let result = benchmark(
         || {
@@ -1085,7 +1086,7 @@ fn hash_sha256() {
 
 fn hash_crc32() {
     use crc32fast::Hasher;
-    let size_of_writes = 64 as usize;
+    let size_of_writes = 64;
 
     let result = benchmark(
         || {
@@ -1094,7 +1095,7 @@ fn hash_crc32() {
         },
         |bytes| {
             let mut hasher = Hasher::new();
-            hasher.update(&bytes);
+            hasher.update(bytes);
             black_box(hasher.finalize());
             true
         },
@@ -1107,7 +1108,7 @@ fn hash_crc32() {
 fn hash_siphash() {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::Hasher;
-    let size_of_writes = 64 as usize;
+    let size_of_writes = 64;
 
     let result = benchmark(
         || {
@@ -1116,7 +1117,7 @@ fn hash_siphash() {
         },
         |bytes| {
             let mut hasher = DefaultHasher::new();
-            hasher.write(&bytes);
+            hasher.write(bytes);
             black_box(hasher.finish());
             true
         },
@@ -1180,7 +1181,8 @@ fn mysql_write() {
     // 4020/0x15e848:  130444415     277    110 fsync(0x5, 0x0, 0x0)
     let result = benchmark(
         || {
-            let pool = Pool::new(url).unwrap();
+            let opts = Opts::from_url(url).unwrap();
+            let pool = Pool::new(opts).unwrap();
             let mut conn = pool.get_conn().unwrap();
             conn.query_drop(
                 r"
