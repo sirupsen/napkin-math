@@ -15,6 +15,7 @@ extern crate libc;
 use libc::posix_fadvise;
 
 use regex::Regex;
+use std::process::Command;
 
 #[cfg(target_os = "linux")]
 use rio::{Rio, Uring};
@@ -305,6 +306,14 @@ fn main() {
         .author("Simon Eskildsen <simon@sirupsen.com>")
         .about("Runs computing benchmarks to find numbers for napkin math.")
         .arg(
+            Arg::with_name("number")
+                .long("number")
+                .short("n")
+                .help("How many times to run each test")
+                .value_name("N")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("evaluate")
                 .long("evaluate")
                 .short("e")
@@ -314,7 +323,11 @@ fn main() {
         )
         .get_matches();
 
-    let methods: [(&'static str, fn()); 21] = [
+    let methods: [(&'static str, fn()); 22] = [
+        (
+            "memory_read_sequential_threaded",
+            memory_read_sequential_threaded,
+        ),
         ("memory_read_sequential", memory_read_sequential),
         ("memory_write_sequential", memory_write_sequential),
         ("memory_read_random", memory_read_random),
@@ -349,11 +362,14 @@ fn main() {
         let regex_argument = matches.value_of("evaluate").unwrap_or(".*");
         println!("Matching tests with regex: {}", regex_argument);
         let regex = Regex::new(regex_argument).unwrap();
+        let n = matches.value_of("number").unwrap_or("1");
 
         for (name, func) in &methods {
             if regex.is_match(name) {
-                println!("\nExecuting {}..", name);
-                func();
+                for _ in 0..(n.parse().unwrap_or(1)) {
+                    println!("\nExecuting {}..", name);
+                    func();
+                }
             }
         }
     }
@@ -392,10 +408,11 @@ fn memory_read_sequential() {
     struct Test {
         i: usize,
         vec: Vec<[u64; 8]>,
+        total: u64,
     }
 
     let bytes_per_iteration = 64;
-    let size_in_elements = (n_gb_bytes!(1) as u64 / bytes_per_iteration) as u64;
+    let size_in_elements = (n_gb_bytes!(4) as u64 / bytes_per_iteration) as u64;
 
     // put these in separate functions so they can be disassembled.
     // #[inline] is going to be important here.
@@ -406,16 +423,23 @@ fn memory_read_sequential() {
                 vec.push([i, i, i, i, i, i, i, i]);
             }
 
-            Test { i: 0, vec }
+            // println!("Length: {}", vec.len());
+            Test {
+                i: 0,
+                vec,
+                total: 0,
+            }
         },
         |test| {
-            black_box(test.vec[test.i]);
-            test.i += 1;
             if test.i == test.vec.len() {
-                return false;
+                // println!("Result: {}", test.total);
+                false
+            } else {
+                black_box(test.vec[test.i]);
+                test.total += test.vec[test.i][0];
+                test.i += 1;
+                true
             }
-
-            true
         },
     )
     .unwrap();
@@ -572,24 +596,34 @@ fn disk_read_sequential() {
 
     let result = benchmark(
         || {
-            // flush page cache? prob not necessary since we re-create the file.
             std::mem::drop(fs::remove_file(FILE_NAME));
-            let mut file = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .read(true)
-                .open(FILE_NAME)
-                .unwrap();
             let buffer = vec![0; n_gib_bytes!(1) as usize];
-            file.write_all(&buffer).unwrap();
-            file.sync_data().unwrap();
+            {
+                let mut file = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .read(true)
+                    .open(FILE_NAME)
+                    .unwrap();
+                file.write_all(&buffer).unwrap();
+                file.sync_data().unwrap();
+            }
 
             let buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
+            let mut file = OpenOptions::new().read(true).open(FILE_NAME).unwrap();
             file.seek(SeekFrom::Start(0)).unwrap();
 
             #[cfg(target_os = "linux")]
             unsafe {
                 libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_SEQUENTIAL);
+            }
+
+            // TODO: for linux
+            if cfg!(target_os = "macos") {
+                Command::new("sudo")
+                    .arg("purge")
+                    .output()
+                    .expect("failed to flush page cache");
             }
 
             Test { buffer, file }
@@ -720,15 +754,19 @@ fn disk_read_random() {
     let result = benchmark(
         || {
             std::mem::drop(fs::remove_file(FILE_NAME));
-            let mut file = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .read(true)
-                .open(FILE_NAME)
-                .unwrap();
             let buffer = vec![0; n_gib_bytes!(8) as usize];
-            file.write_all(&buffer).unwrap();
-            file.sync_data().unwrap();
+            {
+                let mut file = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .read(true)
+                    .open(FILE_NAME)
+                    .unwrap();
+                file.write_all(&buffer).unwrap();
+                file.sync_data().unwrap();
+            }
+
+            let file = OpenOptions::new().read(true).open(FILE_NAME).unwrap();
 
             // This is to ensure we only visit each page once. Otherwise this is essentially just
             // benchmarking syscall + page cache, which is going to be awfully close to random
@@ -742,6 +780,14 @@ fn disk_read_random() {
             #[cfg(target_os = "linux")]
             unsafe {
                 libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_RANDOM);
+            }
+
+            // TODO: for linux
+            if cfg!(target_os = "macos") {
+                Command::new("sudo")
+                    .arg("purge")
+                    .output()
+                    .expect("failed to flush page cache");
             }
 
             let buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
