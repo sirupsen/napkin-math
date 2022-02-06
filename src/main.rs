@@ -447,6 +447,64 @@ fn memory_read_sequential() {
     result.print_results("Read Seq Vec", bytes_per_iteration as usize);
 }
 
+fn memory_read_sequential_threaded() {
+    let bytes_per_iteration = 64;
+    let size_in_elements = (n_gb_bytes!(4) as u64 / bytes_per_iteration) as u64;
+
+    let result = benchmark(
+        || {
+            let mut vec: Vec<[u64; 8]> = Vec::new();
+            for i in 0..size_in_elements {
+                vec.push([i, i, i, i, i, i, i, i]);
+            }
+
+            Arc::new(vec)
+        },
+        |vec| {
+            let mut threads: Vec<thread::JoinHandle<_>> = vec![];
+            let n_threads = 4;
+            for k in 0..(n_threads) {
+                let my_vec = vec.clone();
+                let mut start = (my_vec.len() / n_threads) * k;
+                let mut end = start + (my_vec.len() / n_threads);
+                if k != 0 {
+                    start += 1;
+                    end += 1;
+                }
+
+                if k == n_threads - 1 {
+                    end -= 1;
+                }
+
+                // println!("{}..{}", start, end);
+
+                threads.push(thread::spawn(move || {
+                    let mut i: u64 = 0;
+
+                    for j in start..end {
+                        i += my_vec[j][0];
+                        black_box(my_vec[j]);
+                    }
+
+                    i
+                }));
+            }
+
+            // let mut result = 0;
+            for thread in threads {
+                // result += thread.join().unwrap();
+                thread.join().unwrap();
+            }
+            // print!("Result {}\n", result);
+
+            false
+        },
+    )
+    .unwrap();
+
+    result.print_results("Read Seq Vec Threaded", n_gb_bytes!(4) as usize);
+}
+
 fn memory_write_random() {
     struct Test {
         vec: Vec<[u64; 8]>,
