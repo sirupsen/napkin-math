@@ -26,9 +26,12 @@ Cascade) and 2017 Macbook (2.8GHz, quad-core).
 
 [9]: https://gist.github.com/sirupsen/766f266eebf6bdf2525bdbb309e17a41
 
-**Note 1:** Numbers have been rounded, which means they don't line up perfectly.
-**Note 2:** Some throughput and latency numbers don't line up (for ease of
-calculations see exact results e.g. [here][9]).
+**Note 1:** Some throughput and latency numbers don't line up, this is
+intentional for ease of calculations.
+
+**Note 2:** Take the numbers with a grain of salt. E.g. for I/O, [`fio`][fio] is
+the state-of-the-art. I am continuously updating these numbers as I learn more
+to improve accuracy and as hardware improves.
 
 | Operation                           | Latency     | Throughput | 1 MiB  | 1 GiB  |
 | ----------------------------------- | -------     | ---------- | ------ | ------ |
@@ -68,9 +71,9 @@ serialization such as e.g. JSON will be of the slower kind. We include both here
 as serialization/deserialization is a very, very broad topic with extremely
 different performance characteristics depending on data and implementation.
 
-You can run this with `RUSTFLAGS='-C target-cpu=native' cargo run --release --
--h`. You won't get the right numbers when you're compiling in debug mode. You
-can help this project by adding new suites and filling out the blanks.
+You can run this with `./run` to run with the right optimization levels. You
+won't get the right numbers when you're compiling in debug mode. You can help
+this project by adding new suites and filling out the blanks.
 
 I am aware of some inefficiencies in this suite. I intend to improve my skills
 in this area, in order to ensure the numbers are the upper-bound of performance
@@ -174,3 +177,5 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
 * [How Long Does It Takes To Make a Context Switch](https://blog.tsunanet.net/2010/11/how-long-does-it-take-to-make-context.html)
 * [Integer Compression Comparisons](https://github.com/powturbo/TurboPFor-Integer-Compression)
 * [Files are hard](https://danluu.com/file-consistency/)
+
+[fio]: https://github.com/axboe/fio
