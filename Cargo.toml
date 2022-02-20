@@ -21,6 +21,12 @@ regex = "*"
 sha2 = "0.8"
 crc32fast = "*"
 mysql = "*"
+criterion = "*"
+core_affinity = "*"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rio = "0.9.3"
+
+[[bench]]
+name = "memory_read"
+harness = false
