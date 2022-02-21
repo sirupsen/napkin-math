@@ -75,6 +75,9 @@ You can run this with `./run` to run with the right optimization levels. You
 won't get the right numbers when you're compiling in debug mode. You can help
 this project by adding new suites and filling out the blanks.
 
+**Note:** I'm currently porting the benchmarks over to Criterion.rs, so some are
+in `bench/` now. You can run those by uncommenting the relevant line in `./run`.
+
 I am aware of some inefficiencies in this suite. I intend to improve my skills
 in this area, in order to ensure the numbers are the upper-bound of performance
 you may be able to squeeze out in production. I find it highly unlikely any of
