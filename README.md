@@ -37,20 +37,20 @@ to improve accuracy and as hardware improves.
 | ----------------------------------- | -------     | ---------- | ------ | ------ |
 | Sequential Memory R/W (64 bytes)    | 5 ns        | 50 GiB/s   | 20 μs  | 20 ms  |
 | Hashing, not crypto-safe (64 bytes) | 25 ns       | 2 GiB/s    | 500 μs | 500 ms |
-| Random Memory R/W (64 bytes)        | 50 ns       | 1 GiB/s    | 1 ms   | 1 s    |
+| Random Memory R/W (64 bytes)        | 50 ns       | 1 GiB/s    | 1 ms   | 1s     |
 | Fast Serialization `[8]` `[9]` †    | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | Fast Deserialization `[8]` `[9]` †  | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | System Call                         | 500 ns      | N/A        | N/A    | N/A    |
 | Hashing, crypto-safe (64 bytes)     | 500 ns      | 200 MiB/s  | 10 ms  | 10s    |
 | Sequential SSD read (8 KiB)         | 1 μs        | 4 GiB/s    | 200 μs | 200 ms |
 | Context Switch `[1] [2]`            | 10 μs       | N/A        | N/A    | N/A    |
-| Sequential SSD write, -fsync (8KiB) | 10 μs       | 1 GiB/s    | 1 ms   | 1 s    |
+| Sequential SSD write, -fsync (8KiB) | 10 μs       | 1 GiB/s    | 1 ms   | 1s     |
 | TCP Echo Server (32 KiB)            | 10 μs       | 4 GiB/s    | 200 μs | 200 ms |
+| Decompression `[11]`                | N/A         | 1   GiB/s  | 1 ms   | 1s     |
+| Compression `[11]`                  | N/A         | 500 MiB/s  | 2 ms   | 2s     |
 | Sequential SSD write, +fsync (8KiB) | 1 ms        | 10 MiB/s   | 100 ms | 2 min  |
-| Sorting (64-bit integers)           | N/A         | 200 MiB/s  | 5 ms   | 5 s    |
-| Random SSD Seek (8 KiB)             | 100 μs      | 70 MiB/s   | 15 ms  | 15 s   |
-| Compression `[3]`                   | N/A         | 100 MiB/s  | 10 ms  | 10s    |
-| Decompression `[3]`                 | N/A         | 200 MiB/s  | 5 ms   | 5s     |
+| Sorting (64-bit integers)           | N/A         | 200 MiB/s  | 5 ms   | 5s     |
+| Random SSD Seek (8 KiB)             | 100 μs      | 70 MiB/s   | 15 ms  | 15s    |
 | Serialization `[8]` `[9]` †         | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Deserialization `[8]` `[9]` †       | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Proxy: Envoy/ProxySQL/Nginx/HAProxy | 50 μs       | ?          | ?      | ?      |
@@ -145,6 +145,7 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
 * `[8]`: https://github.com/simdjson/simdjson#performance-results
 * `[9]`: https://github.com/protocolbuffers/protobuf/blob/master/docs/performance.md
 * `[10]`: https://www.imperialviolet.org/2010/06/25/overclocking-ssl.html
+* `[11]`: https://github.com/inikep/lzbench
 * ["How to get consistent results when benchmarking on
   Linux?"](https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux#2-disable-hyper-threading).
   Great compilation of various Kernel and CPU features to toggle for reliable
