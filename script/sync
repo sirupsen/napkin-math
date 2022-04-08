@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# This is to sync napkin math to a Linux directory. Bare metal Linux servers
+# have far superior resources for performance monitoring.
+
+rsync --filter=':- .gitignore' --exclude '.git' . root@napkin:napkin/ --compress --archive
+
+if [[ "${1}" = "-s" ]]; then
+  echo -e "\x1b[32mWill sync on changes...\x1b[0m"
+  rsync --filter=':- .gitignore' --exclude '.git' --list-only . root@napkin:napkin/ -ca \
+    | awk '{print $5}' | entr -p time ./script/sync
+fi

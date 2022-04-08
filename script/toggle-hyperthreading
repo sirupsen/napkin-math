@@ -1,0 +1,24 @@
+#!/usr/bin/env ruby
+
+# Disable hyperthreading by listing the sibling CPUs and disabling the 'higher'
+# ones.
+# https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux
+
+if ['-e', '--enable'].include?(ARGV[0].strip)
+  Dir['/sys/devices/system/cpu/cpu*/online']
+    .select { |e| File.read(e).strip == '0' }
+    .each { |e| File.open(e, 'w') { |f| f.write('1') } }
+elsif ['-d', '--disable'].include?(ARGV[0].strip)
+  cpu_sibs = Dir['/sys/devices/system/cpu/cpu*/topology/thread_siblings_list'].map do |path|
+    File.read(path).strip.split(',')
+  end.uniq
+
+  cpu_sibs.select { |cpus| cpus.size > 1 }.each do |(_smaller, bigger)|
+    puts "/sys/devices/system/cpu/cpu#{bigger}/online"
+    File.open("/sys/devices/system/cpu/cpu#{bigger}/online", 'w') { |f| f.write('0') }
+  end
+else
+  raise 'Need to pass --enable/-e or --disable/-d'
+end
+
+system('lscpu | grep -i "cpu(s)"')

@@ -1,8 +1,43 @@
 #!/bin/bash
 
 # RUSTFLAGS='-C target-cpu=native'  cargo build --release
+# RUSTFLAGS='-C target-cpu=native'  cargo run --release -- $@
+# RUSTFLAGS='-C target-cpu=native' cargo bench -- $@
+# RUSTFLAGS='-C target-cpu=native' cargo bench -- $@
+
+# https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux#1-disable-turboboost
+echo 1 | tee /sys/devices/system/cpu/intel_pstate/no_turbo
+
+# AMD
+# echo 0 > /sys/devices/system/cpu/cpufreq/boost
+
+for i in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+do
+  echo 'performance' > $i
+done
+echo 3 | tee /proc/sys/vm/drop_caches
+sync
+echo 0 | tee /proc/sys/kernel/randomize_va_space
+
+script/toggle-hyperthreading -d
+
+echo 'always' > /sys/kernel/mm/transparent_hugepage/enabled
+echo 'always' > /sys/kernel/mm/transparent_hugepage/defrag
+
+# RUSTFLAGS="-C target-cpu=native" perf stat --detailed --detailed --detailed \
+#   -- nice -n -5 cargo bench
 RUSTFLAGS='-C target-cpu=native'  cargo run --release -- $@
-# RUSTFLAGS='--emit asm -C target-cpu=native' cargo bench -- $@
+
+echo 'madvise' > /sys/kernel/mm/transparent_hugepage/enabled
+echo 'madvise' > /sys/kernel/mm/transparent_hugepage/defrag
+
+# RUSTFLAGS="-C target-cpu=native" nice -n -5 cargo bench
+
+# This binary will show when doing `cargo bench`!
+# http://www.codeofview.com/fix-rs/2017/01/24/how-to-optimize-rust-programs-on-linux/
+# valgrind --tool=callgrind --dump-instr=yes \
+#   --simulate-cache=yes \
+#   -- target/release/deps/memory_read-0f307ff37948551e --test
 
 # gcloud compute instances create instance-1 --project=omphalos-1186 --zone=us-central1-c --machine-type=n2-standard-16 --network-interface=network-tier=PREMIUM,subnet=default --maintenance-policy=MIGRATE --provisioning-model=STANDARD --service-account=438246618084-compute@developer.gserviceaccount.com --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append --min-cpu-platform=Intel\ Ice\ Lake --create-disk=auto-delete=yes,boot=yes,device-name=instance-1,image=projects/debian-cloud/global/images/debian-10-buster-v20220118,mode=rw,size=10,type=projects/omphalos-1186/zones/us-east4-b/diskTypes/pd-balanced --no-shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring --reservation-affinity=any
 # apt-get update

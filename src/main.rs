@@ -447,6 +447,8 @@ fn memory_read_sequential() {
     result.print_results("Read Seq Vec", bytes_per_iteration as usize);
 }
 
+// USE https://github.com/bheisler/criterion.rs instead... Just too much of a hassle to setup
+// threads etc. and we should've done this from the get-go anyway.
 fn memory_read_sequential_threaded() {
     let bytes_per_iteration = 64;
     let size_in_elements = (n_gb_bytes!(4) as u64 / bytes_per_iteration) as u64;

@@ -6,6 +6,7 @@ edition = "2018"
 
 [profile.release]
 debug = true
+overflow-checks = false
 
 [dependencies]
 byte-unit = "3.0"

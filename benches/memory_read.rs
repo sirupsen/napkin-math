@@ -9,35 +9,39 @@ extern crate byte_unit;
 
 extern crate core_affinity;
 
-fn memory_read_sequential_single_thread(vec: &Vec<[u64; 8]>) -> u64 {
+#[inline(never)]
+#[no_mangle]
+fn memory_read_sequential_single_thread(vec: &Vec<u64>) -> u64 {
+    // SHE-COM memory_read_sequential_single_thread
     let mut sum = 0;
     for el in vec {
-        sum += el[0];
+        sum += el
     }
 
     sum
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let bytes_per_iteration = 64;
+    let bytes_per_iteration = 8;
     let size_bytes = n_gib_bytes!(1);
     let size_in_elements = (size_bytes as u64 / bytes_per_iteration) as u64;
-    let mut vec: Vec<[u64; 8]> = Vec::new();
+    let mut vec: Vec<u64> = Vec::new();
     for i in 0..size_in_elements {
-        vec.push([i, i, i, i, i, i, i, i]);
+        vec.push(i)
     }
 
     let all_core_ids = Arc::new(core_affinity::get_core_ids().unwrap());
     // to make it easy to grab a subset if needed, e.g. on M1 you have low performance cores.
-    let core_ids = &all_core_ids.clone()[0..4];
+    let core_ids = all_core_ids.clone();
     let last_id = core_ids.last().unwrap().id;
+    let num_cores = core_ids.len();
 
     let start = Arc::new(Barrier::new(core_ids.len() + 1));
     let end = Arc::new(Barrier::new(core_ids.len() + 1));
     let done_allocating = Arc::new(Barrier::new(core_ids.len() + 1));
     let threaded_total = Arc::new(AtomicU64::new(0));
 
-    for core in core_ids {
+    for core in core_ids.iter() {
         let t_start = start.clone();
         let t_end = end.clone();
         let t_total = threaded_total.clone();
@@ -51,28 +55,30 @@ fn criterion_benchmark(c: &mut Criterion) {
             //
             // An M1 CPU seems to be able to maximize bandwidth though, due to higher number of
             // outstanding requests to the L1 cache.
-            //
-            // TODO: Can we detect high-performance low-performance cores on .e.g. an M1?
-            // core_affinity::set_for_current(core);
+            core_affinity::set_for_current(core);
 
-            let mut vec: Vec<[u64; 8]> = Vec::new();
-            let slice_size = size_in_elements / 4;
-            let mut range = (slice_size * core.id as u64)..(slice_size * (core.id as u64 + 1));
+            let mut vec: Vec<u64> = Vec::new();
+            let slice_size = size_in_elements / num_cores as u64;
+            let mut range = (slice_size as u64 * core.id as u64)
+                ..(slice_size as u64 * (core.id as u64 + 1));
             if core.id == last_id {
                 // slice sizes might not entirely line up. doesn't really matter,
                 // but nice to see that it's the same as in the single-threaded case.
-                range.end = size_in_elements;
+                range.end = size_in_elements as u64;
             }
             // println!("\n{}: {:?} of {}\n", thread_id, range, size_in_elements);
             for i in range {
-                vec.push([i, i, i, i, i, i, i, i]);
+                vec.push(i)
             }
 
             t_done_allocating.wait();
             loop {
                 // println!("{} Done allocating", core.id);
                 t_start.wait();
-                t_total.fetch_add(memory_read_sequential_single_thread(&vec), Ordering::Relaxed);
+                t_total.fetch_add(
+                    memory_read_sequential_single_thread(&vec),
+                    Ordering::Relaxed,
+                );
                 t_end.wait();
             }
         });
@@ -94,7 +100,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             threaded_total.store(0, Ordering::Relaxed);
             start.wait(); // every thread will start totalling...
             end.wait(); // wait for every thread to finish...
-            // println!("{:?}", threaded_total.load(Ordering::Relaxed));
+                        // println!("{:?}", threaded_total.load(Ordering::Relaxed));
         })
     });
     group.finish()
