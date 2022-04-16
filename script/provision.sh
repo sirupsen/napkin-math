@@ -1,13 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -ex
-
-ssh root@napkin << EOF
 set -ex
 GO_VERSION="1.18"
 
-# apt-get update
-
+apt-get update
 apt-get install -y \
   ruby-full \
   python3.10-full \
@@ -15,10 +11,21 @@ apt-get install -y \
   sqlite3 \
   libsqlite3-dev \
   gnuplot-nox \
-  linux-tools-\$(uname -r) \
-  linux-cloud-tools-\$(uname -r) \
+  linux-tools-$(uname -r) \
+  linux-cloud-tools-$(uname -r) \
   build-essential \
+  automake \
+  autoconf \
+  cmake \
+  gettext \
+  ninja-build \
+  libtool \
+  libtool-bin \
+  doxygen \
   fzf \
+  bat \
+  hexyl \
+  fd-find \
   ripgrep \
   universal-ctags \
   gdb \
@@ -39,8 +46,23 @@ apt-get install -y \
   msr-tools \
   software-properties-common
 
+# The command-line name has a conflict by default
+if ! command -v fd; then
+  ln -s $(which fdfind) /usr/local/bin/fd
+fi
+
+if ! command -v bat; then
+  ln -s $(which batcat) /usr/local/bin/bat
+fi
+
+if ! command -v pastel; then
+  wget "https://github.com/sharkdp/pastel/releases/download/v0.8.1/pastel_0.8.1_amd64.deb"
+  sudo dpkg -i pastel_0.8.1_amd64.deb
+  rm pastel*
+fi
+
 if ! command -v psql; then
-  sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt \$(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+  sudo sh -c "echo 'deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main' > /etc/apt/sources.list.d/pgdg.list"
   wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
   apt-get update
   apt-get -y install postgresql
@@ -52,12 +74,20 @@ if ! command -v psql; then
   # listen on tailscale IP
 fi
 
+if ! command -v hyperfine; then
+  wget https://github.com/sharkdp/hyperfine/releases/download/v1.13.0/hyperfine_1.13.0_amd64.deb
+  sudo dpkg -i hyperfine_1.13.0_amd64.deb
+  rm hyperfine*
+fi
+
 if ! command -v go; then
-  wget -nc https://go.dev/dl/go\$GO_VERSION.linux-amd64.tar.gz
-  sudo tar -C /usr/local -xzf go\$GO_VERSION.linux-amd64.tar.gz
+  wget -nc https://go.dev/dl/go$GO_VERSION.linux-amd64.tar.gz
+  sudo tar -C /usr/local -xzf go$GO_VERSION.linux-amd64.tar.gz
 
   echo 'export PATH=\$PATH:/usr/local/go/bin' >> ~/.bashrc
   rm *.tar.gz
+
+  go install golang.org/x/tools/cmd/goimports@latest
 fi
 
 if ! command -v rustc; then
@@ -68,7 +98,7 @@ if ! command -v docker; then
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
   echo \
     "deb [arch=\$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
-    \$(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
   apt-get update
   apt-get install -y docker-ce docker-ce-cli containerd.io
@@ -76,15 +106,23 @@ fi
 
 if ! command -v docker-compose; then
   # https://docs.docker.com/compose/install/
-  curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-\$(uname -s)-\$(uname -m)" -o /usr/local/bin/docker-compose
+  curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-\$(uname -m)" -o /usr/local/bin/docker-compose
   chmod +x /usr/local/bin/docker-compose
 fi
 
 if ! command -v nvim; then
-  add-apt-repository ppa:neovim-ppa/stable
-  apt-get update
-  apt-get install -y neovim
-  echo 'alias vim=nvim' >> ~/.bashrc
+  (
+    cd /tmp
+    if [[ ! -d /tmp/neovim ]]; then
+      git clone https://github.com/neovim/neovim
+    fi
+    cd neovim
+    git checkout stable
+    make clean
+    make CMAKE_BUILD_TYPE=Release
+    sudo make install
+  )
+  # run :checkhealth!
 fi
 
 if ! command -v delta; then
@@ -97,36 +135,36 @@ if ! command -v nvm; then
   (
     . ~/.bashrc
     nvm install stable
+    npm install -g eslint eslint_d neovim
+    exit 0
   )
 fi
 
-if ! command -v chruby; then
-  (
-    wget -O chruby-0.3.9.tar.gz https://github.com/postmodern/chruby/archive/v0.3.9.tar.gz
-    tar -xzvf chruby-0.3.9.tar.gz
-    cd chruby-0.3.9/
-    sudo make install
-    echo 'source /usr/local/share/chruby/chruby.sh' >> ~/.bashrc
-    cd ..
+# if ! type chruby; then
+#   echo "installing chruby.."
+#   (
+#     wget -O chruby-0.3.9.tar.gz https://github.com/postmodern/chruby/archive/v0.3.9.tar.gz
+#     tar -xzvf chruby-0.3.9.tar.gz
+#     cd chruby-0.3.9/
+#     sudo make install
+#     cd ..
 
-    wget -O ruby-install-0.8.3.tar.gz https://github.com/postmodern/ruby-install/archive/v0.8.3.tar.gz
-    tar -xzvf ruby-install-0.8.3.tar.gz
-    cd ruby-install-0.8.3/
-    sudo make install
+#     wget -O ruby-install-0.8.3.tar.gz https://github.com/postmodern/ruby-install/archive/v0.8.3.tar.gz
+#     tar -xzvf ruby-install-0.8.3.tar.gz
+#     cd ruby-install-0.8.3/
+#     sudo make install
 
-    . ~/.bashrc
+#     . ~/.bashrc
 
-    ruby-install --jobs \$(nproc) ruby
-    chruby ruby
-    gem install bundler
+#     ruby-install --jobs $(nproc) ruby
+#     gem install bundler
 
-    echo 'chruby ruby' >> ~/.bashrc
-
-    cd ..
-    rm -rf chruby-*
-    rm -rf ruby-install-*
-  )
-fi
+#     cd ..
+#     rm -rf chruby-*
+#     rm -rf ruby-install-*
+#     exit 0
+#   )
+# fi
 
 if [ ! -d ~/pmu-tools ]; then
   git clone https://github.com/andikleen/pmu-tools ~/pmu-tools
@@ -153,15 +191,3 @@ fi
 
 apt-get upgrade -y
 apt-get autoremove -y
-
-EOF
-
-script/sync
-
-ssh root@napkin << EOF
-set -ex
-
-cd napkin
-RUSTFLAGS='-C target-cpu=native' cargo build --release
-RUSTFLAGS='-C target-cpu=native' cargo bench DONTRUNANYTHING
-EOF
