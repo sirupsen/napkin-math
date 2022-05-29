@@ -1,5 +1,5 @@
 [package]
-name = "base-rates"
+name = "napkin-math"
 version = "0.1.0"
 authors = ["Simon Eskildsen <sirup@sirupsen.com>"]
 edition = "2018"
@@ -29,5 +29,5 @@ core_affinity = "*"
 rio = "0.9.3"
 
 [[bench]]
-name = "memory_read"
+name = "napkin_math"
 harness = false

@@ -22,7 +22,6 @@ apt-get install -y \
   libtool \
   libtool-bin \
   doxygen \
-  fzf \
   bat \
   hexyl \
   fd-find \
@@ -138,6 +137,11 @@ if ! command -v nvm; then
     npm install -g eslint eslint_d neovim
     exit 0
   )
+fi
+
+if ! command -v fzf; then
+  git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+  ~/.fzf/install
 fi
 
 # if ! type chruby; then

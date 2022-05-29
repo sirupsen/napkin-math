@@ -1,5 +1,6 @@
 #!/bin/bash
 
+#  objdump target/release/deps/napkin_math-fa556eccfee5460a --disassemble=memory_read_sequential_single_thread
 # RUSTFLAGS='-C target-cpu=native'  cargo build --release
 # RUSTFLAGS='-C target-cpu=native'  cargo run --release -- $@
 # RUSTFLAGS='-C target-cpu=native' cargo bench -- $@
@@ -24,9 +25,12 @@ script/toggle-hyperthreading -d
 echo 'always' > /sys/kernel/mm/transparent_hugepage/enabled
 echo 'always' > /sys/kernel/mm/transparent_hugepage/defrag
 
-# RUSTFLAGS="-C target-cpu=native" perf stat --detailed --detailed --detailed \
+RUSTFLAGS="-C target-cpu=native" perf stat --detailed --detailed --detailed \
+  -- nice -n -5 cargo bench
+# RUSTFLAGS="-C target-feature=-avx,-avx2,-sse" perf stat --detailed --detailed --detailed \
+# perf stat --detailed --detailed --detailed \
 #   -- nice -n -5 cargo bench
-RUSTFLAGS='-C target-cpu=native'  cargo run --release -- $@
+# RUSTFLAGS='-C target-cpu=native'  cargo run --release -- $@
 
 echo 'madvise' > /sys/kernel/mm/transparent_hugepage/enabled
 echo 'madvise' > /sys/kernel/mm/transparent_hugepage/defrag
