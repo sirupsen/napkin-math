@@ -35,7 +35,11 @@ to improve accuracy and as hardware improves.
 
 | Operation                           | Latency     | Throughput | 1 MiB  | 1 GiB  |
 | ----------------------------------- | -------     | ---------- | ------ | ------ |
-| Sequential Memory R/W (64 bytes)    | 5 ns        | 50 GiB/s   | 20 μs  | 20 ms  |
+| Sequential Memory R/W (64 bytes)    | 0.5 ns      |            |        |        |
+| -- Single Thread, No SIMD            |             | 10 GiB/s   | 100 μs | 100 ms |
+| -- Single Thread, SIMD               |             | 20 GiB/s   | 50  μs | 50 ms  |
+| -- Threaded, No SIMD                 |             | 30 GiB/s   | 35  μs | 35 ms  |
+| -- Threaded, SIMD                    |             | 35 GiB/s   | 30  μs | 30 ms  |
 | Hashing, not crypto-safe (64 bytes) | 25 ns       | 2 GiB/s    | 500 μs | 500 ms |
 | Random Memory R/W (64 bytes)        | 50 ns       | 1 GiB/s    | 1 ms   | 1s     |
 | Fast Serialization `[8]` `[9]` †    | N/A         | 1 GiB/s    | 1 ms   | 1s     |
