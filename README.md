@@ -21,8 +21,8 @@ newsletter.
 
 ## Numbers
 
-Below are numbers that are rounded from runs on a [GCP `c2-standard-4`][9] (Intel
-Cascade) and 2017 Macbook (2.8GHz, quad-core).
+Below are numbers that are rounded from runs on a metal Intel Xeon E-2236 3.4GHz
+with 12 (virtual) cores.
 
 [9]: https://gist.github.com/sirupsen/766f266eebf6bdf2525bdbb309e17a41
 
