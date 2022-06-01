@@ -96,7 +96,7 @@ fn criterion_benchmark(c: &mut Criterion) {
                 t_start.wait();
                 t_total.fetch_add(
                     // memory_read_sequential_single_thread_vectorized(&mut vec),
-                    memory_read_sequential_single_thread_non_vectorized(&mut vec),
+                    memory_read_sequential_single_thread_vectorized(&mut vec),
                     Ordering::Relaxed,
                 );
                 t_end.wait();
@@ -114,7 +114,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("1 thread", |b| {
         // b.iter(|| println!("{}", memory_read_sequential_single_thread(&vec)))
         // b.iter(|| black_box(memory_read_sequential_single_thread_vectorized(&mut vec)))
-        b.iter(|| black_box(memory_read_sequential_single_thread_non_vectorized(&mut vec)))
+        b.iter(|| black_box(memory_read_sequential_single_thread_vectorized(&mut vec)))
     });
     group.bench_function(format!("{} threads", core_ids.len()), |b| {
         b.iter(|| {
