@@ -43,7 +43,7 @@ static FILE_NAME: &str = "/tmp/napkin.txt";
 //
 // TODO: Would be cool to instrument branch misses etc. here
 use byte_unit::Byte;
-use clap::{App, Arg};
+use clap::{Command as App, Arg};
 // use failure::Error;
 use mysql::prelude::*;
 use mysql::{params, Opts, Pool, Result};
@@ -306,17 +306,17 @@ fn main() {
         .author("Simon Eskildsen <simon@sirupsen.com>")
         .about("Runs computing benchmarks to find numbers for napkin math.")
         .arg(
-            Arg::with_name("number")
+            Arg::new("number")
                 .long("number")
-                .short("n")
+                .short('n')
                 .help("How many times to run each test")
                 .value_name("N")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("evaluate")
+            Arg::new("evaluate")
                 .long("evaluate")
-                .short("e")
+                .short('e')
                 .help("Run tests that match a regex")
                 .value_name("REGEX")
                 .takes_value(true),

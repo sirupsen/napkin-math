@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"runtime/debug"
 	"time"
 
 	"golang.org/x/text/language"
@@ -39,20 +40,26 @@ type Cell float64
 
 func main() {
 	p := message.NewPrinter(language.English)
+	experiments := []int{50_000_000} //, 10_000_000}
+	nTests := 10                     // for gc pressure etc
 
-	experiments := []int{10_000_000} //, 10_000_000}
-	nTests := 10 // for gc pressure etc
+	gcStats := debug.GCStats{}
 
-	for i := 0; i < nTests; i++ {
+	for i := 1; i <= nTests; i++ {
 		for _, nCells := range experiments {
+			debug.ReadGCStats(&gcStats)
+      fmt.Printf("Total GC Time: %s\n", gcStats.PauseTotal.String());
+      fmt.Printf("Recent GC Times: %+v\n", gcStats.Pause[0:7]);
+      fmt.Printf("Total GC Runs: %d\n", gcStats.NumGC);
+
 			p.Printf("%d cells, run %d/%d\n", nCells, i, nTests)
 			// multiDimArray(nCells)
 			// arrayCellValuesSmallest(nCells)
 			// arrayCellValuesSmall(nCells)
 			// arrayCellValuesSmaller(nCells)
 			// arrayCellValues(nCells)
-			// arrayCellPointers(nCells)
-			arrayCellPointersPreAllocated(nCells)
+			arrayCellPointers(nCells)
+			// arrayCellPointersPreAllocated(nCells)
 			// pointerMapIntegerIndexSmallCellsValue(nCells)
 			// pointerMapIntegerIndexSmallCells(nCells)
 			// pointerMapIntegerIndexSmallerCells(nCells)
@@ -60,7 +67,7 @@ func main() {
 			// pointerMapSmallCells(nCells)
 			// pointerMapSmallerCells(nCells)
 			// pointerMapPreAllocate(nCells)
-			// pointerMap(nCells)
+			pointerMap(nCells)
 			// valueMap(nCells)
 		}
 	}
