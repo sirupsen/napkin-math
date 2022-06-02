@@ -21,7 +21,6 @@ sync
 echo 0 | tee /proc/sys/kernel/randomize_va_space
 
 script/toggle-hyperthreading -d
-
 echo 'always' > /sys/kernel/mm/transparent_hugepage/enabled
 echo 'always' > /sys/kernel/mm/transparent_hugepage/defrag
 
@@ -34,6 +33,7 @@ RUSTFLAGS="-C target-cpu=native" perf stat --detailed --detailed --detailed \
 
 echo 'madvise' > /sys/kernel/mm/transparent_hugepage/enabled
 echo 'madvise' > /sys/kernel/mm/transparent_hugepage/defrag
+script/toggle-hyperthreading -e # always re-enable after
 
 # RUSTFLAGS="-C target-cpu=native" nice -n -5 cargo bench
 
