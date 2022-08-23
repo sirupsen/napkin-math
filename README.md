@@ -36,10 +36,10 @@ to improve accuracy and as hardware improves.
 | Operation                           | Latency     | Throughput | 1 MiB  | 1 GiB  |
 | ----------------------------------- | -------     | ---------- | ------ | ------ |
 | Sequential Memory R/W (64 bytes)    | 0.5 ns      |            |        |        |
-| -- Single Thread, No SIMD            |             | 10 GiB/s   | 100 μs | 100 ms |
-| -- Single Thread, SIMD               |             | 20 GiB/s   | 50  μs | 50 ms  |
-| -- Threaded, No SIMD                 |             | 30 GiB/s   | 35  μs | 35 ms  |
-| -- Threaded, SIMD                    |             | 35 GiB/s   | 30  μs | 30 ms  |
+| -- Single Thread, No SIMD           |             | 10 GiB/s   | 100 μs | 100 ms |
+| -- Single Thread, SIMD              |             | 20 GiB/s   | 50  μs | 50 ms  |
+| -- Threaded, No SIMD                |             | 30 GiB/s   | 35  μs | 35 ms  |
+| -- Threaded, SIMD                   |             | 35 GiB/s   | 30  μs | 30 ms  |
 | Hashing, not crypto-safe (64 bytes) | 25 ns       | 2 GiB/s    | 500 μs | 500 ms |
 | Random Memory R/W (64 bytes)        | 50 ns       | 1 GiB/s    | 1 ms   | 1s     |
 | Fast Serialization `[8]` `[9]` †    | N/A         | 1 GiB/s    | 1 ms   | 1s     |
@@ -60,7 +60,7 @@ to improve accuracy and as hardware improves.
 | Proxy: Envoy/ProxySQL/Nginx/HAProxy | 50 μs       | ?          | ?      | ?      |
 | Network within same region `[6]`    | 250 μs      | 100 MiB/s  | 10 ms  | 10s    |
 | {MySQL, Memcached, Redis, ..} Query | 500 μs      | ?          | ?      | ?      |
-| Random HDD Seek (8 KiB)             | 10 ms       | 70 MiB/s   | 15 ms  | 15 s   |
+| Random HDD Seek (8 KiB)             | 10 ms       | 0.7 MiB/s  | 2 s    | 30m    |
 | Network between regions `[6]`       | [Varies][i] | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA East <-> West            | 60 ms       | 25 MiB/s   | 40 ms  | 40s    |
 | Network EU West <-> NA East         | 80 ms       | 25 MiB/s   | 40 ms  | 40s    |
