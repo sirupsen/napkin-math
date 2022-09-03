@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 
 . ~/.bashrc
-set -ex
 GO_VERSION="1.18"
 
 apt-get update
-apt-get install -y \
+
+set -x
+apt-get install -o Dpkg::Options::="--force-overwrite" -y \
   ruby-full \
   python3.10-full \
   python3-pip \
