@@ -1,9 +1,8 @@
-#![deny(clippy::all)]
-
 #[macro_use]
 extern crate byte_unit;
 extern crate clap;
 extern crate regex;
+use std::fmt::Write as FmtWrite;
 
 // use std::alloc::System;
 // #[global_allocator]
@@ -11,14 +10,14 @@ extern crate regex;
 
 extern crate libc;
 
-#[cfg(target_os = "linux")]
-use libc::posix_fadvise;
+// #[cfg(target_os = "linux")]
+// use libc::posix_fadvise;
 
 use regex::Regex;
 use std::process::Command;
 
-#[cfg(target_os = "linux")]
-use rio::{Rio, Uring};
+// #[cfg(target_os = "linux")]
+// use rio::{Rio, Uring};
 
 #[cfg(target_os = "linux")]
 use std::os::unix::io::*;
@@ -68,8 +67,8 @@ use std::time::{Duration, Instant, SystemTime};
 #[allow(unused_imports)]
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::__rdtscp;
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
+// #[cfg(target_arch = "x86_64")]
+// use std::arch::x86_64::*;
 
 // TODO: use this instead
 // from bencher::black_box, avoid compiler dead-code optimizations.
@@ -95,12 +94,12 @@ impl BenchmarkResult {
     fn print_results(&self, name: &str, size_of_type: usize) {
         let mut name = String::from(name);
         if size_of_type > 0 {
-            name.push_str(&format!(
+            write!(name,
                 " <{}>",
                 Byte::from_bytes(size_of_type as u128)
                     .get_appropriate_unit(true)
                     .format(0)
-            ));
+            ).unwrap();
         }
 
         println!(
@@ -762,7 +761,7 @@ fn disk_read_sequential_io_uring() {
             let mut completions = vec![];
 
             for i in 0..reads_per_iteration {
-                if test.size <= 0 {
+                if test.size == 0 {
                     println!("Stopping early");
                     break;
                 }
@@ -783,7 +782,7 @@ fn disk_read_sequential_io_uring() {
                 }
             }
 
-            if test.size <= 0 {
+            if test.size == 0 {
                 test.offset = 0;
                 test.size = n_gib_bytes!(1) as usize;
             }

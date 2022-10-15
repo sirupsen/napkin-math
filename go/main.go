@@ -48,9 +48,9 @@ func main() {
 	for i := 1; i <= nTests; i++ {
 		for _, nCells := range experiments {
 			debug.ReadGCStats(&gcStats)
-      fmt.Printf("Total GC Time: %s\n", gcStats.PauseTotal.String());
-      fmt.Printf("Recent GC Times: %+v\n", gcStats.Pause[0:7]);
-      fmt.Printf("Total GC Runs: %d\n", gcStats.NumGC);
+			fmt.Printf("Total GC Time: %s\n", gcStats.PauseTotal.String())
+			fmt.Printf("Recent GC Times: %+v\n", gcStats.Pause[0:7])
+			fmt.Printf("Total GC Runs: %d\n", gcStats.NumGC)
 
 			p.Printf("%d cells, run %d/%d\n", nCells, i, nTests)
 			// multiDimArray(nCells)
