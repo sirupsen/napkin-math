@@ -1,0 +1,17 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    fiber_scheduler (0.13.0)
+    mysql2 (0.5.4)
+    pg (1.4.5)
+
+PLATFORMS
+  arm64-darwin-21
+
+DEPENDENCIES
+  fiber_scheduler
+  mysql2
+  pg
+
+BUNDLED WITH
+   2.3.7
