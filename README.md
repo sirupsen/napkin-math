@@ -54,13 +54,13 @@ to improve accuracy and as hardware improves.
 | Compression `[11]`                  | N/A         | 500 MiB/s  | 2 ms   | 2s     |
 | Sequential SSD write, +fsync (8KiB) | 1 ms        | 10 MiB/s   | 100 ms | 2 min  |
 | Sorting (64-bit integers)           | N/A         | 200 MiB/s  | 5 ms   | 5s     |
-| Random SSD Seek (8 KiB)             | 100 μs      | 70 MiB/s   | 15 ms  | 15s    |
+| Random SSD Read (8 KiB)             | 100 μs      | 70 MiB/s   | 15 ms  | 15s    |
 | Serialization `[8]` `[9]` †         | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Deserialization `[8]` `[9]` †       | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Proxy: Envoy/ProxySQL/Nginx/HAProxy | 50 μs       | ?          | ?      | ?      |
 | Network within same region `[6]`    | 250 μs      | 100 MiB/s  | 10 ms  | 10s    |
 | {MySQL, Memcached, Redis, ..} Query | 500 μs      | ?          | ?      | ?      |
-| Random HDD Seek (8 KiB)             | 10 ms       | 0.7 MiB/s  | 2 s    | 30m    |
+| Random HDD Read (8 KiB)             | 10 ms       | 0.7 MiB/s  | 2 s    | 30m    |
 | Network between regions `[6]`       | [Varies][i] | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA East <-> West            | 60 ms       | 25 MiB/s   | 40 ms  | 40s    |
 | Network EU West <-> NA East         | 80 ms       | 25 MiB/s   | 40 ms  | 40s    |
