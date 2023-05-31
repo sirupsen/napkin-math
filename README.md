@@ -165,7 +165,7 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
   correctly written (I have not taken them through this yet, but plan to).
 * [Godbolt's compiler explorer](https://gcc.godbolt.org/#). Fantastic resource
   for comparing assembly between Rust and e.g. C with Clang/GCC.
-* [cargo-show-asm](https://github.com/pacak/cargo-asm). Cargo extension to allow
+* [cargo-show-asm](https://github.com/pacak/cargo-show-asm). Cargo extension to allow
   disassembling functions. Unfortunately the support for closure is a bit
   lacking, which requires some refactoring.
 * [Agner's Assembly
