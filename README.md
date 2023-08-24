@@ -110,6 +110,14 @@ Approximate numbers that should be consistent between Cloud providers.
 † This refers to network leaving your cloud provider, e.g. sending data to S3
 from GCP or egress network for sending HTML from AWS to a client.
 
+Furthermore, for blob storage (S3/GCS/R2/...), you're charged per read/write
+operation (fewer, large files is cheaper):
+
+|        | 1M    | 1000    |
+| ------ | ----  | ------- |
+| Reads  | \$0.5 | \$0.0004 |
+| Writes | \$10  | \$0.01   |
+
 ## Compression Ratios
 
 This is sourced from a few sources. `[3]` `[4]` `[5]` Note that compression speeds (but
