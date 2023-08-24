@@ -58,7 +58,9 @@ to improve accuracy and as hardware improves.
 | Serialization `[8]` `[9]` †         | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Deserialization `[8]` `[9]` †       | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Proxy: Envoy/ProxySQL/Nginx/HAProxy | 50 μs       | ?          | ?      | ?      |
-| Network within same region `[6]`    | 250 μs      | 100 MiB/s  | 10 ms  | 10s    |
+| Network within same region          | 250 μs      | 2 GiB/s    | 500 μs | 500 ms |
+| Premium network within zone/VPC     | 250 μs      | 25 GiB/s   | 50 μs  | 40 ms  |
+| Blob Storage bandwidth same region  | 50 ms       | 500 MiB/s  | 2 ms   | 2s     |
 | {MySQL, Memcached, Redis, ..} Query | 500 μs      | ?          | ?      | ?      |
 | Random HDD Read (8 KiB)             | 10 ms       | 0.7 MiB/s  | 2 s    | 30m    |
 | Network between regions `[6]`       | [Varies][i] | 25 MiB/s   | 40 ms  | 40s    |
@@ -91,16 +93,18 @@ them will be more than 2-3x off, which shouldn't be a problem for most users.
 
 Approximate numbers that should be consistent between Cloud providers.
 
-| What             | Amount | \$ / Month | Spot \$ /month |
-| -----------      | ------ | ---------  | -------------- |
-| CPU              | 1      | \$15       | \$2            |
-| Memory           | 1 GB   | \$2        | \$0.2          |
-| SSD              | 1 GB   | \$0.1      | \$0.05         |
-| HDD              | 1 GB   | \$0.05     |                |
-| S3, GCS, ..      | 1 GB   | \$0.01     |                |
-| Cloud Networking*| 1 GB   | \$0.01     |                |
-| Network Ingress  | 1 GB   | \$0        |                |
-| Internet Egress† | 1 GB   | \$0.1      |                |
+| What              | Amount | \$ / Month | Spot \$ /month |
+| -----------       | ------ | ---------  | -------------- |
+| CPU               | 1      | \$15       | \$2            |
+| Memory            | 1 GB   | \$2        | \$0.2          |
+| SSD               | 1 GB   | \$0.1      | \$0.05         |
+| HDD               | 1 GB   | \$0.05     |                |
+| S3, GCS, ..       | 1 GB   | \$0.01     |                |
+| Cloud Networking* | 1 GB   | \$0.01     |                |
+| Network Ingress   | 1 GB   | \$0        |                |
+| Internet Egress†  | 1 GB   | \$0.1      |                |
+| CDN Egress        | 1 GB   | \$0.05     |                |
+| CDN Fill ‡        | 1 GB   | \$0.01     |                |
 
 \* Generally cloud providers only charge for network that leaves a zone, i.e.
 cross-zone, and cross-region. Usually you're _not_ charged egress for blob
@@ -109,6 +113,9 @@ pay cloud networking fees.
 
 † This refers to network leaving your cloud provider, e.g. sending data to S3
 from GCP or egress network for sending HTML from AWS to a client.
+
+‡ An additional per cache-fill fee is incurred that costs close to blob storage
+write costs (see just below).
 
 Furthermore, for blob storage (S3/GCS/R2/...), you're charged per read/write
 operation (fewer, large files is cheaper):
