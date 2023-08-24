@@ -91,14 +91,24 @@ them will be more than 2-3x off, which shouldn't be a problem for most users.
 
 Approximate numbers that should be consistent between Cloud providers.
 
-| What        | Amount | $ / Month | $ / Hour |
-| ----------- | ------ | --------- | -------- |
-| CPU         | 1      | $10       | $0.02    |
-| Memory      | 1 GB   | $1        |          |
-| SSD         | 1 GB   | $0.1      |          |
-| Disk        | 1 GB   | $0.01     |          |
-| S3, GCS, .. | 1 GB   | $0.01     |          |
-| Network     | 1 GB   | $0.01     |          |
+| What             | Amount | \$ / Month | Spot \$ /month |
+| -----------      | ------ | ---------  | -------------- |
+| CPU              | 1      | \$15       | \$2            |
+| Memory           | 1 GB   | \$2        | \$0.2          |
+| SSD              | 1 GB   | \$0.1      | \$0.05         |
+| HDD              | 1 GB   | \$0.05     |                |
+| S3, GCS, ..      | 1 GB   | \$0.01     |                |
+| Cloud Networking*| 1 GB   | \$0.01     |                |
+| Network Ingress  | 1 GB   | \$0        |                |
+| Internet Egress† | 1 GB   | \$0.1      |                |
+
+* Generally cloud providers only charge for network that leaves a zone, i.e.
+  cross-zone, and cross-region. Usually you're _not_ charged egress for blob
+  storage (S3/GCS) within the same region. If leaving the region, you generally
+  pay cloud networking fees.
+
+† This refers to network leaving your cloud provider, e.g. sending data to S3
+from GCP or egress network for sending HTML from AWS to a client.
 
 ## Compression Ratios
 
