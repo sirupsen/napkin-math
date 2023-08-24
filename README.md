@@ -102,10 +102,10 @@ Approximate numbers that should be consistent between Cloud providers.
 | Network Ingress  | 1 GB   | \$0        |                |
 | Internet Egress† | 1 GB   | \$0.1      |                |
 
-* Generally cloud providers only charge for network that leaves a zone, i.e.
-  cross-zone, and cross-region. Usually you're _not_ charged egress for blob
-  storage (S3/GCS) within the same region. If leaving the region, you generally
-  pay cloud networking fees.
+\* Generally cloud providers only charge for network that leaves a zone, i.e.
+cross-zone, and cross-region. Usually you're _not_ charged egress for blob
+storage (S3/GCS) within the same region. If leaving the region, you generally
+pay cloud networking fees.
 
 † This refers to network leaving your cloud provider, e.g. sending data to S3
 from GCP or egress network for sending HTML from AWS to a client.
