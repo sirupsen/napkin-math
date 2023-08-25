@@ -105,6 +105,7 @@ Approximate numbers that should be consistent between Cloud providers.
 | Internet Egress†  | 1 GB   | \$0.1      |                |
 | CDN Egress        | 1 GB   | \$0.05     |                |
 | CDN Fill ‡        | 1 GB   | \$0.01     |                |
+| Warehouse Query   | 1 TB   | \$5.00     |                |
 
 \* Generally cloud providers only charge for network that leaves a zone, i.e.
 cross-zone, and cross-region. Usually you're _not_ charged egress for blob
