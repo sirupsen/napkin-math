@@ -10,7 +10,6 @@ type Int = u64;
 #[inline(never)]
 #[no_mangle]
 fn memory_read_sequential_single_thread_vectorized(vec: &mut [Int]) -> u64 {
-    // This prevents using SIMD
     let mut sum = 0;
 
     for i in 0..vec.len() {

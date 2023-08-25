@@ -7,25 +7,25 @@
 # RUSTFLAGS='-C target-cpu=native' cargo bench -- $@
 
 # https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux#1-disable-turboboost
-echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo
+echo 1 | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
 
 # AMD
 # echo 0 > /sys/devices/system/cpu/cpufreq/boost
 
 for i in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
 do
-  echo "performance" > "${i}"
+  echo "performance" | sudo tee "${i}"
 done
-echo 3 > /proc/sys/vm/drop_caches
+echo 3 | sudo tee /proc/sys/vm/drop_caches
 sync
-echo 0 > /proc/sys/kernel/randomize_va_space
+echo 0 | sudo tee /proc/sys/kernel/randomize_va_space
 
-script/toggle-hyperthreading -d > /dev/null
-echo 'always' > /sys/kernel/mm/transparent_hugepage/enabled
-echo 'always' > /sys/kernel/mm/transparent_hugepage/defrag
+sudo script/toggle-hyperthreading -d > /dev/null
+echo 'always' | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+echo 'always' | sudo tee /sys/kernel/mm/transparent_hugepage/defrag
 
 RUSTFLAGS="-C target-cpu=native" perf stat \
-  -- nice -n -5 cargo bench "${@}"
+  -- cargo bench "${@}"
 # RUSTFLAGS="-C target-feature=+avx,+avx2,+sse2,+sse3" perf stat \
 #   -- nice -n -5 cargo bench "${@}"
 
@@ -33,9 +33,9 @@ RUSTFLAGS="-C target-cpu=native" perf stat \
 #   -- nice -n -5 cargo bench
 # RUSTFLAGS='-C target-cpu=native'  cargo run --release -- $@
 
-echo 'madvise' > /sys/kernel/mm/transparent_hugepage/enabled
-echo 'madvise' > /sys/kernel/mm/transparent_hugepage/defrag
-script/toggle-hyperthreading -e # always re-enable after
+echo 'madvise' | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+echo 'madvise' | sudo tee /sys/kernel/mm/transparent_hugepage/defrag
+sudo script/toggle-hyperthreading -e # always re-enable after
 
 # RUSTFLAGS="-C target-cpu=native" nice -n -5 cargo bench
 
