@@ -101,10 +101,10 @@ Approximate numbers that should be consistent between Cloud providers.
 | SSD               | 1 GB   | \$0.1      | \$0.05               |\$0.05          |  \$0.05         |
 | HDD               | 1 GB   | \$0.05     |                      |                |                 |
 | Warehouse Storage | 1 GB   | \$0.02     |                      |                |                 |
-| S3, GCS, ..       | 1 GB   | \$0.01     |                      |                |                 |
-| Cloud Networking* | 1 GB   | \$0.01     |                      |                |                 |
+| Blob (S3, GCS)    | 1 GB   | \$0.02     |                      |                |                 |
+| Cloud Networking *| 1 GB   | \$0.01     |                      |                |                 |
+| Internet Egress † | 1 GB   | \$0.1      |                      |                |                 |
 | Network Ingress   | 1 GB   | \$0        |                      |                |                 |
-| Internet Egress†  | 1 GB   | \$0.1      |                      |                |                 |
 | CDN Egress        | 1 GB   | \$0.05     |                      |                |                 |
 | CDN Fill ‡        | 1 GB   | \$0.01     |                      |                |                 |
 | Warehouse Query   | 1 GB   | \$0.005    |                      |                |                 |
