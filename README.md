@@ -93,7 +93,7 @@ them will be more than 2-3x off, which shouldn't be a problem for most users.
 
 Approximate numbers that should be consistent between Cloud providers.
 
-| What              | Amount | \$ / Month | 1y commit \$/month  |Spot \$/month  | Hourly Spot \$  |
+| What              | Amount | \$ / Month | 1y commit \$/ month  |Spot \$/ month  | Hourly Spot \$  |
 | -----------       | ------ | ---------  | -------------- -----|-------------- | --------------- |
 | CPU               | 1      | \$15       | \$10                |\$2            |  \$0.005        |
 | GPU               | 1      | \$5000     | \$3000              |\$1500         |  \$2            |
