@@ -93,19 +93,20 @@ them will be more than 2-3x off, which shouldn't be a problem for most users.
 
 Approximate numbers that should be consistent between Cloud providers.
 
-| What              | Amount | \$ / Month | Spot \$ /month |
-| -----------       | ------ | ---------  | -------------- |
-| CPU               | 1      | \$15       | \$2            |
-| Memory            | 1 GB   | \$2        | \$0.2          |
-| SSD               | 1 GB   | \$0.1      | \$0.05         |
-| HDD               | 1 GB   | \$0.05     |                |
-| S3, GCS, ..       | 1 GB   | \$0.01     |                |
-| Cloud Networking* | 1 GB   | \$0.01     |                |
-| Network Ingress   | 1 GB   | \$0        |                |
-| Internet Egress†  | 1 GB   | \$0.1      |                |
-| CDN Egress        | 1 GB   | \$0.05     |                |
-| CDN Fill ‡        | 1 GB   | \$0.01     |                |
-| Warehouse Query   | 1 TB   | \$5.00     |                |
+| What              | Amount | \$ / Month | Spot \$ /month | Hourly Spot \$  |
+| -----------       | ------ | ---------  | -------------- | --------------- |
+| CPU               | 1      | \$15       | \$2            |  \$0.003        |
+| Memory            | 1 GB   | \$2        | \$0.2          |  \$0.0004       |
+| SSD               | 1 GB   | \$0.1      | \$0.05         |                 |
+| HDD               | 1 GB   | \$0.05     |                |                 |
+| Warehouse Storage | 1 GB   | \$0.02     |                |                 |
+| S3, GCS, ..       | 1 GB   | \$0.01     |                |                 |
+| Cloud Networking* | 1 GB   | \$0.01     |                |                 |
+| Network Ingress   | 1 GB   | \$0        |                |                 |
+| Internet Egress†  | 1 GB   | \$0.1      |                |                 |
+| CDN Egress        | 1 GB   | \$0.05     |                |                 |
+| CDN Fill ‡        | 1 GB   | \$0.01     |                |                 |
+| Warehouse Query   | 1 GB   | \$0.005    |                |                 |
 
 \* Generally cloud providers only charge for network that leaves a zone, i.e.
 cross-zone, and cross-region. Usually you're _not_ charged egress for blob
