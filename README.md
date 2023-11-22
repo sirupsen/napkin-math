@@ -36,10 +36,13 @@ to improve accuracy and as hardware improves.
 | Operation                           | Latency     | Throughput | 1 MiB  | 1 GiB  |
 | ----------------------------------- | -------     | ---------- | ------ | ------ |
 | Sequential Memory R/W (64 bytes)    | 0.5 ns      |            |        |        |
-| -- Single Thread, No SIMD           |             | 10 GiB/s   | 100 μs | 100 ms |
-| -- Single Thread, SIMD              |             | 20 GiB/s   | 50  μs | 50 ms  |
-| -- Threaded, No SIMD                |             | 30 GiB/s   | 35  μs | 35 ms  |
-| -- Threaded, SIMD                   |             | 35 GiB/s   | 30  μs | 30 ms  |
+| ├ Single Thread, No SIMD            |             | 10 GiB/s   | 100 μs | 100 ms |
+| ├ Single Thread, SIMD               |             | 20 GiB/s   | 50  μs | 50 ms  |
+| ├ Threaded, No SIMD                 |             | 30 GiB/s   | 35  μs | 35 ms  |
+| ├ Threaded, SIMD                    |             | 35 GiB/s   | 30  μs | 30 ms  |
+| Network Same-Zone                   |             | 10 GiB/s   | 100 μs | 100 ms |
+| ├ Inside VPC                        |             | 10 GiB/s   | 100 μs | 100 ms |
+| ├ Outside VPC                       |             | 3 GiB/s    | 300 μs | 300 ms |
 | Hashing, not crypto-safe (64 bytes) | 25 ns       | 2 GiB/s    | 500 μs | 500 ms |
 | Random Memory R/W (64 bytes)        | 50 ns       | 1 GiB/s    | 1 ms   | 1s     |
 | Fast Serialization `[8]` `[9]` †    | N/A         | 1 GiB/s    | 1 ms   | 1s     |
@@ -54,13 +57,15 @@ to improve accuracy and as hardware improves.
 | Compression `[11]`                  | N/A         | 500 MiB/s  | 2 ms   | 2s     |
 | Sequential SSD write, +fsync (8KiB) | 1 ms        | 10 MiB/s   | 100 ms | 2 min  |
 | Sorting (64-bit integers)           | N/A         | 200 MiB/s  | 5 ms   | 5s     |
+| Sequential HDD Read (8 KiB)         | 10 ms       | 250 MiB/s  | 2 ms   | 2s     |
+| Blob Storage same region, 1 file    | 50 ms       | 500 MiB/s  | 2 ms   | 2s     |
+| Blob Storage same region, n files   | 50 ms       | NW limit   |        |        |
 | Random SSD Read (8 KiB)             | 100 μs      | 70 MiB/s   | 15 ms  | 15s    |
 | Serialization `[8]` `[9]` †         | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Deserialization `[8]` `[9]` †       | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Proxy: Envoy/ProxySQL/Nginx/HAProxy | 50 μs       | ?          | ?      | ?      |
 | Network within same region          | 250 μs      | 2 GiB/s    | 500 μs | 500 ms |
 | Premium network within zone/VPC     | 250 μs      | 25 GiB/s   | 50 μs  | 40 ms  |
-| Blob Storage bandwidth same region  | 50 ms       | 500 MiB/s  | 2 ms   | 2s     |
 | {MySQL, Memcached, Redis, ..} Query | 500 μs      | ?          | ?      | ?      |
 | Random HDD Read (8 KiB)             | 10 ms       | 0.7 MiB/s  | 2 s    | 30m    |
 | Network between regions `[6]`       | [Varies][i] | 25 MiB/s   | 40 ms  | 40s    |
@@ -99,18 +104,18 @@ Approximate numbers that should be consistent between Cloud providers.
 | GPU               | 1      | \$5000     | \$3000              | \$1500         |  \$2           |
 | Memory            | 1 GB   | \$2        | \$1                 | \$0.2          |  \$0.0005      |
 | Storage           |        |           |                    |               |               |
-| ├─ Blob (S3, GCS) | 1 GB   | \$0.02     |                    |               |               |
-| ├─ HDD            | 1 GB   | \$0.05     |                    |               |               |
-| ├─ SSD            | 1 GB   | \$0.1      | \$0.05              | \$0.05         |  \$0.05        |
-| ├─ Warehouse Storage | 1 GB | \$0.02    |                    |               |               |
+| ├ Blob (S3, GCS) | 1 GB   | \$0.02     |                    |               |               |
+| ├ HDD            | 1 GB   | \$0.05     |                    |               |               |
+| ├ SSD            | 1 GB   | \$0.1      | \$0.05              | \$0.05         |  \$0.05        |
+| ├ Warehouse Storage | 1 GB | \$0.02    |                    |               |               |
 | Networking           |      |           |                    |               |               |
-| ├─ Same Zone †      | 1 GB  | \$0       |                    |               |               |
-| ├─ Cross-Zone       | 1 GB  | \$0.01    |                    |               |               |
-| ├─ Cross-Zone Blob  | 1 GB  | \$0       |                    |               |               |
-| ├─ Region Ingress   | 1 GB  | \$0       |                    |               |               |
-| ├─ Region Egress    | 1 GB  | \$0.1     |                    |               |               |
-| ├─ Internet Ingress | 1 GB  | \$0       |                    |               |               |
-| ├─ Internet Egress  | 1 GB  | \$0.1     |                    |               |               |
+| ├ Same Zone †      | 1 GB  | \$0       |                    |               |               |
+| ├ Cross-Zone       | 1 GB  | \$0.01    |                    |               |               |
+| ├ Cross-Zone Blob  | 1 GB  | \$0       |                    |               |               |
+| ├ Region Ingress   | 1 GB  | \$0       |                    |               |               |
+| ├ Region Egress    | 1 GB  | \$0.1     |                    |               |               |
+| ├ Internet Ingress | 1 GB  | \$0       |                    |               |               |
+| ├ Internet Egress  | 1 GB  | \$0.1     |                    |               |               |
 | CDN Egress          | 1 GB  | \$0.05    |                    |               |               |
 | CDN Fill ‡          | 1 GB  | \$0.01    |                    |               |               |
 | Warehouse Query     | 1 GB  | \$0.005   |                    |               |               |
