@@ -98,27 +98,30 @@ them will be more than 2-3x off, which shouldn't be a problem for most users.
 
 Approximate numbers that should be consistent between Cloud providers.
 
-| What              | Amount | \$ / Month | 1y commit \$ /month | Spot \$ /month | Hourly Spot \$ |
-| ----------------- | ------ | --------- | ------------------ | ------------- | ------------- |
-| CPU               | 1      | \$15       | \$10                | \$2            |  \$0.005       |
-| GPU               | 1      | \$5000     | \$3000              | \$1500         |  \$2           |
-| Memory            | 1 GB   | \$2        | \$1                 | \$0.2          |  \$0.0005      |
-| Storage           |        |           |                    |               |               |
-| ├ Blob (S3, GCS) | 1 GB   | \$0.02     |                    |               |               |
-| ├ HDD            | 1 GB   | \$0.05     |                    |               |               |
-| ├ SSD            | 1 GB   | \$0.1      | \$0.05              | \$0.05         |  \$0.05        |
-| ├ Warehouse Storage | 1 GB | \$0.02    |                    |               |               |
-| Networking           |      |           |                    |               |               |
-| ├ Same Zone †      | 1 GB  | \$0       |                    |               |               |
-| ├ Cross-Zone       | 1 GB  | \$0.01    |                    |               |               |
-| ├ Cross-Zone Blob  | 1 GB  | \$0       |                    |               |               |
-| ├ Region Ingress   | 1 GB  | \$0       |                    |               |               |
-| ├ Region Egress    | 1 GB  | \$0.1     |                    |               |               |
-| ├ Internet Ingress | 1 GB  | \$0       |                    |               |               |
-| ├ Internet Egress  | 1 GB  | \$0.1     |                    |               |               |
-| CDN Egress          | 1 GB  | \$0.05    |                    |               |               |
-| CDN Fill ‡          | 1 GB  | \$0.01    |                    |               |               |
-| Warehouse Query     | 1 GB  | \$0.005   |                    |               |               |
+| What                | Amount | \$ / Month | 1y commit \$ /month | Spot \$ /month | Hourly Spot \$ |
+| --------------------| ------ | ---------  | ------------------ | ------------- | ------------- |
+| CPU                 | 1      | \$15       | \$10                | \$2            |  \$0.005       |
+| GPU                 | 1      | \$5000     | \$3000              | \$1500         |  \$2           |
+| Memory              | 1 GB   | \$2        | \$1                 | \$0.2          |  \$0.0005      |
+| Storage             |        |            |                    |               |               |
+| ├ Blob (S3, GCS)    | 1 GB   | \$0.02     |                    |               |               |
+| ├ Zonal HDD         | 1 GB   | \$0.05     |                    |               |               |
+| ├ Ephemeral SSD     | 1 GB   | \$0.1      | \$0.05              | \$0.05         |  \$0.05        |
+| ├ Regional HDD      | 1 GB   | \$0.08     |                    |               |               |
+| ├ Warehouse Storage | 1 GB   | \$0.02     |                    |               |               |
+| ├ Zonal SSD         | 1 GB   | \$0.2      |                    |               |               |
+| ├ Regional SSD      | 1 GB   | \$0.35     |                    |               |               |
+| Networking          |        |            |                    |               |               |
+| ├ Same Zone †       | 1 GB   | \$0        |                    |               |               |
+| ├ Cross-Zone        | 1 GB   | \$0.01     |                    |               |               |
+| ├ Cross-Zone Blob   | 1 GB   | \$0        |                    |               |               |
+| ├ Region Ingress    | 1 GB   | \$0        |                    |               |               |
+| ├ Region Egress     | 1 GB   | \$0.1      |                    |               |               |
+| ├ Internet Ingress  | 1 GB   | \$0        |                    |               |               |
+| ├ Internet Egress   | 1 GB   | \$0.1      |                    |               |               |
+| CDN Egress          | 1 GB   | \$0.05     |                    |               |               |
+| CDN Fill ‡          | 1 GB   | \$0.01     |                    |               |               |
+| Warehouse Query     | 1 GB   | \$0.005    |                    |               |               |
 
 † This refers to network leaving your cloud provider, e.g. sending data to S3
 from GCP or egress network for sending HTML from AWS to a client.
