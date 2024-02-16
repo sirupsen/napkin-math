@@ -69,8 +69,11 @@ to improve accuracy and as hardware improves.
 | {MySQL, Memcached, Redis, ..} Query | 500 μs      | ?          | ?      | ?      |
 | Random HDD Read (8 KiB)             | 10 ms       | 0.7 MiB/s  | 2 s    | 30m    |
 | Network between regions `[6]`       | [Varies][i] | 25 MiB/s   | 40 ms  | 40s    |
+| Network NA Central <-> East         | 25 ms       | 25 MiB/s   | 40 ms  | 40s    |
+| Network NA Central <-> West         | 40 ms       | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA East <-> West            | 60 ms       | 25 MiB/s   | 40 ms  | 40s    |
 | Network EU West <-> NA East         | 80 ms       | 25 MiB/s   | 40 ms  | 40s    |
+| Network EU West <-> NA Central      | 100 ms      | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA West <-> Singapore       | 180 ms      | 25 MiB/s   | 40 ms  | 40s    |
 | Network EU West <-> Singapore       | 160 ms      | 25 MiB/s   | 40 ms  | 40s    |
 
