@@ -112,13 +112,12 @@ Approximate numbers that should be consistent between Cloud providers.
 | ├ Zonal SSD         | 1 GB   | \$0.2      |                    |               |               |
 | ├ Regional SSD      | 1 GB   | \$0.35     |                    |               |               |
 | Networking          |        |            |                    |               |               |
-| ├ Same Zone †       | 1 GB   | \$0        |                    |               |               |
-| ├ Cross-Zone        | 1 GB   | \$0.01     |                    |               |               |
-| ├ Cross-Zone Blob   | 1 GB   | \$0        |                    |               |               |
-| ├ Region Ingress    | 1 GB   | \$0        |                    |               |               |
-| ├ Region Egress     | 1 GB   | \$0.1      |                    |               |               |
-| ├ Internet Ingress  | 1 GB   | \$0        |                    |               |               |
-| ├ Internet Egress   | 1 GB   | \$0.1      |                    |               |               |
+| ├ Same Zone         | 1 GB   | \$0        |                    |               |               |
+| ├ Blob              | 1 GB   | \$0        |                    |               |               |
+| ├ Ingress           | 1 GB   | \$0        |                    |               |               |
+| ├ Inter-Zone        | 1 GB   | \$0.01     |                    |               |               |
+| ├ Inter-Region      | 1 GB   | \$0.02     |                    |               |               |
+| ├ Internet Egress † | 1 GB   | \$0.1      |                    |               |               |
 | CDN Egress          | 1 GB   | \$0.05     |                    |               |               |
 | CDN Fill ‡          | 1 GB   | \$0.01     |                    |               |               |
 | Warehouse Query     | 1 GB   | \$0.005    |                    |               |               |
