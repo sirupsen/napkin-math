@@ -136,7 +136,7 @@ operation (fewer, large files is cheaper):
 
 |        | 1M    | 1000     |
 | ------ | ----  | -------  |
-| Reads  | \$0.5 | \$0.0004 |
+| Reads  | \$0.4 | \$0.0004 |
 | Writes | \$5   | \$0.005  |
 
 ## Compression Ratios
