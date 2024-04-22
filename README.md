@@ -134,10 +134,10 @@ write costs (see just below).
 Furthermore, for blob storage (S3/GCS/R2/...), you're charged per read/write
 operation (fewer, large files is cheaper):
 
-|        | 1M    | 1000    |
-| ------ | ----  | ------- |
+|        | 1M    | 1000     |
+| ------ | ----  | -------  |
 | Reads  | \$0.5 | \$0.0004 |
-| Writes | \$10  | \$0.01   |
+| Writes | \$5   | \$0.005  |
 
 ## Compression Ratios
 
