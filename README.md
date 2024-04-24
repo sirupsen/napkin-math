@@ -124,12 +124,19 @@ Approximate numbers that should be consistent between Cloud providers.
 | CDN Egress          | 1 GB   | \$0.05     |                    |               |               |
 | CDN Fill ‡          | 1 GB   | \$0.01     |                    |               |               |
 | Warehouse Query     | 1 GB   | \$0.005    |                    |               |               |
+| Logs/Traces    ♣    | 1 GB   | \$0.5      |                    |               |               |
+| Metrics             | 1000   | \$20       |                    |               |               |
 
 † This refers to network leaving your cloud provider, e.g. sending data to S3
 from GCP or egress network for sending HTML from AWS to a client.
 
 ‡ An additional per cache-fill fee is incurred that costs close to blob storage
 write costs (see just below).
+
+♣ This is standard pricing among a few logging providers, but e.g. [Datadog
+pricing](https://www.datadoghq.com/pricing/?product=log-management#products) is
+different and charges \$0.1 per ingested logs with \$1.5 per 1m on top for 7d
+retention.
 
 Furthermore, for blob storage (S3/GCS/R2/...), you're charged per read/write
 operation (fewer, large files is cheaper):
