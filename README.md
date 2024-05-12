@@ -110,7 +110,7 @@ Approximate numbers that should be consistent between Cloud providers.
 | ├ Warehouse Storage | 1 GB   | \$0.02     |                    |               |               |
 | ├ Blob (S3, GCS)    | 1 GB   | \$0.02     |                    |               |               |
 | ├ Zonal HDD         | 1 GB   | \$0.05     |                    |               |               |
-| ├ Ephemeral SSD     | 1 GB   | \$0.1      | \$0.05              | \$0.05         |  \$0.05        |
+| ├ Ephemeral SSD     | 1 GB   | \$0.08     | \$0.05             | \$0.05        |  \$0.07        |
 | ├ Regional HDD      | 1 GB   | \$0.1      |                    |               |               |
 | ├ Zonal SSD         | 1 GB   | \$0.2      |                    |               |               |
 | ├ Regional SSD      | 1 GB   | \$0.35     |                    |               |               |
@@ -133,7 +133,7 @@ from GCP or egress network for sending HTML from AWS to a client.
 ‡ An additional per cache-fill fee is incurred that costs close to blob storage
 write costs (see just below).
 
-♣ This is standard pricing among a few logging providers, but e.g. [Datadog
+7 This is standard pricing among a few logging providers, but e.g. [Datadog
 pricing](https://www.datadoghq.com/pricing/?product=log-management#products) is
 different and charges \$0.1 per ingested logs with \$1.5 per 1m on top for 7d
 retention.
