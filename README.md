@@ -118,6 +118,7 @@ Approximate numbers that should be consistent between Cloud providers.
 | ├ Same Zone         | 1 GB   | \$0        |                    |               |               |
 | ├ Blob              | 1 GB   | \$0        |                    |               |               |
 | ├ Ingress           | 1 GB   | \$0        |                    |               |               |
+| ├ L4 LB             | 1 GB   | \$0.008    |                    |               |               |
 | ├ Inter-Zone        | 1 GB   | \$0.01     |                    |               |               |
 | ├ Inter-Region      | 1 GB   | \$0.02     |                    |               |               |
 | ├ Internet Egress † | 1 GB   | \$0.1      |                    |               |               |
