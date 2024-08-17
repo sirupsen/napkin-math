@@ -194,7 +194,7 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
 * `[6]`: https://dl.acm.org/doi/10.1145/1879141.1879143
 * `[7]`: https://en.wikipedia.org/wiki/Hard_disk_drive_performance_characteristics#Seek_times_&_characteristics
 * `[8]`: https://github.com/simdjson/simdjson#performance-results
-* `[9]`: https://github.com/protocolbuffers/protobuf/blob/master/docs/performance.md
+* `[9]`: https://github.com/protocolbuffers/protobuf/blob/d20e9a92/docs/performance.md
 * `[10]`: https://www.imperialviolet.org/2010/06/25/overclocking-ssl.html
 * `[11]`: https://github.com/inikep/lzbench
 * ["How to get consistent results when benchmarking on
