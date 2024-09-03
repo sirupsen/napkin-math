@@ -48,7 +48,7 @@ to improve accuracy and as hardware improves.
 | Fast Serialization `[8]` `[9]` †    | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | Fast Deserialization `[8]` `[9]` †  | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | System Call                         | 500 ns      | N/A        | N/A    | N/A    |
-| Hashing, crypto-safe (64 bytes)     | 500 ns      | 200 MiB/s  | 10 ms  | 10s    |
+| Hashing, crypto-safe (64 bytes)     | 100 ns      | 1 GiB/s    | 1 ms   | 1s     |
 | Sequential SSD read (8 KiB)         | 1 μs        | 4 GiB/s    | 200 μs | 200 ms |
 | Context Switch `[1] [2]`            | 10 μs       | N/A        | N/A    | N/A    |
 | Sequential SSD write, -fsync (8KiB) | 10 μs       | 1 GiB/s    | 1 ms   | 1s     |
