@@ -60,8 +60,8 @@ to improve accuracy and as hardware improves.
 | Sequential HDD Read (8 KiB)         | 10 ms       | 250 MiB/s  | 2 ms   | 2s     |
 | Blob Storage GET, 1 conn            | 50 ms       | 500 MiB/s  | 2 ms   | 2s     |
 | Blob Storage GET, n conn (offsets)  | 50 ms       | NW limit   |        |        |
-| Blob Storage PUT, 1 conn            | 100 ms      | 100 MiB/s  | 10 ms  | 10s    |
-| Blob Storage PUT, n conn (multipart)| 200 ms      | NW limit   |        |        |
+| Blob Storage PUT, 1 conn            | 50 ms       | 100 MiB/s  | 10 ms  | 10s    |
+| Blob Storage PUT, n conn (multipart)| 150 ms      | NW limit   |        |        |
 | Random SSD Read (8 KiB)             | 100 μs      | 70 MiB/s   | 15 ms  | 15s    |
 | Serialization `[8]` `[9]` †         | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Deserialization `[8]` `[9]` †       | N/A         | 100 MiB/s  | 10 ms  | 10s    |
