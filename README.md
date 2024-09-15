@@ -129,6 +129,7 @@ Approximate numbers that should be consistent between Cloud providers.
 | Warehouse Query     | 1 GB   | \$0.005    |                    |               |               |
 | Logs/Traces    ♣    | 1 GB   | \$0.5      |                    |               |               |
 | Metrics             | 1000   | \$20       |                    |               |               |
+| EKM Keys            | 1      | \$1        |                    |               |               |
 
 † This refers to network leaving your cloud provider, e.g. sending data to S3
 from GCP or egress network for sending HTML from AWS to a client.
@@ -144,10 +145,11 @@ retention.
 Furthermore, for blob storage (S3/GCS/R2/...), you're charged per read/write
 operation (fewer, large files is cheaper):
 
-|        | 1M    | 1000     |
-| ------ | ----  | -------  |
-| Reads  | \$0.4 | \$0.0004 |
-| Writes | \$5   | \$0.005  |
+ |                | 1M      | 1000     |
+ |----------------|---------|----------|
+ | Reads          | \$0.4   | \$0.0004 |
+ | Writes         | \$5     | \$0.005  |
+ | EKM Encryption | \$3     | \$0.003  |
 
 ## Compression Ratios
 
