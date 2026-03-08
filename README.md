@@ -45,7 +45,7 @@ to improve accuracy and as hardware improves.
 | ├ Inside VPC                        |             | 10 GiB/s   | 100 μs | 100 ms |
 | ├ Outside VPC                       |             | 3 GiB/s    | 300 μs | 300 ms |
 | Hashing, not crypto-safe (64 bytes) | 10 ns       | 5 GiB/s    | 200 μs | 200 ms |
-| Random Memory R/W (64 bytes)        | 30 ns       | 2 GiB/s    | 500 μs | 500 ms |
+| Random Memory R/W (64 bytes)        | 20 ns       | 3 GiB/s    | 300 μs | 300 ms |
 | Fast Serialization `[8]` `[9]` †    | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | Fast Deserialization `[8]` `[9]` †  | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | System Call                         | 300 ns      | N/A        | N/A    | N/A    |
@@ -96,12 +96,17 @@ internally. On locked-down cloud images, run
 can help this project by adding new suites and filling out the blanks.
 
 **Note:** The active benchmark path today is Criterion.rs in `benches/`.
-`src/main.rs` is the older ad hoc harness with many more experiments, but it is
-not the default README refresh path. The current SSD rows were refreshed from
-that older harness with `NAPKIN_BENCH_FILE` pointed at a RAID0 local-SSD mount.
+`src/main.rs` is still the older ad hoc harness and remains the source of truth
+for the benches that have not been fully migrated and revalidated yet. The
+current Criterion suite now includes `memory_read`, `memory_random`, `hash`,
+`syscall`, `sort`, `serialization`, `compression`, and
+`compressed_memory_read`. The current SSD rows were refreshed from the older
+harness with `NAPKIN_BENCH_FILE` pointed at a RAID0 local-SSD mount.
 The `compressed_memory_read` Criterion bench is a BitPacker integer-unpack
 microbenchmark; it should not be used to rewrite the generic `[11]`
-compression/decompression rows above.
+compression/decompression rows above. The new `serialization` and
+`compression` Criterion groups are workload-specific and are not yet wired into
+the generic README rows above.
 `memory_read` now emits explicit `No SIMD` and `SIMD` variants in Criterion,
 but the README intentionally collapses them to one single-thread row and one
 threaded row for memorability.
