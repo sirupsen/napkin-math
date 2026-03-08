@@ -21,8 +21,11 @@ newsletter.
 
 ## Numbers
 
-Below are numbers that are rounded from runs on a metal Intel Xeon E-2236 3.4GHz
-with 12 (virtual) cores.
+Below are numbers rounded for memorization, not faux precision.
+The rows this repo can currently refresh on a single host were re-measured and
+revalidated on fresh GCP `c4-standard-48-lssd` instances on March 8, 2026
+(Intel Xeon 6985P-C, 48 vCPU / 24 physical cores, 180 GB RAM, Ubuntu 22.04.5
+LTS).
 
 [9]: https://gist.github.com/sirupsen/766f266eebf6bdf2525bdbb309e17a41
 
@@ -36,27 +39,25 @@ to improve accuracy and as hardware improves.
 | Operation                           | Latency     | Throughput | 1 MiB  | 1 GiB  |
 | ----------------------------------- | -------     | ---------- | ------ | ------ |
 | Sequential Memory R/W (64 bytes)    | 0.5 ns      |            |        |        |
-| ├ Single Thread, No SIMD            |             | 10 GiB/s   | 100 μs | 100 ms |
-| ├ Single Thread, SIMD               |             | 20 GiB/s   | 50  μs | 50 ms  |
-| ├ Threaded, No SIMD                 |             | 30 GiB/s   | 35  μs | 35 ms  |
-| ├ Threaded, SIMD                    |             | 35 GiB/s   | 30  μs | 30 ms  |
+| ├ Single Thread                     |             | 20 GiB/s   | 50 μs  | 50 ms  |
+| ├ Threaded                          |             | 200 GiB/s  | 5 μs   | 5 ms   |
 | Network Same-Zone                   |             | 10 GiB/s   | 100 μs | 100 ms |
 | ├ Inside VPC                        |             | 10 GiB/s   | 100 μs | 100 ms |
 | ├ Outside VPC                       |             | 3 GiB/s    | 300 μs | 300 ms |
-| Hashing, not crypto-safe (64 bytes) | 25 ns       | 2 GiB/s    | 500 μs | 500 ms |
-| Random Memory R/W (64 bytes)        | 50 ns       | 1 GiB/s    | 1 ms   | 1s     |
+| Hashing, not crypto-safe (64 bytes) | 10 ns       | 5 GiB/s    | 200 μs | 200 ms |
+| Random Memory R/W (64 bytes)        | 30 ns       | 2 GiB/s    | 500 μs | 500 ms |
 | Fast Serialization `[8]` `[9]` †    | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | Fast Deserialization `[8]` `[9]` †  | N/A         | 1 GiB/s    | 1 ms   | 1s     |
-| System Call                         | 500 ns      | N/A        | N/A    | N/A    |
+| System Call                         | 300 ns      | N/A        | N/A    | N/A    |
 | Hashing, crypto-safe (64 bytes)     | 100 ns      | 1 GiB/s    | 1 ms   | 1s     |
-| Sequential SSD read (8 KiB)         | 1 μs        | 4 GiB/s    | 200 μs | 200 ms |
+| Sequential SSD read (8 KiB)         | 1 μs        | 8 GiB/s    | 100 μs | 100 ms |
 | Context Switch `[1] [2]`            | 10 μs       | N/A        | N/A    | N/A    |
-| Sequential SSD write, -fsync (8KiB) | 10 μs       | 1 GiB/s    | 1 ms   | 1s     |
-| TCP Echo Server (32 KiB)            | 10 μs       | 4 GiB/s    | 200 μs | 200 ms |
-| Decompression `[11]`                | N/A         | 1   GiB/s  | 1 ms   | 1s     |
+| Sequential SSD write, -fsync (8KiB) | 2 μs        | 3 GiB/s    | 300 μs | 300 ms |
+| TCP Echo Server (32 KiB)            | 50 μs       | 500 MiB/s  | 2 ms   | 2s     |
+| Decompression `[11]`                | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | Compression `[11]`                  | N/A         | 500 MiB/s  | 2 ms   | 2s     |
-| Sequential SSD write, +fsync (8KiB) | 1 ms        | 10 MiB/s   | 100 ms | 2 min  |
-| Sorting (64-bit integers)           | N/A         | 200 MiB/s  | 5 ms   | 5s     |
+| Sequential SSD write, +fsync (8KiB) | 300 μs      | 30 MiB/s   | 30 ms  | 30s    |
+| Sorting (64-bit integers)           | N/A         | 500 MiB/s  | 2 ms   | 2s     |
 | Sequential HDD Read (8 KiB)         | 10 ms       | 250 MiB/s  | 2 ms   | 2s     |
 | Blob Storage GET, 1 conn            | 50 ms       | 500 MiB/s  | 2 ms   | 2s     |
 | Blob Storage GET, n conn (offsets)  | 50 ms       | NW limit   |        |        |
@@ -87,12 +88,23 @@ serialization such as e.g. JSON will be of the slower kind. We include both here
 as serialization/deserialization is a very, very broad topic with extremely
 different performance characteristics depending on data and implementation.
 
-You can run this with `./run` to run with the right optimization levels. You
-won't get the right numbers when you're compiling in debug mode. You can help
-this project by adding new suites and filling out the blanks.
+For the active Criterion suite, run `./run --bench napkin_math` to get the
+right optimization levels and Linux tuning. You won't get the right numbers
+when you're compiling in debug mode. The wrapper already uses `sudo`
+internally. On locked-down cloud images, run
+`sudo sysctl -w kernel.perf_event_paranoid=-1` once before invoking it. You
+can help this project by adding new suites and filling out the blanks.
 
-**Note:** I'm currently porting the benchmarks over to Criterion.rs, so some are
-in `bench/` now. You can run those by uncommenting the relevant line in `./run`.
+**Note:** The active benchmark path today is Criterion.rs in `benches/`.
+`src/main.rs` is the older ad hoc harness with many more experiments, but it is
+not the default README refresh path. The current SSD rows were refreshed from
+that older harness with `NAPKIN_BENCH_FILE` pointed at a RAID0 local-SSD mount.
+The `compressed_memory_read` Criterion bench is a BitPacker integer-unpack
+microbenchmark; it should not be used to rewrite the generic `[11]`
+compression/decompression rows above.
+`memory_read` now emits explicit `No SIMD` and `SIMD` variants in Criterion,
+but the README intentionally collapses them to one single-thread row and one
+threaded row for memorability.
 
 I am aware of some inefficiencies in this suite. I intend to improve my skills
 in this area, in order to ensure the numbers are the upper-bound of performance

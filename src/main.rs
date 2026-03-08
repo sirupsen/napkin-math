@@ -26,7 +26,21 @@ extern crate jemallocator;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-static FILE_NAME: &str = "/tmp/napkin.txt";
+static DEFAULT_FILE_NAME: &str = "/tmp/napkin.txt";
+
+fn benchmark_file_name() -> String {
+    std::env::var("NAPKIN_BENCH_FILE").unwrap_or_else(|_| String::from(DEFAULT_FILE_NAME))
+}
+
+#[cfg(target_os = "linux")]
+fn drop_file_page_cache(file: &std::fs::File) {
+    unsafe {
+        libc::posix_fadvise(file.as_raw_fd(), 0, 0, libc::POSIX_FADV_DONTNEED);
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn drop_file_page_cache(_file: &std::fs::File) {}
 
 // https://ark.intel.com/content/www/us/en/ark/products/97185/intel-core-i7-7700hq-processor-6m-cache-up-to-3-80-ghz.html
 // https://en.wikichip.org/wiki/intel/core_i7/i7-7700hq
@@ -42,7 +56,7 @@ static FILE_NAME: &str = "/tmp/napkin.txt";
 //
 // TODO: Would be cool to instrument branch misses etc. here
 use byte_unit::Byte;
-use clap::{Command as App, Arg};
+use clap::{Arg, Command as App};
 // use failure::Error;
 use mysql::prelude::*;
 use mysql::{params, Opts, Pool, Result};
@@ -94,12 +108,14 @@ impl BenchmarkResult {
     fn print_results(&self, name: &str, size_of_type: usize) {
         let mut name = String::from(name);
         if size_of_type > 0 {
-            write!(name,
+            write!(
+                name,
                 " <{}>",
                 Byte::from_bytes(size_of_type as u128)
                     .get_appropriate_unit(true)
                     .format(0)
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         println!(
@@ -558,13 +574,21 @@ fn memory_read_random_setup() -> MemoryReadTest {
     vec.resize(size_in_elements, [1, 2, 3, 4, 5, 6, 7, 8]);
     unsafe {
         let data = vec.as_mut_ptr() as *mut libc::c_void;
-        libc::madvise(data, size_in_elements, libc::MADV_RANDOM);
+        libc::madvise(
+            data,
+            size_in_elements * std::mem::size_of::<[u64; 8]>(),
+            libc::MADV_RANDOM,
+        );
     }
 
     let mut order: Vec<usize> = (0..size_in_elements).collect();
     unsafe {
         let data = order.as_mut_ptr() as *mut libc::c_void;
-        libc::madvise(data, size_in_elements, libc::MADV_SEQUENTIAL);
+        libc::madvise(
+            data,
+            size_in_elements * std::mem::size_of::<usize>(),
+            libc::MADV_SEQUENTIAL,
+        );
     }
     order.shuffle(&mut thread_rng());
     MemoryReadTest { vec, order, i: 0 }
@@ -587,6 +611,7 @@ fn disk_write_sequential_fsync() {
     }
 
     let size_of_writes = n_kib_bytes!(8) as usize;
+    let file_name = benchmark_file_name();
 
     let result = benchmark(
         || {
@@ -594,7 +619,7 @@ fn disk_write_sequential_fsync() {
                 .create(true)
                 .write(true)
                 .truncate(true)
-                .open(FILE_NAME)
+                .open(&file_name)
                 .unwrap();
 
             let bytes: Vec<u8> = (0..size_of_writes).map(|_| rand::random::<u8>()).collect();
@@ -608,7 +633,7 @@ fn disk_write_sequential_fsync() {
         },
     )
     .unwrap();
-    fs::remove_file(FILE_NAME).unwrap();
+    fs::remove_file(&file_name).unwrap();
 
     result.print_results("Sequential Disk Write, Fsync", size_of_writes);
 }
@@ -620,6 +645,7 @@ fn disk_write_sequential_no_fsync() {
     }
 
     let size_of_writes = n_kib_bytes!(8) as usize;
+    let file_name = benchmark_file_name();
 
     let result = benchmark(
         || {
@@ -627,7 +653,7 @@ fn disk_write_sequential_no_fsync() {
                 .create(true)
                 .write(true)
                 .truncate(true)
-                .open(FILE_NAME)
+                .open(&file_name)
                 .unwrap();
 
             let bytes: Vec<u8> = (0..size_of_writes).map(|_| rand::random::<u8>()).collect();
@@ -640,13 +666,14 @@ fn disk_write_sequential_no_fsync() {
         },
     )
     .unwrap();
-    fs::remove_file(FILE_NAME).unwrap();
+    fs::remove_file(&file_name).unwrap();
 
     result.print_results("Sequential Disk Write, No Fsync", size_of_writes);
 }
 
 fn disk_read_sequential() {
-    const BUF_SIZE: usize = n_kib_bytes!(64) as usize;
+    const BUF_SIZE: usize = n_kib_bytes!(8) as usize;
+    let file_name = benchmark_file_name();
 
     struct Test {
         buffer: [u8; BUF_SIZE],
@@ -655,21 +682,22 @@ fn disk_read_sequential() {
 
     let result = benchmark(
         || {
-            std::mem::drop(fs::remove_file(FILE_NAME));
+            std::mem::drop(fs::remove_file(&file_name));
             let buffer = vec![0; n_gib_bytes!(1) as usize];
             {
                 let mut file = OpenOptions::new()
                     .create(true)
                     .write(true)
                     .read(true)
-                    .open(FILE_NAME)
+                    .open(&file_name)
                     .unwrap();
                 file.write_all(&buffer).unwrap();
                 file.sync_data().unwrap();
+                drop_file_page_cache(&file);
             }
 
             let buffer: [u8; BUF_SIZE] = [0; BUF_SIZE];
-            let mut file = OpenOptions::new().read(true).open(FILE_NAME).unwrap();
+            let mut file = OpenOptions::new().read(true).open(&file_name).unwrap();
             file.seek(SeekFrom::Start(0)).unwrap();
 
             #[cfg(target_os = "linux")]
@@ -697,7 +725,7 @@ fn disk_read_sequential() {
         },
     )
     .unwrap();
-    fs::remove_file(FILE_NAME).unwrap();
+    fs::remove_file(&file_name).unwrap();
 
     result.print_results("Sequential Disk Read", BUF_SIZE);
 }
@@ -712,6 +740,7 @@ fn disk_read_sequential_io_uring() {
     // https://github.com/axboe/liburing/blob/master/examples/io_uring-cp.c
     const BUF_SIZE: usize = n_kib_bytes!(32) as usize;
     let reads_per_iteration: isize = 64;
+    let file_name = benchmark_file_name();
 
     struct Test {
         buffers: Vec<Vec<u8>>,
@@ -727,16 +756,17 @@ fn disk_read_sequential_io_uring() {
     let result = benchmark(
         || {
             // flush page cache? prob not necessary since we re-create the file.
-            let _ = fs::remove_file(FILE_NAME);
+            let _ = fs::remove_file(&file_name);
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .read(true)
-                .open(FILE_NAME)
+                .open(&file_name)
                 .unwrap();
             let buffer = vec![0; n_gib_bytes!(1) as usize];
             file.write_all(&buffer).unwrap();
             file.sync_data().unwrap();
+            drop_file_page_cache(&file);
             file.seek(SeekFrom::Start(0)).unwrap();
 
             // flush page cache after this
@@ -791,7 +821,7 @@ fn disk_read_sequential_io_uring() {
         },
     )
     .unwrap();
-    let _ = fs::remove_file(FILE_NAME);
+    let _ = fs::remove_file(&file_name);
 
     result.print_results(
         "Io-uring Sequential Disk Read",
@@ -801,6 +831,7 @@ fn disk_read_sequential_io_uring() {
 
 fn disk_read_random() {
     const BUF_SIZE: usize = n_kib_bytes!(8) as usize;
+    let file_name = benchmark_file_name();
 
     struct Test {
         buffer: [u8; BUF_SIZE],
@@ -812,20 +843,21 @@ fn disk_read_random() {
 
     let result = benchmark(
         || {
-            std::mem::drop(fs::remove_file(FILE_NAME));
+            std::mem::drop(fs::remove_file(&file_name));
             let buffer = vec![0; n_gib_bytes!(8) as usize];
             {
                 let mut file = OpenOptions::new()
                     .create(true)
                     .write(true)
                     .read(true)
-                    .open(FILE_NAME)
+                    .open(&file_name)
                     .unwrap();
                 file.write_all(&buffer).unwrap();
                 file.sync_data().unwrap();
+                drop_file_page_cache(&file);
             }
 
-            let file = OpenOptions::new().read(true).open(FILE_NAME).unwrap();
+            let file = OpenOptions::new().read(true).open(&file_name).unwrap();
 
             // This is to ensure we only visit each page once. Otherwise this is essentially just
             // benchmarking syscall + page cache, which is going to be awfully close to random
@@ -872,7 +904,7 @@ fn disk_read_random() {
         },
     )
     .unwrap();
-    fs::remove_file(FILE_NAME).unwrap();
+    fs::remove_file(&file_name).unwrap();
 
     result.print_results("Random Disk Seek, No Page Cache", BUF_SIZE);
 }
@@ -962,7 +994,7 @@ fn syscall_stat() {
 }
 
 fn tcp_read_write() {
-    const BUF_SIZE: usize = n_kib_bytes!(64) as usize;
+    const BUF_SIZE: usize = n_kib_bytes!(32) as usize;
 
     // This server doesn't support multiple clients.
     thread::spawn(move || {

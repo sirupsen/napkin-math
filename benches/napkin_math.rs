@@ -1,5 +1,6 @@
 mod benchmarks;
-#[macro_use] extern crate byte_unit;
+#[macro_use]
+extern crate byte_unit;
 use criterion::criterion_main;
 
 criterion_main! {
