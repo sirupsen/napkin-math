@@ -81,6 +81,18 @@ to improve accuracy and as hardware improves.
 | Network EU West <-> NA Central      | 100 ms      | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA West <-> Singapore       | 180 ms      | 25 MiB/s   | 40 ms  | 40s    |
 | Network EU West <-> Singapore       | 160 ms      | 25 MiB/s   | 40 ms  | 40s    |
+| AEGIS-128L  (16 KiB) `[12]`         | N/A         | 100 GiB/s  | 10 μs  | 10 ms  |
+| AEGIS-128X2 (16 KiB) `[12]`         | N/A         | 200 GiB/s  | 5 μs   | 5 ms   |
+| AEGIS-128X4 (16 KiB) `[12]`         | N/A         | 280 GiB/s  | 4 μs   | 4 ms   |
+| AEGIS-256   (16 KiB) `[12]`         | N/A         | 55 GiB/s   | 20 μs  | 20 ms  |
+| AEGIS-256X2 (16 KiB) `[12]`         | N/A         | 110 GiB/s  | 10 μs  | 10 ms  |
+| AEGIS-256X4 (16 KiB) `[12]`         | N/A         | 205 GiB/s  | 5 μs   | 5 ms   |
+| AEGIS-128L  MAC (64 KiB)`[12]`      | N/A         | 110 GiB/s  | 10 μs  | 10 ms  |
+| AEGIS-128X2 MAC (64 KiB)`[12]`      | N/A         | 210 GiB/s  | 5 μs   | 5 ms   |
+| AEGIS-128X4 MAC (64 KiB)`[12]`      | N/A         | 295 GiB/s  | 3 μs   | 3 ms   |
+| AEGIS-256   MAC (64 KiB)`[12]`      | N/A         | 55 GiB/s   | 20 μs  | 20 ms  |
+| AEGIS-256X2 MAC (64 KiB)`[12]`      | N/A         | 110 GiB/s  | 10 μs  | 10 ms  |
+| AEGIS-256X4 MAC (64 KiB)`[12]`      | N/A         | 180 GiB/s  | 5 μs   | 5 ms   |
 
 [i]: https://www.cloudping.co/grid#
 
@@ -220,6 +232,7 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
 * `[9]`: https://github.com/protocolbuffers/protobuf/blob/d20e9a92/docs/performance.md
 * `[10]`: https://www.imperialviolet.org/2010/06/25/overclocking-ssl.html
 * `[11]`: https://github.com/inikep/lzbench
+* `[12]`: https://github.com/aegis-aead/libaegis
 * ["How to get consistent results when benchmarking on
   Linux?"](https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux#2-disable-hyper-threading).
   Great compilation of various Kernel and CPU features to toggle for reliable
