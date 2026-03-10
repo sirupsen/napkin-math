@@ -62,7 +62,7 @@ to improve accuracy and as hardware improves.
 | Blob Storage GET, if not match      | 30 ms       |            |        |        |
 | Blob Storage GET, 1 conn (128KiB)   | 50 ms       | 100 MiB/s  | 10 ms  | 10s    |
 | Blob Storage GET, n conn (offsets)  | 50 ms       | NW limit   |        |        |
-| Blob Storage PUT, 1 conn            | 100 ms      | 100 MiB/s  | 10 ms  | 10s    |
+| Blob Storage PUT, 1 conn (128KiB)   | 100 ms      | 100 MiB/s  | 10 ms  | 10s    |
 | Blob Storage PUT, n conn (multipart)| 150 ms      | NW limit   |        |        |
 | Blob Storage PUT, CAS (8 KiB)       | 100 ms      |            |        |        |
 | Random SSD Read (8 KiB)             | 100 μs      | 70 MiB/s   | 15 ms  | 15s    |
