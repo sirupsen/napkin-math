@@ -84,6 +84,8 @@ to improve accuracy and as hardware improves.
 
 [i]: https://www.cloudping.co/grid#
 
+(See Appendix for explanation of above operations)
+
 **†:** "Fast serialization/deserialization" is typically a simple wire-protocol
 that just dumps bytes, or a very efficient environment. Typically standard
 serialization such as e.g. JSON will be of the slower kind. We include both here
@@ -256,3 +258,88 @@ MiB/s, and 3x at ~20MiB/s, and 4x at 1MB/s.
 * [Files are hard](https://danluu.com/file-consistency/)
 
 [fio]: https://github.com/axboe/fio
+
+
+## Appendix
+
+### Explanation of Each Operation
+
+#### Memory Operations
+
+| Operation | Meaning |
+|-----------|---------|
+| **Single Thread, No SIMD** | Basic memory copy/access using one CPU core with standard instructions |
+| **Single Thread, SIMD** | Memory operations using vectorized instructions (SSE, AVX) that process multiple data points per instruction |
+| **Threaded, No SIMD** | Parallel memory access across multiple CPU cores without vectorization |
+| **Threaded, SIMD** | Combining both multi-threading AND vector instructions for maximum throughput |
+
+#### Network Operations
+
+| Operation | Meaning |
+|-----------|---------|
+| **Network Same-Zone** | Data transfer between machines in the same cloud availability zone |
+| **Inside VPC** | Traffic staying within your Virtual Private Cloud (private network) |
+| **Outside VPC** | Traffic crossing VPC boundaries (through NAT gateways, internet) |
+| **Network within same region** | Cross-zone traffic (e.g., us-east-1a to us-east-1b) |
+| **Premium network within zone/VPC** | High-bandwidth cloud offerings (AWS ENA, GCP Tier_1) |
+| **Network between regions** | Cross-region traffic (e.g., US-East to EU-West) |
+
+#### Hashing Operations
+
+| Operation | Meaning |
+|-----------|---------|
+| **Hashing, not crypto-safe** | Fast hash functions like xxHash, MurmurHash, FNV—used for hash tables, checksums. NOT secure against attacks |
+| **Hashing, crypto-safe** | Cryptographic hashes like SHA-256, BLAKE3—secure but slower |
+
+#### Serialization
+
+| Operation | Meaning |
+|-----------|---------|
+| **Fast Serialization** | Zero-copy formats like FlatBuffers, Cap'n Proto—minimal encoding overhead |
+| **Fast Deserialization** | Reading zero-copy formats (often just pointer casting) |
+| **Serialization** | Traditional formats like JSON, Protocol Buffers, MessagePack—requires encoding |
+| **Deserialization** | Parsing traditional formats back into objects |
+
+#### System/OS Operations
+
+| Operation | Meaning |
+|-----------|---------|
+| **System Call** | Transitioning from user space to kernel (e.g., `read()`, `write()`, `open()`) |
+| **Context Switch** | OS saving one thread's state and loading another's (registers, stack pointer, etc.) |
+
+#### Storage Operations
+
+| Operation | Meaning |
+|-----------|---------|
+| **Sequential SSD write, -fsync** | Writing to SSD in order WITHOUT forcing flush to disk (data may be in controller cache) |
+| **Blob Storage GET, 1 conn** | Downloading from S3/GCS/Azure Blob using single HTTP connection |
+| **Blob Storage GET, n conn** | Parallel range requests to maximize download speed |
+| **Blob Storage PUT, 1 conn** | Single-stream upload to object storage |
+| **Blob Storage PUT, n conn** | Multipart upload (chunks uploaded in parallel, then combined) |
+
+#### Data Processing
+
+| Operation | Meaning |
+|-----------|---------|
+| **Compression** | Encoding data smaller (LZ4, Snappy, zstd) |
+| **Decompression** | Decoding compressed data back to original |
+| **Sorting (64-bit integers)** | In-memory sort of 8-byte integers (benchmark for cache/memory efficiency) |
+
+#### Network Services
+
+| Operation | Meaning |
+|-----------|---------|
+| **TCP Echo Server (32 KiB)** | Round-trip: send 32KB → server receives → server sends back → client receives |
+| **Proxy: Envoy/ProxySQL/Nginx/HAProxy** | Added latency when traffic passes through a reverse proxy or load balancer |
+| **MySQL, Memcached, Redis Query** | Simple query round-trip to these services (network + parsing + execution) |
+
+---
+
+#### Column Meanings
+
+| Column | Meaning |
+|--------|---------|
+| **Latency** | Time for a single operation |
+| **Throughput** | Sustainable rate of data processing |
+| **1 MiB** | Time to process 1 mebibyte |
+| **1 GiB** | Time to process 1 gibibyte |
