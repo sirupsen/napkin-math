@@ -82,7 +82,7 @@ to improve accuracy and as hardware improves.
 | Network NA West <-> Singapore       | 180 ms      | 25 MiB/s   | 40 ms  | 40s    |
 | Network EU West <-> Singapore       | 160 ms      | 25 MiB/s   | 40 ms  | 40s    |
 
-[i]: https://www.cloudping.info/ 
+[i]: https://www.cloudping.co/ 
 
 **†:** "Fast serialization/deserialization" is typically a simple wire-protocol
 that just dumps bytes, or a very efficient environment. Typically standard
