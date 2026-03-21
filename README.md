@@ -54,25 +54,25 @@ to improve accuracy and as hardware improves.
 | Context Switch `[1] [2]`            | 10 μs       | N/A        | N/A    | N/A    |
 | Sequential SSD write, -fsync (8KiB) | 2 μs        | 3 GiB/s    | 300 μs | 300 ms |
 | TCP Echo Server (32 KiB)            | 50 μs       | 500 MiB/s  | 2 ms   | 2s     |
+| Random SSD Read (8 KiB)             | 100 μs      | 70 MiB/s   | 15 ms  | 15s    |
 | Decompression `[11]`                | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | Compression `[11]`                  | N/A         | 500 MiB/s  | 2 ms   | 2s     |
-| Sequential SSD write, +fsync (8KiB) | 300 μs      | 30 MiB/s   | 30 ms  | 30s    |
 | Sorting (64-bit integers)           | N/A         | 500 MiB/s  | 2 ms   | 2s     |
-| Sequential HDD Read (8 KiB)         | 10 ms       | 250 MiB/s  | 2 ms   | 2s     |
-| Blob Storage GET, if not match      | 30 ms       |            |        |        |
-| Blob Storage GET, 1 conn (128KiB)   | 50 ms       | 100 MiB/s  | 10 ms  | 10s    |
-| Blob Storage GET, n conn (offsets)  | 50 ms       | NW limit   |        |        |
-| Blob Storage PUT, 1 conn (128KiB)   | 100 ms      | 100 MiB/s  | 10 ms  | 10s    |
-| Blob Storage PUT, n conn (multipart)| 150 ms      | NW limit   |        |        |
-| Blob Storage PUT, CAS (8 KiB)       | 100 ms      |            |        |        |
-| Random SSD Read (8 KiB)             | 100 μs      | 70 MiB/s   | 15 ms  | 15s    |
-| Serialization `[8]` `[9]` †         | N/A         | 100 MiB/s  | 10 ms  | 10s    |
-| Deserialization `[8]` `[9]` †       | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Proxy: Envoy/ProxySQL/Nginx/HAProxy | 50 μs       | ?          | ?      | ?      |
 | Network within same region          | 250 μs      | 2 GiB/s    | 500 μs | 500 ms |
 | Premium network within zone/VPC     | 250 μs      | 25 GiB/s   | 50 μs  | 40 ms  |
+| Sequential SSD write, +fsync (8KiB) | 300 μs      | 30 MiB/s   | 30 ms  | 30s    |
 | {MySQL, Memcached, Redis, ..} Query | 500 μs      | ?          | ?      | ?      |
+| Serialization `[8]` `[9]` †         | N/A         | 100 MiB/s  | 10 ms  | 10s    |
+| Deserialization `[8]` `[9]` †       | N/A         | 100 MiB/s  | 10 ms  | 10s    |
+| Sequential HDD Read (8 KiB)         | 10 ms       | 250 MiB/s  | 2 ms   | 2s     |
 | Random HDD Read (8 KiB)             | 10 ms       | 0.7 MiB/s  | 2 s    | 30m    |
+| Blob Storage GET, if-not-match 304  | 30 ms       |            |        |        |
+| Blob Storage GET, 1 conn (128KiB)   | 80 ms       | 100 MiB/s  | 10 ms  | 10s    |
+| Blob Storage GET, n conn (offsets)  | 80 ms       | NW limit   |        |        |
+| Blob Storage LIST                   | 100 ms      |            |        |        |
+| Blob Storage PUT, 1 conn (128KiB)   | 200 ms      | 100 MiB/s  | 10 ms  | 10s    |
+| Blob Storage PUT, n conn (multipart)| 200 ms      | NW limit   | 10 ms  | 10s    |
 | Network between regions `[6]`       | [Varies][i] | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA Central <-> East         | 25 ms       | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA Central <-> West         | 40 ms       | 25 MiB/s   | 40 ms  | 40s    |
@@ -100,15 +100,63 @@ can help this project by adding new suites and filling out the blanks.
 **Note:** The active benchmark path today is Criterion.rs in `benches/`.
 `src/main.rs` is still the older ad hoc harness and remains the source of truth
 for the benches that have not been fully migrated and revalidated yet. The
-current Criterion suite now includes `memory_read`, `memory_random`, `hash`,
-`syscall`, `sort`, `serialization`, `compression`, and
-`compressed_memory_read`. The current SSD rows were refreshed from the older
+current Criterion suite now includes `blob_storage`, `memory_read`,
+`memory_random`, `hash`, `syscall`, `sort`, `serialization`, `compression`,
+and `compressed_memory_read`. The current SSD rows were refreshed from the older
 harness with `NAPKIN_BENCH_FILE` pointed at a RAID0 local-SSD mount.
 The `compressed_memory_read` Criterion bench is a BitPacker integer-unpack
 microbenchmark; it should not be used to rewrite the generic `[11]`
 compression/decompression rows above. The new `serialization` and
 `compression` Criterion groups are workload-specific and are not yet wired into
 the generic README rows above.
+The new `blob_storage` Criterion group is opt-in and credentialed: set
+`NAPKIN_GCS_BUCKET` and/or `NAPKIN_S3_BUCKET`. Both the GCS and S3 paths now
+use the AWS S3 SDK. The GCS side talks to the GCS XML interoperability endpoint
+and requires `NAPKIN_GCS_ACCESS_KEY` plus `NAPKIN_GCS_SECRET_KEY`. The S3 side
+uses the local AWS profile in `NAPKIN_S3_PROFILE` (default `tpuf-test`) plus
+`NAPKIN_S3_REGION` (default `us-west-2`).
+The concurrent `get_offsets` and `put_multipart` paths explicitly fan out onto
+a multi-thread Tokio runtime, so they can get close to the host NIC limit when
+the range count / object count is high enough. On March 9, 2026, same-region
+`1 GiB` single-stream GETs landed at about `95 MiB/s` on S3 (`m6id.12xlarge`
+in `us-west-2a`) and about `190-200 MiB/s` on GCS XML
+(`c4-standard-48-lssd` in `us-central1-c`). On the same machines, explicit
+concurrent range GETs reached about `2.0 GiB/s` on S3 and about `4.9 GiB/s` on
+GCS, while multipart PUTs reached about `1.8-1.9 GiB/s` on S3 and about
+`3.3 GiB/s` on GCS. AWS's own S3 guidance suggests budgeting about
+`85-90 MB/s` per concurrent request when saturating a `10 Gbps` instance, which
+matched the measured S3 single-stream result closely. The old `500 MiB/s`
+single-stream blob GET row above did not reproduce on either provider, so it
+has been revised down to a conservative generic `100 MiB/s`. The current
+blob-storage work has revalidated throughput much more than first-byte latency;
+the `50 ms` / `150 ms` latency cells above should still be read as rough
+heuristics until a dedicated small-object / time-to-first-byte probe is added.
+There is now a dedicated small-object latency probe in `src/bin/s3_latency.rs`.
+Run `./script/blob-latency s3` or `./script/blob-latency gcs` to sweep
+`get`, `put`, `if_none_match`, and `put_if_match` across the default
+`8 KiB .. 8 MiB` size ladder, except `if_none_match`, which now defaults to a
+single `128 KiB` row because its latency was effectively flat across the small
+size sweep. Override `NAPKIN_BLOB_LATENCY_OPS`,
+`NAPKIN_BLOB_LATENCY_SIZES`, and
+`NAPKIN_BLOB_LATENCY_IF_NONE_MATCH_SIZES` when you want a smaller or
+provider-specific run. The latency probe now defaults to a per-row wall-clock
+budget of `300` seconds, collecting as many samples as fit in that time.
+Tune that with `NAPKIN_BLOB_LATENCY_ROW_SECONDS`; optionally cap it with
+`NAPKIN_BLOB_LATENCY_SAMPLE_CAP` (or the older `NAPKIN_BLOB_LATENCY_SAMPLES`
+alias) when you want shorter count-limited experiments instead.
+The `list` op now seeds a larger namespace by default (`100k` keys) and
+measures one randomized `1000`-key page per sample via `start_after`, rather
+than repeatedly scanning the same small fixed prefix. Tune that shape with
+`NAPKIN_BLOB_LATENCY_LIST_NAMESPACE_KEYS`,
+`NAPKIN_BLOB_LATENCY_LIST_KEYS`, and
+`NAPKIN_BLOB_LATENCY_LIST_SEED_CONCURRENCY`. If you also want the old
+whole-namespace walk, add `list_full_scan` to `NAPKIN_BLOB_LATENCY_OPS`.
+For aligned range-read latency, `./script/blob-random-range-latency` measures
+the `128 KiB`-aligned shape and `./script/blob-random-range-latency-8m`
+measures the `8 MiB`-aligned shape over the same `128 x 1 GiB` object pool.
+`./script/blob-random-range-latency-8m-multipart` seeds those `1 GiB` source
+objects via multipart upload with `8 MiB` parts, then measures `8 MiB`-aligned
+reads against those multipart boundaries.
 `memory_read` now emits explicit `No SIMD` and `SIMD` variants in Criterion,
 but the README intentionally collapses them to one single-thread row and one
 threaded row for memorability.
