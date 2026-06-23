@@ -67,12 +67,12 @@ to improve accuracy and as hardware improves.
 | Deserialization `[8]` `[9]` †       | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Sequential HDD Read (8 KiB)         | 10 ms       | 250 MiB/s  | 2 ms   | 2s     |
 | Random HDD Read (8 KiB)             | 10 ms       | 0.7 MiB/s  | 2 s    | 30m    |
-| Blob Storage GET, if-not-match 304  | 30 ms       |            |        |        |
-| Blob Storage GET, 1 conn (128KiB)   | 80 ms       | 100 MiB/s  | 10 ms  | 10s    |
-| Blob Storage GET, n conn (offsets)  | 80 ms       | NW limit   |        |        |
-| Blob Storage LIST                   | 100 ms      |            |        |        |
-| Blob Storage PUT, 1 conn (128KiB)   | 200 ms      | 100 MiB/s  | 10 ms  | 10s    |
-| Blob Storage PUT, n conn (multipart)| 200 ms      | NW limit   | 10 ms  | 10s    |
+| Blob Storage GET, if-not-match 304  | 10 ms       |            |        |        |
+| Blob Storage GET, 1 conn (128KiB)   | 30 ms       | 100 MiB/s  | 10 ms  | 10s    |
+| Blob Storage GET, n conn (offsets)  | 30 ms       | NW limit   |        |        |
+| Blob Storage LIST                   | 15 ms       |            |        |        |
+| Blob Storage PUT, 1 conn (128KiB)   | 30 ms       | 100 MiB/s  | 10 ms  | 10s    |
+| Blob Storage PUT, n conn (multipart)| 30 ms       | NW limit   | 10 ms  | 10s    |
 | Network between regions `[6]`       | [Varies][i] | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA Central <-> East         | 25 ms       | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA Central <-> West         | 40 ms       | 25 MiB/s   | 40 ms  | 40s    |
