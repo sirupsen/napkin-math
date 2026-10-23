@@ -1,7 +1,10 @@
 use crc32fast::Hasher as Crc32Hasher;
 use criterion::*;
+use std::hint::black_box;
+
+use super::MIB;
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use sha2::{Digest, Sha256};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
@@ -38,7 +41,7 @@ fn hash_group(c: &mut Criterion, name: &str, bytes: &[u8]) {
 
 fn hash_benchmark(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0xfeed_face);
-    let bytes: Vec<u8> = (0..n_mib_bytes!(1)).map(|_| rng.gen()).collect();
+    let bytes: Vec<u8> = (0..MIB).map(|_| rng.random()).collect();
 
     // The README rows are per 64-byte call, where per-call setup dominates.
     hash_group(c, "hash", &bytes[..64]);

@@ -1,6 +1,9 @@
 use criterion::*;
+use std::hint::black_box;
+
+use super::{GIB, MIB};
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 
 fn sort_benchmark(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0x1337);
@@ -13,14 +16,14 @@ fn sort_benchmark(c: &mut Criterion) {
     // what people extrapolate to, so measure that directly instead of assuming
     // sorting is linear.
     let sizes = [
-        ("u64/1 MiB", n_mib_bytes!(1) as usize),
-        ("u64/64 MiB", n_mib_bytes!(64) as usize),
-        ("u64/1 GiB", n_gib_bytes!(1) as usize),
+        ("u64/1 MiB", MIB),
+        ("u64/64 MiB", 64 * MIB),
+        ("u64/1 GiB", GIB),
     ];
 
     for (name, total_size) in sizes.iter() {
         let elements = total_size / std::mem::size_of::<u64>();
-        let input: Vec<u64> = (0..elements).map(|_| rng.gen()).collect();
+        let input: Vec<u64> = (0..elements).map(|_| rng.random()).collect();
 
         group.throughput(Throughput::Bytes(*total_size as u64));
         group.bench_function(*name, |b| {

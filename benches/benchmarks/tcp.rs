@@ -1,9 +1,12 @@
 use criterion::*;
+use std::hint::black_box;
+
+use super::KIB;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 
-const BUF_SIZE: usize = n_kib_bytes!(32) as usize;
+const BUF_SIZE: usize = 32 * KIB;
 
 // Round trip of a 32 KiB message through an echo server on loopback. This is the README's
 // "TCP Echo, loopback (32 KiB)" row: kernel TCP stack and syscall cost, no NIC involved.

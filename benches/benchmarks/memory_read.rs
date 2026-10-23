@@ -1,4 +1,7 @@
 use criterion::*;
+use std::hint::black_box;
+
+use super::GIB;
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::{asm, x86_64::*};
@@ -211,7 +214,7 @@ unsafe fn memory_read_sequential_single_thread_non_vectorized_x86(vec: &[Int]) -
 
 fn memory_read_benchmark(c: &mut Criterion) {
     let bytes_per_iteration = 8usize;
-    let size_bytes = n_gib_bytes!(1) as usize;
+    let size_bytes = GIB;
     let size_in_elements = size_bytes / bytes_per_iteration;
     let vec: Vec<Int> = (0..size_in_elements).map(|i| i as Int).collect();
 

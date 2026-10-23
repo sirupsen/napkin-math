@@ -1,11 +1,8 @@
 mod benchmarks;
-#[macro_use]
-extern crate byte_unit;
-extern crate jemallocator;
 use criterion::criterion_main;
 
 #[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 criterion_main! {
     benchmarks::compression::benches,

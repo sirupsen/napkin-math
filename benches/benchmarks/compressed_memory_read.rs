@@ -2,9 +2,12 @@ use std::time::Duration;
 
 use bitpacking::{BitPacker, BitPacker8x};
 use criterion::*;
+use std::hint::black_box;
+
+use super::MIB;
 
 fn compressed_memory_read_benchmark(c: &mut Criterion) {
-    let size_bytes = n_mib_bytes!(1);
+    let size_bytes = MIB;
     let bytes_per_iteration = 4; // u32
     let size_in_elements = (size_bytes as u32 / bytes_per_iteration) as u32;
 

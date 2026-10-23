@@ -1,6 +1,7 @@
 use criterion::*;
+
+use super::GIB;
 use rand::seq::SliceRandom;
-use rand::thread_rng;
 use std::mem::forget;
 use std::ptr;
 use std::time::Instant;
@@ -14,19 +15,19 @@ struct RandomMemoryTest {
 }
 
 fn random_memory_write_setup() -> RandomMemoryTest {
-    let size_in_elements = (n_gb_bytes!(1) as u64 / 64) as usize;
+    let size_in_elements = (GIB as u64 / 64) as usize;
 
     let mut vec = Vec::new();
     vec.resize(size_in_elements, [1, 2, 3, 4, 5, 6, 7, 8]);
 
     let mut order: Vec<usize> = (0..size_in_elements).collect();
-    order.shuffle(&mut thread_rng());
+    order.shuffle(&mut rand::rng());
 
     RandomMemoryTest { vec, order, i: 0 }
 }
 
 fn random_memory_read_setup() -> RandomMemoryTest {
-    let size_in_elements = (n_gb_bytes!(1) as u64 / 64) as usize;
+    let size_in_elements = (GIB as u64 / 64) as usize;
 
     let mut vec = Vec::new();
     vec.resize(size_in_elements, [1, 2, 3, 4, 5, 6, 7, 8]);
@@ -48,7 +49,7 @@ fn random_memory_read_setup() -> RandomMemoryTest {
             libc::MADV_SEQUENTIAL,
         );
     }
-    order.shuffle(&mut thread_rng());
+    order.shuffle(&mut rand::rng());
 
     RandomMemoryTest { vec, order, i: 0 }
 }
@@ -64,7 +65,7 @@ fn legacy_black_box<T>(dummy: T) -> T {
 fn random_memory_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("random_memory");
     group.sample_size(10);
-    group.throughput(Throughput::Bytes(n_gb_bytes!(1) as u64));
+    group.throughput(Throughput::Bytes(GIB as u64));
 
     {
         group.bench_function("read", |b| {

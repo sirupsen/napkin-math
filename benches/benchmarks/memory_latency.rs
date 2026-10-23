@@ -1,6 +1,9 @@
 use criterion::*;
+use std::hint::black_box;
+
+use super::{GIB, KIB, MIB};
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use std::time::Instant;
 
 // One 64-byte cache line per node. Only the first word is used as the "next"
@@ -38,7 +41,7 @@ impl PointerChase {
         let mut order: Vec<usize> = (0..len).collect();
         let mut rng = StdRng::seed_from_u64(0xc0ffee);
         for i in (1..len).rev() {
-            let j = rng.gen_range(0, i);
+            let j = rng.random_range(0..i);
             order.swap(i, j);
         }
         for i in 0..len {
@@ -85,11 +88,11 @@ fn memory_latency_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_latency");
 
     let shapes = [
-        ("16 KiB", n_kib_bytes!(16) as usize, true),
-        ("256 KiB", n_kib_bytes!(256) as usize, true),
-        ("8 MiB", n_mib_bytes!(8) as usize, true),
-        ("1 GiB, huge pages", n_gib_bytes!(1) as usize, true),
-        ("1 GiB, 4 KiB pages", n_gib_bytes!(1) as usize, false),
+        ("16 KiB", 16 * KIB, true),
+        ("256 KiB", 256 * KIB, true),
+        ("8 MiB", 8 * MIB, true),
+        ("1 GiB, huge pages", GIB, true),
+        ("1 GiB, 4 KiB pages", GIB, false),
     ];
 
     for (name, bytes, huge_pages) in shapes.iter() {

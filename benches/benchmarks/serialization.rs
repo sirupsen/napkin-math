@@ -1,4 +1,5 @@
 use criterion::*;
+use std::hint::black_box;
 use prost::Message;
 
 use super::workload::{serialization_corpus, BenchPayload};

@@ -2,42 +2,34 @@
 name = "napkin-math"
 version = "0.1.0"
 authors = ["Simon Eskildsen <sirup@sirupsen.com>"]
-edition = "2018"
+edition = "2021"
 
 [profile.release]
 debug = true
 overflow-checks = false
 
+# Used by src/bin/compression_corpus.rs.
 [dependencies]
-byte-unit = "3.0"
-rand = { features = ["small_rng"], version = "0.7.3" }
-num-format = "0.4.0"
-failure = "*"
-page_size = "*"
-redis = "*"
-clap = "*"
-jemallocator = "*"
-libc = "*"
-regex = "*"
-sha2 = "0.10.7"
-crc32fast = "*"
-xxhash-rust = { version = "0.8", features = ["xxh3"] }
+brotli = "9"
+flate2 = "1"
+lz4_flex = "0.14"
+snap = "1"
+zstd = "0.14"
+
+[dev-dependencies]
+bitpacking = "0.9"
 blake3 = "1"
-mysql = "*"
-criterion = "*"
-core_affinity = "*"
-bitpacking = "0.5"
-prost = "0.13"
+core_affinity = "0.8"
+crc32fast = "1"
+criterion = "0.8"
+libc = "0.2"
+prost = "0.14"
+rand = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-zstd = "0.13"
-lz4_flex = "0.11"
-snap = "1"
-flate2 = "1"
-brotli = "7"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-rio = "0.9.3"
+sha2 = "0.11"
+tikv-jemallocator = "0.7"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
 
 [[bench]]
 name = "napkin_math"
