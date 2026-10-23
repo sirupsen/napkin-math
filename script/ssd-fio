@@ -6,7 +6,8 @@
 #
 # A file target measures what applications see, including the file system's fsync cost. A raw
 # device skips the file system. NAPKIN_FIO_SIZE (default 32G) sets the test size; NAPKIN_FIO_RUNTIME
-# (default 15) the seconds per test.
+# (default 15) the seconds per test. For an HDD, use the whole disk so random reads seek across
+# all of it, and NAPKIN_FIO_PRECONDITION=0.
 set -euo pipefail
 
 target="${1:?usage: $0 <file-on-mounted-fs | /dev/raw-device>}"
@@ -63,7 +64,11 @@ direct=(--direct=1 --ioengine=io_uring)
 timed=(--runtime="${runtime}" --time_based)
 
 # Write the whole range first: reads of never-written blocks can be served without touching flash.
-run precondition "${direct[@]}" --rw=write --bs=1M --iodepth=32 >/dev/null
+# NAPKIN_FIO_PRECONDITION=0 skips it, e.g. for an HDD, which has no such shortcut and would take
+# hours to fill.
+if [[ "${NAPKIN_FIO_PRECONDITION:-1}" != "0" ]]; then
+  run precondition "${direct[@]}" --rw=write --bs=1M --iodepth=32 >/dev/null
+fi
 run seq_read_1m_qd32 "${direct[@]}" "${timed[@]}" --rw=read --bs=1M --iodepth=32
 run seq_read_8k_buffered --direct=0 --ioengine=psync --invalidate=1 "${timed[@]}" --rw=read --bs=8k
 run rand_read_8k_qd1 "${direct[@]}" "${timed[@]}" --rw=randread --bs=8k --iodepth=1

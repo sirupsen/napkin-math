@@ -33,37 +33,45 @@ intentional for ease of calculations.
 the state-of-the-art. I am continuously updating these numbers as I learn more
 to improve accuracy and as hardware improves.
 
-| Operation                                 | Latency    | Throughput | 1 GiB  |
-| ----------------------------------------- | ---------- | ---------- | ------ |
-| Sequential memory read, all cores         |            | 200 GiB/s  | 5 ms   |
-| Sequential memory read, 1 thread          |            | 20 GiB/s   | 50 ms  |
-| Hashing, not crypto-safe (64 bytes)       | 10 ns      | 5 GiB/s    | 200 ms |
-| Serialization, fast `[8]` `[9]` †         |            | 1 GiB/s    | 1 s    |
-| Decompression `[11]`                      |            | 1 GiB/s    | 1 s    |
-| Random memory read (64 bytes)             | 100 ns     | 3 GiB/s    | 300 ms |
-| System call                               | 100 ns     |            |        |
-| Hashing, crypto-safe (64 bytes)           | 100 ns     | 1 GiB/s    | 1 s    |
-| Compression `[11]`                        |            | 500 MiB/s  | 2 s    |
-| Sorting (64-bit integers)                 |            | 500 MiB/s  | 3 s    |
-| Serialization, slow `[8]` `[9]` †         |            | 100 MiB/s  | 10 s   |
-| Context switch `[1]` `[2]`                | 1 μs       |            |        |
-| Cross-core thread wake-up                 | 2 μs       |            |        |
-| Sequential SSD read (8 KiB)               | 2 μs       | 4 GiB/s    | 250 ms |
-| Sequential SSD write, no fsync (8 KiB)    | 4 μs       | 2 GiB/s    | 500 ms |
-| Proxy: Envoy, HAProxy, Nginx, ProxySQL    | 50 μs      |            |        |
-| Network, same zone                        | 100 μs     | 3 GiB/s    | 300 ms |
-| Random SSD read (8 KiB)                   | 100 μs     | 2 GiB/s    | 500 ms |
-| Sequential SSD write, fsync (8 KiB)       | 300 μs     | 30 MiB/s   | 30 s   |
-| Network, cross-zone                       | 500 μs     | 2 GiB/s    | 500 ms |
-| Query: MySQL, Memcached, Redis, ...       | 500 μs     |            |        |
-| HDD read (8 KiB) `[7]`                    | 10 ms      | 250 MiB/s  | 4 s    |
-| Network, same continent `[6]`             | 25-60 ms   | 50 MiB/s   | 20 s   |
-| Blob storage GET, per connection          | 80 ms      | 100 MiB/s  | 10 s   |
-| Network, cross-Atlantic                   | 80-100 ms  | 25 MiB/s   | 40 s   |
-| Blob storage LIST (1000 keys)             | 100 ms     |            |        |
-| Network, cross-Pacific                    | 160-180 ms | 25 MiB/s   | 40 s   |
-| Blob storage PUT, per connection          | 200 ms     | 100 MiB/s  | 10 s   |
+| Operation                                        | Latency    | Throughput | 1 GiB  |
+| ------------------------------------------------ | ---------- | ---------- | ------ |
+| CPU Hash, not crypto-safe (64 bytes)             | 10 ns      | 5 GiB/s    | 200 ms |
+| CPU Hash, crypto-safe (64 bytes)                 | 100 ns     | 1 GiB/s    | 1 s    |
+| CPU System Call                                  | 100 ns     |            |        |
+| CPU Context Switch `[1]` `[2]`                   | 1 μs       |            |        |
+| CPU Serialize, fast `[8]` `[9]` †                |            | 1 GiB/s    | 1 s    |
+| CPU Serialize, slow `[8]` `[9]` †                |            | 100 MiB/s  | 10 s   |
+| CPU Compress `[11]`                              |            | 500 MiB/s  | 2 s    |
+| CPU Decompress `[11]`                            |            | 1 GiB/s    | 1 s    |
+| CPU Sort (64-bit integers)                       |            | 500 MiB/s  | 3 s    |
+| Memory Sequential Read, 1 thread                 |            | 20 GiB/s   | 50 ms  |
+| Memory Sequential Read, all cores                |            | 200 GiB/s  | 5 ms   |
+| Memory Random Read (64 bytes)                    | 100 ns     | 3 GiB/s    | 300 ms |
+| SSD Sequential Read                              |            | 4 GiB/s    | 250 ms |
+| SSD Sequential Write                             |            | 2 GiB/s    | 500 ms |
+| SSD Random Read (8 KiB)                          | 100 μs     | 2 GiB/s    | 500 ms |
+| SSD Sequential Write + fsync (8 KiB)             | 300 μs     | 30 MiB/s   | 30 s   |
+| Network Disk Sequential Read                     |            | 1 GiB/s    | 1 s    |
+| Network Disk Sequential Write                    |            | 1 GiB/s    | 1 s    |
+| Network Disk Random Read (8 KiB)                 | 500 μs     | 250 MiB/s  | 4 s    |
+| Network Disk Sequential Write + fsync (8 KiB)    | 1 ms       | 8 MiB/s    | 2 min  |
+| HDD Sequential Read                              |            | 200 MiB/s  | 5 s    |
+| HDD Sequential Write                             |            | 200 MiB/s  | 5 s    |
+| HDD Random Read (8 KiB) `[7]`                    | 10 ms      | 2 MiB/s    | 10 min |
+| HDD Sequential Write + fsync (8 KiB)             | 1 ms       | 8 MiB/s    | 2 min  |
+| Network Same-Zone                                | 100 μs     | 3 GiB/s    | 300 ms |
+| Network Cross-Zone                               | 500 μs     | 2 GiB/s    | 500 ms |
+| Network Same-Continent `[6]`                     | 25-60 ms   | 50 MiB/s   | 20 s   |
+| Network Cross-Atlantic                           | 80-100 ms  | 25 MiB/s   | 40 s   |
+| Network Cross-Pacific                            | 160-180 ms | 25 MiB/s   | 40 s   |
+| Proxy Request (Envoy, HAProxy, Nginx, ProxySQL)  | 50 μs      |            |        |
+| Database Query (MySQL, Memcached, Redis, ...)    | 500 μs     |            |        |
+| Blob Storage GET, 1 connection                   | 80 ms      | 100 MiB/s  | 10 s   |
+| Blob Storage PUT, 1 connection                   | 200 ms     | 100 MiB/s  | 10 s   |
+| Blob Storage LIST (1000 keys)                    | 100 ms     |            |        |
 
+Throughput is the most you can get, e.g. many requests in flight for random
+reads. Network Disk is EBS gp3 / GCP Hyperdisk Balanced provisioned to the max.
 Blob storage and network throughput scale with connections up to the VM's
 network limit. Region-to-region latencies: [cloudping](https://www.cloudping.co/).
 

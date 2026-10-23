@@ -24,13 +24,13 @@ debug build.
 
 | Group | Measures | README row |
 | ----- | -------- | ---------- |
-| `memory_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD | Sequential memory read |
-| `memory_latency` | Dependent pointer chase over 16 KiB to 1 GiB, with and without huge pages | Random memory read, latency |
-| `random_memory` | One pass of independent random 64 B reads/writes over 1 GiB | Random memory read, throughput |
-| `hash`, `hash_1mib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and 1 MiB buffers | Hashing rows |
-| `syscall` | `getppid` (null syscall), `getpid`, `clock_gettime`, `getrusage`, `fstat` | System call |
-| `context_switch` | futex ping-pong between two threads, same core and cross core (Linux) | Context switch, cross-core thread wake-up |
-| `sort` | `sort_unstable` on random `u64`, 1 MiB to 1 GiB | Sorting |
+| `memory_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD | Memory Sequential Read |
+| `memory_latency` | Dependent pointer chase over 16 KiB to 1 GiB, with and without huge pages | Memory Random Read, latency |
+| `random_memory` | One pass of independent random 64 B reads/writes over 1 GiB | Memory Random Read, throughput |
+| `hash`, `hash_1mib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and 1 MiB buffers | CPU Hash rows |
+| `syscall` | `getppid` (null syscall), `getpid`, `clock_gettime`, `getrusage`, `fstat` | CPU System Call |
+| `context_switch` | futex ping-pong between two threads, same core and cross core (Linux) | CPU Context Switch |
+| `sort` | `sort_unstable` on random `u64`, 1 MiB to 1 GiB | CPU Sort |
 | `tcp` | 32 KiB echo over loopback | none (loopback only) |
 | `serialization`, `compression` | prost/serde_json and zstd -3 on a synthetic event corpus | none (workload-specific) |
 | `bitpacking` | `BitPacker8x` integer unpack | none (not the `[11]` rows) |
@@ -40,12 +40,20 @@ single-thread row and one threaded row for memorability. `random_memory` issues
 independent loads, so the CPU overlaps misses; that is throughput, which is why
 the latency cell comes from `memory_latency` instead.
 
-## SSD rows
+## SSD, Network Disk and HDD rows
 
 ```bash
 script/ssd-fio /mnt/nvme/fio.dat                                # a file on a mounted file system
 NAPKIN_FIO_DESTROY_DEVICE=/dev/nvme1n1 script/ssd-fio /dev/nvme1n1   # an unused raw device
 ```
+
+The README uses the max-throughput results (1 MiB QD32 for sequential, 8 KiB
+QD32x4 for random) and QD1 latency for random reads. For an HDD, test the whole
+disk with `NAPKIN_FIO_SIZE=1800G NAPKIN_FIO_PRECONDITION=0` so random reads seek
+across all of it. The October 2026 rows came from local NVMe on GCP C4 and AWS
+m8id/m8gd, EBS gp3 at 16k IOPS / 1000 MiB/s on an m8i.4xlarge, GCP Hyperdisk
+Balanced at 80k IOPS / 1600 MiB/s on a c4-standard-16, and the instance-store
+HDDs of an AWS d3.xlarge.
 
 `script/ssd-fio` runs `fio` for sequential 1 MiB and buffered 8 KiB reads,
 random 8 KiB reads at QD1 and QD32, sequential writes, buffered 8 KiB writes and
@@ -53,7 +61,7 @@ random 8 KiB reads at QD1 and QD32, sequential writes, buffered 8 KiB writes and
 never-written blocks can skip the flash), checks that the file system the file
 actually lands on has 2x the test size free, and refuses to write to a mounted
 or formatted device. A file target includes the file system's fsync cost
-(the README fsync row is ext4); a raw device does not.
+(the README fsync rows are ext4); a raw device does not.
 
 These rows used to come from a Rust harness in `src/main.rs`, whose sequential
 read benchmark reread the same 1 GiB file from page cache after the first pass.
