@@ -24,14 +24,14 @@ debug build.
 
 | Group | Measures | README row |
 | ----- | -------- | ---------- |
-| `memory_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD | Sequential Memory R/W |
-| `memory_latency` | Dependent pointer chase over 16 KiB to 1 GiB, with and without huge pages | Random Memory latency |
-| `random_memory` | One pass of independent random 64 B reads/writes over 1 GiB | Random Memory throughput |
+| `memory_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD | Sequential memory read |
+| `memory_latency` | Dependent pointer chase over 16 KiB to 1 GiB, with and without huge pages | Random memory read, latency |
+| `random_memory` | One pass of independent random 64 B reads/writes over 1 GiB | Random memory read, throughput |
 | `hash`, `hash_1mib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and 1 MiB buffers | Hashing rows |
-| `syscall` | `getppid` (null syscall), `getpid`, `clock_gettime`, `getrusage`, `fstat` | System Call |
-| `context_switch` | futex ping-pong between two threads, same core and cross core (Linux) | Context Switch rows |
+| `syscall` | `getppid` (null syscall), `getpid`, `clock_gettime`, `getrusage`, `fstat` | System call |
+| `context_switch` | futex ping-pong between two threads, same core and cross core (Linux) | Context switch, cross-core thread wake-up |
 | `sort` | `sort_unstable` on random `u64`, 1 MiB to 1 GiB | Sorting |
-| `tcp` | 32 KiB echo over loopback | TCP Echo, loopback |
+| `tcp` | 32 KiB echo over loopback | none (loopback only) |
 | `serialization`, `compression` | prost/serde_json and zstd -3 on a synthetic event corpus | none (workload-specific) |
 | `bitpacking` | `BitPacker8x` integer unpack | none (not the `[11]` rows) |
 
@@ -53,7 +53,7 @@ random 8 KiB reads at QD1 and QD32, sequential writes, buffered 8 KiB writes and
 never-written blocks can skip the flash), checks that the file system the file
 actually lands on has 2x the test size free, and refuses to write to a mounted
 or formatted device. A file target includes the file system's fsync cost
-(the README `+fsync` row is ext4); a raw device does not.
+(the README fsync row is ext4); a raw device does not.
 
 These rows used to come from a Rust harness in `src/main.rs`, whose sequential
 read benchmark reread the same 1 GiB file from page cache after the first pass.
@@ -133,3 +133,37 @@ namespace. For aligned range-read latency,
 `128 x 1 GiB` object pool, and
 `./script/blob-random-range-latency-8m-multipart` seeded those objects via
 multipart upload with `8 MiB` parts to measure reads against part boundaries.
+
+## Further reading
+
+* ["How to get consistent results when benchmarking on
+  Linux?"](https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux#2-disable-hyper-threading).
+  Great compilation of various Kernel and CPU features to toggle for reliable
+  bench-marking, e.g. CPU affinity, disabling turbo boost, etc. It also has
+  resources on proper statistical methods for benchmarking.
+* [LLVM benchmarking tips](https://www.llvm.org/docs/Benchmarking.html). Similar
+  to the above in terms of dedicating CPUs, disabling address space
+  randomization, etc.
+* [Top-Down performance analysis
+  methodology](https://easyperf.net/blog/2019/02/09/Top-Down-performance-analysis-methodology).
+  Useful post about using `toplev` to find the bottlenecks. This is particularly
+  useful for the benchmarking suite we have here, to ensure the programs are
+  correctly written (I have not taken them through this yet, but plan to).
+* [Godbolt's compiler explorer](https://gcc.godbolt.org/#). Fantastic resource
+  for comparing assembly between Rust and e.g. C with Clang/GCC.
+* [cargo-show-asm](https://github.com/pacak/cargo-show-asm). Cargo extension to allow
+  disassembling functions. Unfortunately the support for closure is a bit
+  lacking, which requires some refactoring.
+* [Agner's Assembly
+  Guide](https://www.agner.org/optimize/optimizing_assembly.pdf). An excellent
+  resource on writing optimum assembly, which will be useful to inspect the
+  various functions for inefficiencies in our suite.
+* [Agner's Instruction
+  Tables](https://www.agner.org/optimize/instruction_tables.pdf). Thorough
+  resource on the expected throughput for various instructions which is helpful
+  to inspect the assembly.
+* [halobates.de](http://halobates.de/). Useful resource for low-level
+  performance by the author of `toplev`.
+* [io_uring](https://lwn.net/Articles/776703/). Best summary, it links to many
+  resources.
+* [Integer Compression Comparisons](https://github.com/powturbo/TurboPFor-Integer-Compression)
