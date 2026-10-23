@@ -2,17 +2,22 @@ use criterion::*;
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::{asm, x86_64::*};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
 use std::time::Duration;
 
 type Int = u64;
 
+// One pinned reader thread per core, parked on a barrier between runs. The threads are shut down
+// on drop: left running, they made every later group run in a ~100-thread process, which skews
+// anything that scales with thread count (e.g. getrusage(RUSAGE_SELF) went from ~0.2 to ~7 us).
 struct ThreadedMemoryReadBenchmark {
     start: Arc<Barrier>,
     end: Arc<Barrier>,
     total: Arc<AtomicU64>,
+    stop: Arc<AtomicBool>,
+    threads: Vec<thread::JoinHandle<()>>,
 }
 
 impl ThreadedMemoryReadBenchmark {
@@ -28,14 +33,17 @@ impl ThreadedMemoryReadBenchmark {
         let end = Arc::new(Barrier::new(num_cores + 1));
         let done_allocating = Arc::new(Barrier::new(num_cores + 1));
         let total = Arc::new(AtomicU64::new(0));
+        let stop = Arc::new(AtomicBool::new(false));
+        let mut threads = Vec::with_capacity(num_cores);
 
         for (index, core) in core_ids.iter().copied().enumerate() {
             let t_start = start.clone();
             let t_end = end.clone();
             let t_total = total.clone();
+            let t_stop = stop.clone();
             let t_done_allocating = done_allocating.clone();
 
-            thread::spawn(move || {
+            threads.push(thread::spawn(move || {
                 // Ensure each thread is scheduled on a different core to maximize memory bandwidth.
                 // Each core can typically only have ~10 outstanding requests to the L1 cache.
                 // https://news.ycombinator.com/item?id=16174813
@@ -55,15 +63,24 @@ impl ThreadedMemoryReadBenchmark {
                 t_done_allocating.wait();
                 loop {
                     t_start.wait();
+                    if t_stop.load(Ordering::Acquire) {
+                        return;
+                    }
                     t_total.fetch_add(f(&vec), Ordering::Relaxed);
                     t_end.wait();
                 }
-            });
+            }));
         }
 
         done_allocating.wait();
 
-        Self { start, end, total }
+        Self {
+            start,
+            end,
+            total,
+            stop,
+            threads,
+        }
     }
 
     fn run(&self) -> u64 {
@@ -71,6 +88,16 @@ impl ThreadedMemoryReadBenchmark {
         self.start.wait();
         self.end.wait();
         self.total.load(Ordering::Relaxed)
+    }
+}
+
+impl Drop for ThreadedMemoryReadBenchmark {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        self.start.wait();
+        for thread in self.threads.drain(..) {
+            thread.join().unwrap();
+        }
     }
 }
 

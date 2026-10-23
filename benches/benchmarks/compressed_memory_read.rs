@@ -15,17 +15,6 @@ fn compressed_memory_read_benchmark(c: &mut Criterion) {
         data[i as usize] = i;
     }
 
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    {
-        if is_x86_feature_detected!("sse3") {
-            println!("SSE3 detected");
-        }
-
-        if is_x86_feature_detected!("avx2") {
-            println!("AVX2 detected");
-        }
-    }
-
     let block_len = BitPacker8x::BLOCK_LEN;
     let vector = &data[0..block_len];
     let bitpacker = BitPacker8x::new();
@@ -37,32 +26,22 @@ fn compressed_memory_read_benchmark(c: &mut Criterion) {
         compressed_len = bitpacker.compress(vector, &mut compressed[i as usize], num_bits);
     }
 
-    // println!("vector length: {}", vector.len());
-    // println!("vector: {:?}", vector);
-    // println!("compressed: {:?}", compressed);
-    println!(
-        "compressed_len: {}, length of vec: {}, bits: {}",
-        compressed_len,
-        4 * block_len,
-        num_bits,
-    );
-    println!("block_length: {}", block_len);
-
-    let mut group = c.benchmark_group("compressed_memory_read");
+    // Named so that a `memory_read` filter doesn't also select this group.
+    let mut group = c.benchmark_group("bitpacking");
     let mut decompressed = vec![0; block_len];
     let mut i = 0;
     group.sample_size(10);
     group.warm_up_time(Duration::from_secs(10));
     group.measurement_time(Duration::from_secs(10));
     group.throughput(Throughput::Bytes(block_len as u64 * 4));
-    // group.throughput(Throughput::Elements(block_len as u64));
-    group.bench_function("bitpacker", |b| {
+    group.bench_function("unpack 8x", |b| {
         b.iter(|| {
             bitpacker.decompress(
                 &compressed[i][..compressed_len],
                 &mut decompressed,
                 num_bits,
             );
+            black_box(&mut decompressed);
             if i == 1_000_000 - 1 {
                 i = 0;
             } else {
@@ -72,23 +51,5 @@ fn compressed_memory_read_benchmark(c: &mut Criterion) {
     });
     group.finish()
 }
-
-// #[inline(never)]
-// #[no_mangle]
-// fn simon_do_stuff(
-//     bitpacker: &BitPacker8x,
-//     compressed: &Vec<u8>,
-//     compressed_len: usize,
-//     decompressed: &mut Vec<Vec<u32>>,
-//     offset: &mut u8,
-//     num_bits: u8,
-// ) {
-//     bitpacker.decompress(
-//         &compressed[..compressed_len],
-//         &mut decompressed[*offset as usize],
-//         num_bits,
-//     );
-//     *offset = offset.wrapping_add(1);
-// }
 
 criterion_group!(benches, compressed_memory_read_benchmark);

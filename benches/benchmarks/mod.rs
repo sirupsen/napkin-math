@@ -8,4 +8,5 @@ pub mod memory_read;
 pub mod serialization;
 pub mod sort;
 pub mod syscall;
+pub mod tcp;
 pub mod workload;

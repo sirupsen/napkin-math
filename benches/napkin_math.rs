@@ -17,5 +17,6 @@ criterion_main! {
     benchmarks::serialization::benches,
     benchmarks::sort::benches,
     benchmarks::syscall::benches,
+    benchmarks::tcp::benches,
     benchmarks::compressed_memory_read::benches,
 }
