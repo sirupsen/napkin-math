@@ -1,24 +1,53 @@
-#!/usr/bin/env ruby
-
-# Disable hyperthreading by listing the sibling CPUs and disabling the 'higher'
-# ones.
+#!/usr/bin/env bash
+# Take SMT (hyperthread) siblings offline or bring them back.
+#
+#   script/toggle-hyperthreading -d                # keep the first CPU of each core, offline the rest
+#   script/toggle-hyperthreading -e                # bring every offline CPU back
+#   script/toggle-hyperthreading --siblings 0,24   # print the CPUs -d would offline: "24"
+#
+# thread_siblings_list is "0,24" on some kernels and "0-1" on others; both are handled.
 # https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux
+set -euo pipefail
 
-if ['-e', '--enable'].include?(ARGV[0].strip)
-  Dir['/sys/devices/system/cpu/cpu*/online']
-    .select { |e| File.read(e).strip == '0' }
-    .each { |e| File.open(e, 'w') { |f| f.write('1') } }
-elsif ['-d', '--disable'].include?(ARGV[0].strip)
-  cpu_sibs = Dir['/sys/devices/system/cpu/cpu*/topology/thread_siblings_list'].map do |path|
-    File.read(path).strip.split(',')
-  end.uniq
+# Expand a CPU list like "0-1,24" and print every CPU except the first.
+extra_siblings() {
+  local cpus=() part cpu
+  IFS=',' read -ra parts <<<"$1"
+  for part in "${parts[@]}"; do
+    if [[ "${part}" == *-* ]]; then
+      for ((cpu = ${part%-*}; cpu <= ${part#*-}; cpu++)); do cpus+=("${cpu}"); done
+    else
+      cpus+=("${part}")
+    fi
+  done
+  if ((${#cpus[@]} > 1)); then
+    printf '%s\n' "${cpus[@]:1}"
+  fi
+}
 
-  cpu_sibs.select { |cpus| cpus.size > 1 }.each do |(_smaller, bigger)|
-    puts "/sys/devices/system/cpu/cpu#{bigger}/online"
-    File.open("/sys/devices/system/cpu/cpu#{bigger}/online", 'w') { |f| f.write('0') }
-  end
-else
-  raise 'Need to pass --enable/-e or --disable/-d'
-end
-
-system('lscpu | grep -i "cpu(s)"')
+case "${1:-}" in
+  --siblings)
+    extra_siblings "${2:?usage: $0 --siblings <cpu-list>}"
+    ;;
+  -d | --disable)
+    for siblings in /sys/devices/system/cpu/cpu*/topology/thread_siblings_list; do
+      [[ -e "${siblings}" ]] || continue
+      for cpu in $(extra_siblings "$(cat "${siblings}")"); do
+        echo 0 | sudo tee "/sys/devices/system/cpu/cpu${cpu}/online" >/dev/null
+      done
+    done
+    lscpu | grep -iE "^cpu\(s\)|on-line"
+    ;;
+  -e | --enable)
+    for online in /sys/devices/system/cpu/cpu*/online; do
+      if [[ "$(cat "${online}")" == 0 ]]; then
+        echo 1 | sudo tee "${online}" >/dev/null
+      fi
+    done
+    lscpu | grep -iE "^cpu\(s\)|on-line"
+    ;;
+  *)
+    echo "usage: $0 -d|--disable | -e|--enable | --siblings <cpu-list>" >&2
+    exit 1
+    ;;
+esac
