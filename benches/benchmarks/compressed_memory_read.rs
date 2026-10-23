@@ -1,6 +1,6 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use bitpacking::{BitPacker, BitPacker1x, BitPacker4x, BitPacker8x};
+use bitpacking::{BitPacker, BitPacker8x};
 use criterion::*;
 
 fn compressed_memory_read_benchmark(c: &mut Criterion) {
@@ -15,12 +15,15 @@ fn compressed_memory_read_benchmark(c: &mut Criterion) {
         data[i as usize] = i;
     }
 
-    if is_x86_feature_detected!("sse3") {
-        println!("SSE3 detected");
-    }
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("sse3") {
+            println!("SSE3 detected");
+        }
 
-    if is_x86_feature_detected!("avx2") {
-        println!("AVX2 detected");
+        if is_x86_feature_detected!("avx2") {
+            println!("AVX2 detected");
+        }
     }
 
     let block_len = BitPacker8x::BLOCK_LEN;

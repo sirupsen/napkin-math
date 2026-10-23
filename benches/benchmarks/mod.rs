@@ -1,2 +1,11 @@
 pub mod compressed_memory_read;
+pub mod compression;
+pub mod context_switch;
+pub mod hash;
+pub mod memory_latency;
+pub mod memory_random;
 pub mod memory_read;
+pub mod serialization;
+pub mod sort;
+pub mod syscall;
+pub mod workload;
