@@ -25,7 +25,7 @@ debug build.
 | Group | Measures | README row |
 | ----- | -------- | ---------- |
 | `memory_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD | Sequential Memory R/W |
-| `memory_latency` | Dependent pointer chase over 16 KiB to 1 GiB, with and without huge pages | Random Memory latency (`§`) |
+| `memory_latency` | Dependent pointer chase over 16 KiB to 1 GiB, with and without huge pages | Random Memory latency |
 | `random_memory` | One pass of independent random 64 B reads/writes over 1 GiB | Random Memory throughput |
 | `hash`, `hash_1mib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and 1 MiB buffers | Hashing rows |
 | `syscall` | `getppid` (null syscall), `getpid`, `clock_gettime`, `getrusage`, `fstat` | System Call, `stat()` |
@@ -112,8 +112,9 @@ The old `500 MiB/s` single-stream blob GET row did not reproduce on either
 provider, so it was revised down to a conservative generic `100 MiB/s`.
 
 The blob latency cells came from a small-object latency probe
-(`src/bin/s3_latency.rs`, March 10-20, 2026); see the README's `※` footnote for
-the percentile and backends. `./script/blob-latency
+(`src/bin/s3_latency.rs`, March 10-20, 2026). They are roughly p99 for
+same-region S3 Standard and GCS (XML API) on warm connections; p50 is ~1.5-3x
+lower. `./script/blob-latency
 <s3|s3x|gcs|r2|tigris|azure>` swept `get`, `put`, `if_none_match` and
 `put_if_match` across an `8 KiB .. 8 MiB` size ladder, except `if_none_match`,
 which defaulted to a single `128 KiB` row because its latency was effectively

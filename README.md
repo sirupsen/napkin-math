@@ -21,19 +21,10 @@ newsletter.
 
 ## Numbers
 
-Below are numbers rounded for memorization, not faux precision.
-The CPU, memory, system call, context switch, hashing, sorting and compression
-rows were re-measured on October 23, 2026 on current-generation 48 vCPU VMs: a
-GCP `c4-standard-48-lssd` (Intel Xeon 6985P-C, Granite Rapids), an AWS
-`m8id.12xlarge` (Intel Xeon 6975P-C, Granite Rapids) and an AWS `m8gd.12xlarge`
-(Graviton4, ARM Neoverse-V2), all with ~180-192 GB RAM. The same-zone and
-cross-zone network rows were measured between GCP `c4-standard-48` VMs and
-between AWS `m8id`/`m8gd` VMs with `netperf` and `iperf3`. The inter-region
-rows were measured from GCP C4 VMs to `n2-standard-8` VMs in other regions;
-round-trip time and single-flow TCP throughput there are set by distance and
-window size, not the VM. The SSD rows were measured with `fio` on the local
-NVMe of the GCP C4 and AWS `m8id`/`m8gd` VMs. The blob storage rows come from
-the March 2026 multi-cloud runs described below.
+Below are numbers rounded for memorization, not faux precision. Last measured
+in October 2026 on GCP `c4-standard-48-lssd` and AWS `m8id.12xlarge` /
+`m8gd.12xlarge` (Graviton4). See [BENCHMARKING.md](BENCHMARKING.md) to run them
+yourself.
 
 **Note 1:** Some throughput and latency numbers don't line up, this is
 intentional for ease of calculations.
@@ -42,21 +33,16 @@ intentional for ease of calculations.
 the state-of-the-art. I am continuously updating these numbers as I learn more
 to improve accuracy and as hardware improves.
 
-**Note 3:** The 1 MiB / 1 GiB columns are size ÷ throughput only. For
-request-based rows (blob storage, cross-region) add the latency: a single 1 MiB
-blob GET takes ~150 ms, and a cold 1 MiB cross-region transfer takes several
-round trips.
-
 | Operation                           | Latency     | Throughput | 1 MiB  | 1 GiB  |
 | ----------------------------------- | -------     | ---------- | ------ | ------ |
 | Sequential Memory R/W (64 bytes)    | 3 ns        |            |        |        |
 | ├ Single Thread                     |             | 20 GiB/s   | 50 μs  | 50 ms  |
 | ├ Threaded                          |             | 200 GiB/s  | 5 μs   | 5 ms   |
-| Network Same-Zone ¶                 | 100 μs      | 3 GiB/s    | 300 μs | 300 ms |
+| Network Same-Zone                   | 100 μs      | 3 GiB/s    | 300 μs | 300 ms |
 | ├ Inside VPC                        | 100 μs      | 3 GiB/s    | 300 μs | 300 ms |
 | ├ Outside VPC                       |             | 1 GiB/s    | 1 ms   | 1s     |
 | Hashing, not crypto-safe (64 bytes) | 10 ns       | 5 GiB/s    | 200 μs | 200 ms |
-| Random Memory R/W (64 bytes) §      | 100 ns      | 3 GiB/s    | 300 μs | 300 ms |
+| Random Memory R/W (64 bytes)        | 100 ns      | 3 GiB/s    | 300 μs | 300 ms |
 | Fast Serialization `[8]` `[9]` †    | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | Fast Deserialization `[8]` `[9]` †  | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | System Call                         | 100 ns      | N/A        | N/A    | N/A    |
@@ -69,8 +55,8 @@ round trips.
 | TCP Echo, loopback (32 KiB)         | 50 μs       | 500 MiB/s  | 2 ms   | 2s     |
 | Random SSD Read, QD1 (8 KiB)        | 100 μs      | 70 MiB/s   | 15 ms  | 15s    |
 | ├ Parallel, QD32+ (1 NVMe)          |             | 2 GiB/s    | 500 μs | 500 ms |
-| Decompression `[11]` ◊              | N/A         | 1 GiB/s    | 1 ms   | 1s     |
-| Compression, fast `[11]` ◊          | N/A         | 500 MiB/s  | 2 ms   | 2s     |
+| Decompression `[11]`                | N/A         | 1 GiB/s    | 1 ms   | 1s     |
+| Compression, fast `[11]`            | N/A         | 500 MiB/s  | 2 ms   | 2s     |
 | Sorting (64-bit integers)           | N/A         | 500 MiB/s  | 2 ms   | 3s     |
 | Proxy: Envoy/ProxySQL/Nginx/HAProxy | 50 μs       | ?          | ?      | ?      |
 | Network cross-zone, same region     | 500 μs      | 2 GiB/s    | 500 μs | 500 ms |
@@ -81,13 +67,13 @@ round trips.
 | Deserialization `[8]` `[9]` †       | N/A         | 100 MiB/s  | 10 ms  | 10s    |
 | Sequential HDD Read (8 KiB) `[7]`   | 10 ms       | 250 MiB/s  | 4 ms   | 4s     |
 | Random HDD Read (8 KiB) `[7]`       | 10 ms       | 0.7 MiB/s  | 2 s    | 30 min |
-| Blob Storage GET, If-None-Match 304 ※ | 30 ms     |            |        |        |
+| Blob Storage GET, If-None-Match 304 | 30 ms       |            |        |        |
 | Blob Storage GET, 1 conn (128KiB)   | 80 ms       | 100 MiB/s  | 10 ms  | 10s    |
 | Blob Storage GET, n conn (offsets)  | 80 ms       | NW limit   |        |        |
 | Blob Storage LIST (1000 keys)       | 100 ms      |            |        |        |
 | Blob Storage PUT, 1 conn (128KiB)   | 200 ms      | 100 MiB/s  | 10 ms  | 10s    |
 | Blob Storage PUT, n conn (multipart)| 200 ms      | NW limit   |        |        |
-| Network between regions, 1 flow ♦   | [Varies][i] | 25 MiB/s   | 40 ms  | 40s    |
+| Network between regions `[6]`       | [Varies][i] | 25 MiB/s   | 40 ms  | 40s    |
 | Network NA Central <-> East         | 25 ms       | 100 MiB/s  | 10 ms  | 10s    |
 | Network NA Central <-> West         | 40 ms       | 50 MiB/s   | 20 ms  | 20s    |
 | Network NA East <-> West            | 60 ms       | 50 MiB/s   | 20 ms  | 20s    |
@@ -96,90 +82,18 @@ round trips.
 | Network NA West <-> Singapore       | 180 ms      | 25 MiB/s   | 40 ms  | 40s    |
 | Network EU West <-> Singapore       | 160 ms      | 25 MiB/s   | 40 ms  | 40s    |
 
-[i]: https://www.cloudping.co/ 
+[i]: https://www.cloudping.co/
 
-**†:** Slow (~100 MiB/s): Go `encoding/json`, Python/Ruby stdlib JSON,
-`nlohmann::json`, reflection-heavy and ORM serializers. Fast (~1 GiB/s):
-`serde_json`, simdjson, protobuf/FlatBuffers in C++/Java/Rust. Decoding into
-owned heap objects is typically ~300 MiB/s even in fast languages (this repo
-measured `prost` decode at ~300 MiB/s and `serde_json` decode at ~350 MiB/s);
-zero-copy formats reach 1 GiB/s and more. Serialization performance depends
-enormously on the data and the implementation.
-
-**§:** 100 ns is one dependent DRAM miss, e.g. a pointer chase, B-tree hop or
-hash-chain walk (measured with huge pages at 123 ns on GCP C4, 136 ns on AWS
-`m8id` and 115 ns on Graviton4; with 4 KiB pages 160-180 ns on the Intel VMs
-and 138 ns on Graviton4). A single thread doing
-_independent_ random accesses overlaps ~5 misses, so a shuffled gather streams
-at ~3 GiB/s (~20 ns amortized per cache line); the throughput and 1 MiB / 1 GiB
-columns assume that independent case. For reference, the same pointer chase
-measured ~1.5 ns in L1, ~5 ns in L2 and ~30 ns in L3.
-
-**¶:** Per VM, many parallel flows, typical 16-48 vCPU VM. Measured: GCP
-`c4-standard-48` 32 Gbit/s (~3.8 GiB/s) same-zone and cross-zone, AWS
-`m8id`/`m8gd.12xlarge` 22.3 Gbit/s (~2.6 GiB/s). AWS caps a single TCP flow at
-5 Gbit/s (~600 MiB/s) outside a cluster placement group. Same-zone TCP round
-trips measured 74 μs on GCP and 81 μs on AWS; cross-zone 766 μs on GCP and 456
-μs on AWS. Outside VPC = to public IPs: GCP caps it at 7 Gbit/s per VM (25 with
-Tier_1), AWS at 50% of the NIC for ≥32 vCPU. 10+ GiB/s needs a 96+ vCPU or
-network-optimized VM (see the premium row).
-
-**♦:** One TCP flow with default Linux buffers (`tcp_wmem` max 4 MiB, CUBIC)
-moves roughly one window per round trip. Measured from GCP `us-central1`: 80
-MiB/s to `us-east4` (23 ms), 68 MiB/s to `us-west1` (38 ms), 21 MiB/s to
-`europe-west1` (110 ms) and 10 MiB/s to `asia-southeast1` (200 ms). Parallel
-flows scale nearly linearly until the VM's egress cap (8 flows: 0.5-0.9 GiB/s).
-Round-trip times measured between GCP regions on October 23, 2026 were within
-~10% of the rows above, except NA West <-> Singapore: 149 ms on GCP versus
-~170-180 ms between AWS regions ([cloudping][i]).
-
-**◊:** Fast codecs (lz4, snappy, zstd -1) on the Silesia corpus, single thread
-(measured on AWS `m8id` and Graviton4 `m8gd` with
-`src/bin/compression_corpus.rs`, within ~10% of each other): lz4 ~520 MiB/s,
-snappy ~555 MiB/s, zstd -1 ~450 MiB/s to compress; zstd and snappy decompress
-at ~1 GiB/s, the Rust lz4 at ~1.5 GiB/s and the C lz4 library at ~4 GiB/s per
-`[11]`. Slower, denser
-settings are much slower to compress: zstd -3 ~270 MiB/s, gzip -6 ~30 MiB/s,
-zstd -19 ~3 MiB/s, while decompression stays ~1 GiB/s for zstd and ~300 MiB/s
-for gzip.
-
-**※:** Blob latencies are roughly p99 for same-region S3 Standard and GCS
-(XML API) on warm keep-alive connections, measured with `src/bin/s3_latency.rs`
-in March 2026. p50 is ~1.5-3x lower (304 ~10 ms, 128 KiB GET ~60 ms, 128 KiB PUT
-~65-125 ms). S3 Express One Zone and Azure Blob answer 304s and conditional
-PUTs in ~5 ms, and GCS gRPC serves small GETs in ~15 ms. Multipart PUT latency
-(≥3 round trips) is a heuristic.
-
-Sorting is `n log n`: `sort_unstable` on random `u64` measured 560-670 MiB/s
-for 1 MiB but 330-360 MiB/s for 1 GiB (~3 s) on all three VMs. A null system
-call (`getppid`) measured 77 ns on GCP C4, 83 ns on AWS `m8id` and 134 ns on
-Graviton4; `stat()` 300-540 ns. The context switch rows come from a futex
-ping-pong between two threads (`context_switch` bench): 0.75-1 μs per switch on
-one core, and 1.9-2.7 μs to wake a thread on another core. Neither includes the
-cost of refilling caches afterwards. Sequential memory reads on Graviton4 are
-notably faster than the Intel VMs: 23-29 GiB/s on one thread and ~350 GiB/s
-across all 48 cores, versus 16-22 GiB/s and 170-190 GiB/s.
-
-Local NVMe varies a lot by provider: GCP throttles each local disk to ~650
-MiB/s (~5 GiB/s for 8 disks), while one AWS `m8id` instance-store disk read
-6 GiB/s sequentially and 760k random 8 KiB IOPS (~6 GiB/s) at QD32, and each of
-the `m8gd`'s three disks ~2 GiB/s. Random 8 KiB reads at QD1 took 70-95 μs
-everywhere. An 8 KiB append + `fdatasync` on ext4 took 255 μs on `m8id` (88 μs
-on `m8gd`); on the raw device without a file system it was 17-42 μs, and
-buffered 8 KiB writes without fsync ran at 0.7-3 GiB/s.
-
-To refresh or reproduce these numbers, see [BENCHMARKING.md](BENCHMARKING.md).
-In short: `./run` runs the Criterion suite in `benches/` with Linux tuning,
-`script/ssd-fio` measures the SSD rows, `script/net-pair` the network rows and
-`src/bin/compression_corpus.rs` the compression rows. You can help this
-project by adding new suites and filling out the blanks.
+**†:** "Fast serialization/deserialization" is typically a simple wire-protocol
+that just dumps bytes, or a very efficient environment. Typically standard
+serialization such as e.g. JSON will be of the slower kind. We include both here
+as serialization/deserialization is a very, very broad topic with extremely
+different performance characteristics depending on data and implementation.
 
 I am aware of some inefficiencies in this suite. I intend to improve my skills
 in this area, in order to ensure the numbers are the upper-bound of performance
-you may be able to squeeze out in production. An October 2026 audit found
-several cells that were more than 3x off (random memory latency, same-zone
-network bandwidth, the sequential SSD read); those have been fixed, and the
-rest should be within 2-3x, which shouldn't be a problem for most users.
+you may be able to squeeze out in production. I find it highly unlikely any of
+them will be more than 2-3x off, which shouldn't be a problem for most users.
 
 ## Cost Numbers
 
