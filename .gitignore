@@ -1,2 +1,10 @@
 target
 **/*.rs.bk
+__pycache__/
+# Newsletter working data: captures, TLS key logs, vector indexes and embeddings.
+newsletter/**/*.pcap
+newsletter/**/*.pcapng
+newsletter/**/*.key
+newsletter/**/*.faiss
+newsletter/**/*.index
+newsletter/**/embeddings.json

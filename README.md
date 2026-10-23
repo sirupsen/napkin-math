@@ -168,88 +168,11 @@ everywhere. An 8 KiB append + `fdatasync` on ext4 took 255 μs on `m8id` (88 μs
 on `m8gd`); on the raw device without a file system it was 17-42 μs, and
 buffered 8 KiB writes without fsync ran at 0.7-3 GiB/s.
 
-For the active Criterion suite, run `./run --bench napkin_math` to get the
-right optimization levels and Linux tuning. You won't get the right numbers
-when you're compiling in debug mode. The wrapper already uses `sudo`
-internally. On locked-down cloud images, run
-`sudo sysctl -w kernel.perf_event_paranoid=-1` once before invoking it. You
-can help this project by adding new suites and filling out the blanks.
-
-**Note:** The active benchmark path today is Criterion.rs in `benches/`.
-`src/main.rs` is still the older ad hoc harness and remains the source of truth
-for the benches that have not been fully migrated and revalidated yet. The
-current Criterion suite now includes `blob_storage`, `memory_read`,
-`memory_random`, `memory_latency`, `hash`, `syscall`, `context_switch`, `sort`,
-`serialization`, `compression`, and `compressed_memory_read`.
-`memory_latency` is a dependent pointer chase over 16 KiB to 1 GiB, with and
-without huge pages; `memory_random` is the independent-access throughput
-counterpart. `hash` reports both 64-byte calls and 1 MiB bulk throughput
-(`hash_1mib`, including xxh3 and BLAKE3), and `sort` covers 1 MiB, 64 MiB and
-1 GiB inputs. `context_switch` is Linux-only.
-The SSD rows were re-checked with `fio` rather than the older harness. Until
-October 2026, `disk_read_sequential` (and its io_uring variant) in
-`src/main.rs` dropped the page cache once and then looped over the same 1 GiB
-file, so after the first pass they measured page cache, not the SSD. That's
-where the old `8 GiB/s` came from. They now read an 8 GiB file once and stop,
-so `NAPKIN_BENCH_FILE` needs ~8 GiB free. On an Azure `D48ds_v5` temp SSD
-they measure 1.6 GiB/s with 8 KiB reads and 2.0 GiB/s with io_uring. `src/bin/compression_corpus.rs` reports ratio and single-threaded
-speed for real files (e.g. the Silesia corpus) for lz4, snappy, zstd, gzip and
-brotli.
-The `compressed_memory_read` Criterion bench is a BitPacker integer-unpack
-microbenchmark; it should not be used to rewrite the generic `[11]`
-compression/decompression rows above. The new `serialization` and
-`compression` Criterion groups are workload-specific and are not yet wired into
-the generic README rows above.
-The new `blob_storage` Criterion group is opt-in and credentialed: set
-`NAPKIN_GCS_BUCKET` and/or `NAPKIN_S3_BUCKET`. Both the GCS and S3 paths now
-use the AWS S3 SDK. The GCS side talks to the GCS XML interoperability endpoint
-and requires `NAPKIN_GCS_ACCESS_KEY` plus `NAPKIN_GCS_SECRET_KEY`. The S3 side
-uses the local AWS profile in `NAPKIN_S3_PROFILE` (default `tpuf-test`) plus
-`NAPKIN_S3_REGION` (default `us-west-2`).
-The concurrent `get_offsets` and `put_multipart` paths explicitly fan out onto
-a multi-thread Tokio runtime, so they can get close to the host NIC limit when
-the range count / object count is high enough. On March 9, 2026, same-region
-`1 GiB` single-stream GETs landed at about `95 MiB/s` on S3 (`m6id.12xlarge`
-in `us-west-2a`) and about `190-200 MiB/s` on GCS XML
-(`c4-standard-48-lssd` in `us-central1-c`). On the same machines, explicit
-concurrent range GETs reached about `2.0 GiB/s` on S3 and about `4.9 GiB/s` on
-GCS, while multipart PUTs reached about `1.8-1.9 GiB/s` on S3 and about
-`3.3 GiB/s` on GCS. Older AWS S3 guidance suggested budgeting about
-`85-90 MB/s` per concurrent request when saturating a `10 Gbps` instance, which
-matched the measured S3 single-stream result closely. The old `500 MiB/s`
-single-stream blob GET row above did not reproduce on either provider, so it
-has been revised down to a conservative generic `100 MiB/s`.
-The blob latency cells come from the small-object latency probe in
-`src/bin/s3_latency.rs` (March 10-20, 2026); see the `※` footnote for the
-percentile and backends. Run
-`./script/blob-latency <s3|s3x|gcs|r2|tigris|azure>` to sweep
-`get`, `put`, `if_none_match`, and `put_if_match` across the default
-`8 KiB .. 8 MiB` size ladder, except `if_none_match`, which now defaults to a
-single `128 KiB` row because its latency was effectively flat across the small
-size sweep. Override `NAPKIN_BLOB_LATENCY_OPS`,
-`NAPKIN_BLOB_LATENCY_SIZES`, and
-`NAPKIN_BLOB_LATENCY_IF_NONE_MATCH_SIZES` when you want a smaller or
-provider-specific run. The latency probe now defaults to a per-row wall-clock
-budget of `300` seconds, collecting as many samples as fit in that time.
-Tune that with `NAPKIN_BLOB_LATENCY_ROW_SECONDS`; optionally cap it with
-`NAPKIN_BLOB_LATENCY_SAMPLE_CAP` (or the older `NAPKIN_BLOB_LATENCY_SAMPLES`
-alias) when you want shorter count-limited experiments instead.
-The `list` op now seeds a larger namespace by default (`1M` keys) and
-measures one randomized `1000`-key page per sample via `start_after`, rather
-than repeatedly scanning the same small fixed prefix. Tune that shape with
-`NAPKIN_BLOB_LATENCY_LIST_NAMESPACE_KEYS`,
-`NAPKIN_BLOB_LATENCY_LIST_KEYS`, and
-`NAPKIN_BLOB_LATENCY_LIST_SEED_CONCURRENCY`. If you also want the old
-whole-namespace walk, add `list_full_scan` to `NAPKIN_BLOB_LATENCY_OPS`.
-For aligned range-read latency, `./script/blob-random-range-latency` measures
-the `128 KiB`-aligned shape and `./script/blob-random-range-latency-8m`
-measures the `8 MiB`-aligned shape over the same `128 x 1 GiB` object pool.
-`./script/blob-random-range-latency-8m-multipart` seeds those `1 GiB` source
-objects via multipart upload with `8 MiB` parts, then measures `8 MiB`-aligned
-reads against those multipart boundaries.
-`memory_read` now emits explicit `No SIMD` and `SIMD` variants in Criterion,
-but the README intentionally collapses them to one single-thread row and one
-threaded row for memorability.
+To refresh or reproduce these numbers, see [BENCHMARKING.md](BENCHMARKING.md).
+In short: `./run` runs the Criterion suite in `benches/` with Linux tuning,
+`script/ssd-fio` measures the SSD rows, `script/net-pair` the network rows and
+`src/bin/compression_corpus.rs` the compression rows. You can help this
+project by adding new suites and filling out the blanks.
 
 I am aware of some inefficiencies in this suite. I intend to improve my skills
 in this area, in order to ensure the numbers are the upper-bound of performance
