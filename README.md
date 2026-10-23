@@ -46,15 +46,13 @@ to improve accuracy and as hardware improves.
 | Fast Serialization `[8]` `[9]` †    | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | Fast Deserialization `[8]` `[9]` †  | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | System Call                         | 100 ns      | N/A        | N/A    | N/A    |
-| ├ stat()                            | 300 ns      | N/A        | N/A    | N/A    |
 | Hashing, crypto-safe (64 bytes)     | 100 ns      | 1 GiB/s    | 1 ms   | 1s     |
 | Sequential SSD read (8 KiB)         | 2 μs        | 4 GiB/s    | 250 μs | 250 ms |
+| Random SSD read (8 KiB)             | 100 μs      | 2 GiB/s    | 500 μs | 500 ms |
 | Context Switch, same core `[1] [2]` | 1 μs        | N/A        | N/A    | N/A    |
 | ├ Cross-core thread wake-up         | 2 μs        | N/A        | N/A    | N/A    |
 | Sequential SSD write, -fsync (8KiB) | 4 μs        | 2 GiB/s    | 500 μs | 500 ms |
 | TCP Echo, loopback (32 KiB)         | 50 μs       | 500 MiB/s  | 2 ms   | 2s     |
-| Random SSD Read, QD1 (8 KiB)        | 100 μs      | 70 MiB/s   | 15 ms  | 15s    |
-| ├ Parallel, QD32+ (1 NVMe)          |             | 2 GiB/s    | 500 μs | 500 ms |
 | Decompression `[11]`                | N/A         | 1 GiB/s    | 1 ms   | 1s     |
 | Compression, fast `[11]`            | N/A         | 500 MiB/s  | 2 ms   | 2s     |
 | Sorting (64-bit integers)           | N/A         | 500 MiB/s  | 2 ms   | 3s     |

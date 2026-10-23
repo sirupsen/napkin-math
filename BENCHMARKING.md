@@ -28,7 +28,7 @@ debug build.
 | `memory_latency` | Dependent pointer chase over 16 KiB to 1 GiB, with and without huge pages | Random Memory latency |
 | `random_memory` | One pass of independent random 64 B reads/writes over 1 GiB | Random Memory throughput |
 | `hash`, `hash_1mib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and 1 MiB buffers | Hashing rows |
-| `syscall` | `getppid` (null syscall), `getpid`, `clock_gettime`, `getrusage`, `fstat` | System Call, `stat()` |
+| `syscall` | `getppid` (null syscall), `getpid`, `clock_gettime`, `getrusage`, `fstat` | System Call |
 | `context_switch` | futex ping-pong between two threads, same core and cross core (Linux) | Context Switch rows |
 | `sort` | `sort_unstable` on random `u64`, 1 MiB to 1 GiB | Sorting |
 | `tcp` | 32 KiB echo over loopback | TCP Echo, loopback |
