@@ -680,10 +680,13 @@ fn disk_read_sequential() {
         file: fs::File,
     }
 
+    // Big enough that a single pass at SSD speeds fills most of the 5s run. The read stops at the
+    // end of the file instead of wrapping around, since a second pass would be served from the
+    // page cache the first pass filled.
     let result = benchmark(
         || {
             std::mem::drop(fs::remove_file(&file_name));
-            let buffer = vec![0; n_gib_bytes!(1) as usize];
+            let buffer = vec![0; n_gib_bytes!(8) as usize];
             {
                 let mut file = OpenOptions::new()
                     .create(true)
@@ -717,11 +720,7 @@ fn disk_read_sequential() {
         },
         |test| {
             let n = test.file.read(&mut test.buffer).unwrap();
-            // TODO: this is cheating...
-            if n < BUF_SIZE {
-                test.file.seek(SeekFrom::Start(0)).unwrap();
-            };
-            true
+            n == BUF_SIZE
         },
     )
     .unwrap();
@@ -753,9 +752,10 @@ fn disk_read_sequential_io_uring() {
 
     // TODO: checksum somehow
 
+    // Like `disk_read_sequential`, read the file once and stop rather than wrapping around into the
+    // page cache.
     let result = benchmark(
         || {
-            // flush page cache? prob not necessary since we re-create the file.
             let _ = fs::remove_file(&file_name);
             let mut file = OpenOptions::new()
                 .create(true)
@@ -763,7 +763,7 @@ fn disk_read_sequential_io_uring() {
                 .read(true)
                 .open(&file_name)
                 .unwrap();
-            let buffer = vec![0; n_gib_bytes!(1) as usize];
+            let buffer = vec![0; n_gib_bytes!(8) as usize];
             file.write_all(&buffer).unwrap();
             file.sync_data().unwrap();
             drop_file_page_cache(&file);
@@ -782,7 +782,7 @@ fn disk_read_sequential_io_uring() {
                 buffers,
                 file,
                 ring,
-                size: n_gib_bytes!(1) as usize,
+                size: n_gib_bytes!(8) as usize,
                 offset: 0,
             }
         },
@@ -812,12 +812,7 @@ fn disk_read_sequential_io_uring() {
                 }
             }
 
-            if test.size == 0 {
-                test.offset = 0;
-                test.size = n_gib_bytes!(1) as usize;
-            }
-
-            true
+            test.size > 0
         },
     )
     .unwrap();
