@@ -38,11 +38,11 @@ to improve accuracy and as hardware improves.
 | CPU Hash, not crypto-safe (64 bytes)             | 10 ns      | 5 GiB/s    | 200 ms |
 | CPU Hash, crypto-safe (64 bytes)                 | 100 ns     | 1 GiB/s    | 1 s    |
 | CPU System Call                                  | 100 ns     |            |        |
-| CPU Context Switch `[1]` `[2]`                   | 1 μs       |            |        |
-| CPU Serialize, fast `[8]` `[9]` †                |            | 1 GiB/s    | 1 s    |
-| CPU Serialize, slow `[8]` `[9]` †                |            | 100 MiB/s  | 10 s   |
-| CPU Compress `[11]`                              |            | 500 MiB/s  | 2 s    |
-| CPU Decompress `[11]`                            |            | 1 GiB/s    | 1 s    |
+| CPU Context Switch                               | 1 μs       |            |        |
+| CPU Serialize (JSON, Protobuf)                   |            | 1 GiB/s    | 1 s    |
+| CPU Deserialize (JSON, Protobuf)                 |            | 300 MiB/s  | 3 s    |
+| CPU Compress (lz4, zstd -1)                      |            | 500 MiB/s  | 2 s    |
+| CPU Decompress (lz4, zstd -1)                    |            | 1 GiB/s    | 1 s    |
 | CPU Sort (64-bit integers)                       |            | 500 MiB/s  | 3 s    |
 | Memory Sequential Read, 1 thread                 |            | 20 GiB/s   | 50 ms  |
 | Memory Sequential Read, all cores                |            | 200 GiB/s  | 5 ms   |
@@ -57,29 +57,28 @@ to improve accuracy and as hardware improves.
 | Network Disk Sequential Write + fsync (8 KiB)    | 1 ms       | 8 MiB/s    | 2 min  |
 | HDD Sequential Read                              |            | 200 MiB/s  | 5 s    |
 | HDD Sequential Write                             |            | 200 MiB/s  | 5 s    |
-| HDD Random Read (8 KiB) `[7]`                    | 10 ms      | 2 MiB/s    | 10 min |
+| HDD Random Read (8 KiB)                          | 10 ms      | 2 MiB/s    | 10 min |
 | HDD Sequential Write + fsync (8 KiB)             | 1 ms       | 8 MiB/s    | 2 min  |
+| Blob Storage Sequential Read                     |            | 3 GiB/s    | 300 ms |
+| Blob Storage Sequential Write                    |            | 2 GiB/s    | 500 ms |
+| Blob Storage Random Read (8 KiB)                 | 50 ms      |            |        |
+| Blob Storage Durable Write (8 KiB)               | 50 ms      |            |        |
+| Blob Storage List (1000 keys)                    | 100 ms     |            |        |
 | Network Same-Zone                                | 100 μs     | 3 GiB/s    | 300 ms |
 | Network Cross-Zone                               | 500 μs     | 2 GiB/s    | 500 ms |
-| Network Same-Continent `[6]`                     | 25-60 ms   | 50 MiB/s   | 20 s   |
+| Network Same-Continent                           | 25-60 ms   | 50 MiB/s   | 20 s   |
 | Network Cross-Atlantic                           | 80-100 ms  | 25 MiB/s   | 40 s   |
 | Network Cross-Pacific                            | 160-180 ms | 25 MiB/s   | 40 s   |
 | Proxy Request (Envoy, HAProxy, Nginx, ProxySQL)  | 50 μs      |            |        |
 | Database Query (MySQL, Memcached, Redis, ...)    | 500 μs     |            |        |
-| Blob Storage GET, 1 connection                   | 80 ms      | 100 MiB/s  | 10 s   |
-| Blob Storage PUT, 1 connection                   | 200 ms     | 100 MiB/s  | 10 s   |
-| Blob Storage LIST (1000 keys)                    | 100 ms     |            |        |
 
 Throughput is the most you can get, e.g. many requests in flight for random
 reads. Network Disk is EBS gp3 / GCP Hyperdisk Balanced provisioned to the max.
-Blob storage and network throughput scale with connections up to the VM's
-network limit. Region-to-region latencies: [cloudping](https://www.cloudping.co/).
-
-**†:** "Fast serialization/deserialization" is typically a simple wire-protocol
-that just dumps bytes, or a very efficient environment. Typically standard
-serialization such as e.g. JSON will be of the slower kind. We include both here
-as serialization/deserialization is a very, very broad topic with extremely
-different performance characteristics depending on data and implementation.
+Blob Storage is S3, GCS and Azure Blob from a VM in the same region. One
+connection gets ~100 MiB/s, so its sequential rows take 32+ connections and are
+capped by the VM's network. A PUT is durable when it returns, like write +
+fsync. GCS Rapid reads in ~10 ms. Region-to-region latencies:
+[cloudping](https://www.cloudping.co/).
 
 I am aware of some inefficiencies in this suite. I intend to improve my skills
 in this area, in order to ensure the numbers are the upper-bound of performance
@@ -137,9 +136,10 @@ operation (fewer, large files is cheaper):
 
 ## Compression Ratios
 
-This is sourced from a few sources. `[3]` `[4]` `[5]` Note that compression
-speeds (but generally not ratios) vary by orders of magnitude depending on the
-algorithm and the level of compression (which trades speed for compression).
+Measured with `compression_corpus`; each range spans lz4 to zstd -19. Note
+that compression speeds (but generally not ratios) vary by orders of magnitude
+depending on the algorithm and the level of compression (which trades speed for
+compression).
 
 I typically ballpark that another _x in compression ratio decreases performance
 by 10x_. E.g. on the Silesia corpus, lz4 gets 2x at ~500 MiB/s, zstd -9 3.5x at
@@ -149,10 +149,10 @@ by 10x_. E.g. on the Silesia corpus, lz4 gets 2x at ~500 MiB/s, zstd -9 3.5x at
 | ---------------------- | ----------------- |
 | HTML                   | 3-8x              |
 | English                | 2-4x              |
-| Source Code            | 3-7x              |
+| Source Code            | 3-9x              |
 | Executables            | 2-3x              |
-| RPC (JSON)             | 5-20x             |
-| Encrypted / compressed | 1x `[10]`         |
+| RPC (JSON)             | 5-15x             |
+| Encrypted / compressed | 1x                |
 
 ## Techniques
 
@@ -173,17 +173,6 @@ by 10x_. E.g. on the Silesia corpus, lz4 gets 2x at ~500 MiB/s, zstd -9 3.5x at
 
 ## Resources
 
-* `[1]`: https://eli.thegreenplace.net/2018/measuring-context-switching-and-memory-overheads-for-linux-threads/
-* `[2]`: https://blog.tsunanet.net/2010/11/how-long-does-it-take-to-make-context.html
-* `[3]`: https://cran.r-project.org/web/packages/brotli/vignettes/brotli-2015-09-22.pdf
-* `[4]`: https://github.com/google/snappy
-* `[5]`: https://quixdb.github.io/squash-benchmark/
-* `[6]`: https://dl.acm.org/doi/10.1145/1879141.1879143
-* `[7]`: https://en.wikipedia.org/wiki/Hard_disk_drive_performance_characteristics#Seek_times_&_characteristics
-* `[8]`: https://github.com/simdjson/simdjson#performance-results
-* `[9]`: https://github.com/protocolbuffers/protobuf/blob/d20e9a92/docs/performance.md
-* `[10]`: https://www.imperialviolet.org/2010/06/25/overclocking-ssl.html
-* `[11]`: https://github.com/inikep/lzbench
 * [Systems Performance (book)](https://www.amazon.com/Systems-Performance-Enterprise-Brendan-Gregg/dp/0133390098/ref=sr_1_1?keywords=systems+performance&qid=1580733419&sr=8-1). Fantastic book about analyzing system performance, finding bottlenecks, and understanding operating systems.
 * [Files are hard](https://danluu.com/file-consistency/)
 

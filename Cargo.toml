@@ -23,6 +23,7 @@ core_affinity = "0.8"
 crc32fast = "1"
 criterion = "0.8"
 libc = "0.2"
+postcard = { version = "1", features = ["alloc"] }
 prost = "0.14"
 rand = "0.10"
 serde = { version = "1", features = ["derive"] }

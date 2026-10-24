@@ -32,8 +32,14 @@ debug build.
 | `context_switch` | futex ping-pong between two threads, same core and cross core (Linux) | CPU Context Switch |
 | `sort` | `sort_unstable` on random `u64`, 1 MiB to 1 GiB | CPU Sort |
 | `tcp` | 32 KiB echo over loopback | none (loopback only) |
-| `serialization`, `compression` | prost/serde_json and zstd -3 on a synthetic event corpus | none (workload-specific) |
+| `serialization` | Protobuf (prost), JSON (serde_json, to structs and to a dynamic `Value`) and postcard on a 1 MiB batch of events | CPU Serialize, CPU Deserialize |
+| `compression` | zstd -3 on the event corpus as JSON | none (see `compression_corpus`) |
 | `bitpacking` | `BitPacker8x` integer unpack | none (not the `[11]` rows) |
+
+In October 2026 on a c4-standard-8 (Xeon 8581C), serialization ran at
+0.9-1.2 GiB/s for every format and deserialization into structs at 350-400
+MiB/s (200 MiB/s into a dynamic JSON `Value`): allocating the objects, not the
+format, sets the speed.
 
 The README collapses `memory_read`'s scalar and SIMD variants into one
 single-thread row and one threaded row for memorability. `random_memory` issues
@@ -90,9 +96,12 @@ NAPKIN_COMPRESSION_CODECS="lz4_flex,zstd -3" cargo run --release --bin compressi
 `src/bin/compression_corpus.rs` reports the ratio and single-threaded
 compress/decompress speed of lz4, snappy, zstd (-1, -3, -9, -19), gzip (-1, -6)
 and brotli (-5, -11) for each file, as best of N runs over at least a second.
-The README rows use the [Silesia corpus](https://sun.aei.polsl.pl/~sdeor/index.php?page=silesia);
-the compression ratio table also used modern web pages, source trees,
-`/usr/bin` and API JSON.
+The CPU Compress/Decompress rows use the
+[Silesia corpus](https://sun.aei.polsl.pl/~sdeor/index.php?page=silesia) (on the
+c4-standard-8: lz4 2.1x at 442/1246 MiB/s, zstd -1 2.9x at 395/819 MiB/s). The
+ratio table used Silesia's `dickens` (English), `samba` (source) and `mozilla`
+(executables), a Wikipedia article (HTML), a tarball of the cargo registry
+sources, `/usr/bin` and a page of GitHub API JSON.
 
 ## Blob storage rows (March 2026)
 
@@ -120,9 +129,13 @@ The old `500 MiB/s` single-stream blob GET row did not reproduce on either
 provider, so it was revised down to a conservative generic `100 MiB/s`.
 
 The blob latency cells came from a small-object latency probe
-(`src/bin/s3_latency.rs`, March 10-20, 2026). They are roughly p99 for
-same-region S3 Standard and GCS (XML API) on warm connections; p50 is ~1.5-3x
-lower. `./script/blob-latency
+(`src/bin/s3_latency.rs`, March 10-20, 2026), with 128 requests in flight on
+warm connections from a VM in the same region. They are p50 across S3
+Standard, GCS and Azure Blob: an 8 KiB range read was 56 / 104 (XML) / 35
+(gRPC) / 45 ms, an 8 KiB PUT 49 / 141 / 71 / 32 ms and a 1000-key LIST page
+78 / 56 / 89 ms. p99 is ~1.5-3x higher. GCS Rapid read 8 KiB in 6-14 ms.
+Sequential throughput peaked at the hosts' NICs with 32-128 connections: GETs
+at 2.0 (S3), 4.3 (GCS) and 3.9 GiB/s (Azure), PUTs at 1.9, 3.1 and 2.2 GiB/s. `./script/blob-latency
 <s3|s3x|gcs|r2|tigris|azure>` swept `get`, `put`, `if_none_match` and
 `put_if_match` across an `8 KiB .. 8 MiB` size ladder, except `if_none_match`,
 which defaulted to a single `128 KiB` row because its latency was effectively

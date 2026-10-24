@@ -46,6 +46,31 @@ fn serialization_benchmark(c: &mut Criterion) {
         b.iter(|| black_box(serde_json::from_slice::<BenchPayload>(&json).unwrap()))
     });
 
+    // Into a dynamic tree, like JSON.parse in Ruby, Python or JavaScript.
+    group.throughput(Throughput::Bytes(json.len() as u64));
+    group.bench_function("json/deserialize to Value", |b| {
+        b.iter(|| black_box(serde_json::from_slice::<serde_json::Value>(&json).unwrap()))
+    });
+
+    // A compact binary format that writes fields in order with no tags.
+    let postcard = postcard::to_allocvec(&payload).unwrap();
+    {
+        let mut buffer = Vec::with_capacity(postcard.len());
+        group.throughput(Throughput::Bytes(postcard.len() as u64));
+        group.bench_function("postcard/serialize", |b| {
+            b.iter(|| {
+                buffer.clear();
+                buffer = postcard::to_extend(&payload, std::mem::take(&mut buffer)).unwrap();
+                black_box(buffer.len())
+            })
+        });
+    }
+
+    group.throughput(Throughput::Bytes(postcard.len() as u64));
+    group.bench_function("postcard/deserialize", |b| {
+        b.iter(|| black_box(postcard::from_bytes::<BenchPayload>(&postcard).unwrap()))
+    });
+
     group.finish();
 }
 
