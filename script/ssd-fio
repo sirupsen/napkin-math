@@ -73,6 +73,8 @@ run seq_read_1m_qd32 "${direct[@]}" "${timed[@]}" --rw=read --bs=1M --iodepth=32
 run seq_read_8k_buffered --direct=0 --ioengine=psync --invalidate=1 "${timed[@]}" --rw=read --bs=8k
 run rand_read_8k_qd1 "${direct[@]}" "${timed[@]}" --rw=randread --bs=8k --iodepth=1
 run rand_read_8k_qd32x4 "${direct[@]}" "${timed[@]}" --rw=randread --bs=8k --iodepth=32 --numjobs=4
+run rand_write_8k_qd1 "${direct[@]}" "${timed[@]}" --rw=randwrite --bs=8k --iodepth=1
+run rand_write_8k_qd32x4 "${direct[@]}" "${timed[@]}" --rw=randwrite --bs=8k --iodepth=32 --numjobs=4
 run seq_write_1m_qd32 "${direct[@]}" "${timed[@]}" --rw=write --bs=1M --iodepth=32
 run seq_write_8k_buffered --direct=0 --ioengine=psync --runtime=5 --time_based --rw=write --bs=8k
 run seq_write_8k_fdatasync --direct=0 --ioengine=psync "${timed[@]}" --rw=write --bs=8k --fdatasync=1

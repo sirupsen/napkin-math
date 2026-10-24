@@ -33,43 +33,59 @@ intentional for ease of calculations.
 the state-of-the-art. I am continuously updating these numbers as I learn more
 to improve accuracy and as hardware improves.
 
-| Operation                                        | Latency    | Throughput | 1 GiB  |
-| ------------------------------------------------ | ---------- | ---------- | ------ |
-| Memory Sequential Read, all cores                |            | 200 GiB/s  | 5 ms   |
-| Memory Sequential Read, 1 thread                 |            | 20 GiB/s   | 50 ms  |
-| CPU Hash, not crypto-safe (64 bytes)             | 10 ns      | 5 GiB/s    | 200 ms |
-| Network Bandwidth                                |            | 5 GiB/s    | 200 ms |
-| Network Same-Zone                                | 100 μs     | NW Limit   |        |
-| Network Cross-Zone                               | 500 μs     | NW Limit   |        |
-| Blob Storage Read (128 KiB)                      | 100 ms     | NW Limit   |        |
-| Blob Storage Write (128 KiB)                     | 100 ms     | NW Limit   |        |
-| SSD Sequential Read                              |            | 4 GiB/s    | 250 ms |
-| Memory Random Read (64 bytes)                    | 100 ns     | 3 GiB/s    | 300 ms |
-| SSD Sequential Write                             |            | 2 GiB/s    | 500 ms |
-| SSD Random Read (8 KiB)                          | 100 μs     | 2 GiB/s    | 500 ms |
-| CPU Serialize (JSON, Protobuf)                   |            | 1 GiB/s    | 1 s    |
-| CPU Decompress (lz4, zstd -1)                    |            | 1 GiB/s    | 1 s    |
-| Network Disk Sequential Read                     |            | 1 GiB/s    | 1 s    |
-| Network Disk Sequential Write                    |            | 1 GiB/s    | 1 s    |
-| CPU Hash, crypto-safe (64 bytes)                 | 100 ns     | 1 GiB/s    | 1 s    |
-| CPU Compress (lz4, zstd -1)                      |            | 500 MiB/s  | 2 s    |
-| CPU Sort (64-bit integers)                       |            | 500 MiB/s  | 3 s    |
-| CPU Deserialize (JSON, Protobuf)                 |            | 300 MiB/s  | 3 s    |
-| Network Disk Random Read (8 KiB)                 | 500 μs     | 250 MiB/s  | 4 s    |
-| HDD Sequential Read                              |            | 200 MiB/s  | 5 s    |
-| HDD Sequential Write                             |            | 200 MiB/s  | 5 s    |
-| Network Same-Continent                           | 25-60 ms   | 50 MiB/s   | 20 s   |
-| SSD Sequential Write + fsync (8 KiB)             | 300 μs     | 30 MiB/s   | 30 s   |
-| Network Cross-Atlantic                           | 80-100 ms  | 25 MiB/s   | 40 s   |
-| Network Cross-Pacific                            | 160-180 ms | 25 MiB/s   | 40 s   |
-| Network Disk Sequential Write + fsync (8 KiB)    | 1 ms       | 8 MiB/s    | 2 min  |
-| HDD Sequential Write + fsync (8 KiB)             | 1 ms       | 8 MiB/s    | 2 min  |
-| HDD Random Read (8 KiB)                          | 10 ms      | 2 MiB/s    | 10 min |
-| CPU System Call                                  | 100 ns     |            |        |
-| CPU Context Switch                               | 1 μs       |            |        |
-| Proxy Request (Envoy, HAProxy, Nginx, ProxySQL)  | 50 μs      |            |        |
-| Database Query (MySQL, Memcached, Redis, ...)    | 500 μs     |            |        |
-| Blob Storage List (1000 keys)                    | 150 ms     |            |        |
+| Operation                                       | Latency    | Throughput | 1 GiB  |
+| ----------------------------------------------- | ---------- | ---------- | ------ |
+| Memory Sequential Read, all cores               |            | 200 GiB/s  | 5 ms   |
+| L1 Cache Read                                   | 1 ns       | 200 GiB/s  | 5 ms   |
+| L2 Cache Read                                   | 5 ns       | 150 GiB/s  | 7 ms   |
+| L3 Cache Read                                   | 30 ns      | 30 GiB/s   | 30 ms  |
+| Memory Sequential Read, 1 thread                |            | 20 GiB/s   | 50 ms  |
+| Memory Sequential Write, 1 thread               |            | 10 GiB/s   | 100 ms |
+| CPU Encrypt (AES-256-GCM)                       |            | 10 GiB/s   | 100 ms |
+| CPU Hash, not crypto-safe (64 bytes)            | 10 ns      | 5 GiB/s    | 200 ms |
+| Network Bandwidth                               |            | 5 GiB/s    | 200 ms |
+| Network Same-Zone                               | 100 μs     | NW Limit   |        |
+| Network Cross-Zone                              | 500 μs     | NW Limit   |        |
+| Blob Storage Read (128 KiB)                     | 100 ms     | NW Limit   |        |
+| Blob Storage Write (128 KiB)                    | 100 ms     | NW Limit   |        |
+| SSD Sequential Read                             |            | 4 GiB/s    | 250 ms |
+| Memory Random Write (64 bytes)                  |            | 3 GiB/s    | 300 ms |
+| Memory Random Read (64 bytes)                   | 100 ns     | 3 GiB/s    | 300 ms |
+| SSD Sequential Write                            |            | 2 GiB/s    | 500 ms |
+| SSD Random Read (8 KiB)                         | 100 μs     | 2 GiB/s    | 500 ms |
+| CPU Serialize (JSON, Protobuf)                  |            | 1 GiB/s    | 1 s    |
+| CPU Decompress (lz4, zstd -1)                   |            | 1 GiB/s    | 1 s    |
+| Network Disk Sequential Read                    |            | 1 GiB/s    | 1 s    |
+| Network Disk Sequential Write                   |            | 1 GiB/s    | 1 s    |
+| CPU Hash, crypto-safe (64 bytes)                | 100 ns     | 1 GiB/s    | 1 s    |
+| CPU Compress (lz4, zstd -1)                     |            | 500 MiB/s  | 2 s    |
+| CPU Sort (64-bit integers)                      |            | 500 MiB/s  | 3 s    |
+| CPU Deserialize (JSON, Protobuf)                |            | 300 MiB/s  | 3 s    |
+| Network Disk Random Read (8 KiB)                | 500 μs     | 250 MiB/s  | 4 s    |
+| Network Disk Random Write (8 KiB)               | 500 μs     | 250 MiB/s  | 4 s    |
+| HDD Sequential Read                             |            | 200 MiB/s  | 5 s    |
+| HDD Sequential Write                            |            | 200 MiB/s  | 5 s    |
+| Network Same-Continent                          | 25-60 ms   | 50 MiB/s   | 20 s   |
+| SSD Sequential Write + fsync (8 KiB)            | 300 μs     | 30 MiB/s   | 30 s   |
+| Network Cross-Atlantic                          | 80-100 ms  | 25 MiB/s   | 40 s   |
+| Network Cross-Pacific                           | 160-180 ms | 25 MiB/s   | 40 s   |
+| Network Disk Sequential Write + fsync (8 KiB)   | 1 ms       | 8 MiB/s    | 2 min  |
+| HDD Sequential Write + fsync (8 KiB)            | 1 ms       | 8 MiB/s    | 2 min  |
+| HDD Random Read (8 KiB)                         | 10 ms      | 2 MiB/s    | 10 min |
+| CPU Atomic Increment                            | 5 ns       |            |        |
+| CPU Mutex Lock + Unlock                         | 10 ns      |            |        |
+| CPU System Call                                 | 100 ns     |            |        |
+| CPU Atomic Increment, contended                 | 100 ns     |            |        |
+| CPU Mutex Lock + Unlock, contended              | 500 ns     |            |        |
+| CPU Context Switch                              | 1 μs       |            |        |
+| CPU TCP Connect (+1 RTT)                        | 10 μs      |            |        |
+| Proxy Request (Envoy, HAProxy, Nginx, ProxySQL) | 50 μs      |            |        |
+| CPU Thread Spawn                                | 50 μs      |            |        |
+| CPU TLS 1.3 Handshake (+1 RTT)                  | 250 μs     |            |        |
+| CPU Process Spawn                               | 300 μs     |            |        |
+| Database Query (MySQL, Memcached, Redis, ...)   | 500 μs     |            |        |
+| Blob Storage Conditional Write (128 KiB)        | 100 ms     |            |        |
+| Blob Storage List (1000 keys)                   | 150 ms     |            |        |
 
 Throughput is the most you can get, e.g. many requests in flight for random
 reads. Network Disk is EBS gp3 / GCP Hyperdisk Balanced provisioned to the max.

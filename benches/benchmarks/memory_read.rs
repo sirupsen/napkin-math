@@ -1,7 +1,7 @@
 use criterion::*;
 use std::hint::black_box;
 
-use super::GIB;
+use super::{GIB, KIB, MIB};
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::{asm, x86_64::*};
@@ -255,4 +255,18 @@ fn memory_read_benchmark(c: &mut Criterion) {
     group.finish()
 }
 
-criterion_group!(benches, memory_read_benchmark);
+// The same single-thread SIMD read over buffers that fit in L1, L2 and L3,
+// read again and again.
+fn cache_read_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("cache_read");
+    for (name, bytes) in [("16 KiB", 16 * KIB), ("256 KiB", 256 * KIB), ("8 MiB", 8 * MIB)] {
+        let vec: Vec<Int> = (0..bytes / 8).map(|i| i as Int).collect();
+        group.throughput(Throughput::Bytes(bytes as u64));
+        group.bench_function(name, |b| {
+            b.iter(|| black_box(memory_read_sequential_single_thread_vectorized(black_box(&vec))))
+        });
+    }
+    group.finish()
+}
+
+criterion_group!(benches, memory_read_benchmark, cache_read_benchmark);

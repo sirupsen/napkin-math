@@ -25,8 +25,14 @@ debug build.
 | Group | Measures | README row |
 | ----- | -------- | ---------- |
 | `memory_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD | Memory Sequential Read |
-| `memory_latency` | Dependent pointer chase over 16 KiB to 1 GiB, with and without huge pages | Memory Random Read, latency |
-| `random_memory` | One pass of independent random 64 B reads/writes over 1 GiB | Memory Random Read, throughput |
+| `memory_latency` | Dependent pointer chase over 16 KiB to 1 GiB, with and without huge pages | L1/L2/L3 Cache Read and Memory Random Read, latency |
+| `cache_read` | The `memory_read` SIMD loop over 16 KiB, 256 KiB and 8 MiB buffers | L1/L2/L3 Cache Read, throughput |
+| `memory_write` | memset and memcpy of 1 GiB, 1 thread | Memory Sequential Write |
+| `encrypt` | ring AES-256-GCM and ChaCha20-Poly1305 on 16 KiB | CPU Encrypt |
+| `sync` | Atomic increment and `Mutex` lock + unlock, alone and with a second core on the same line | CPU Atomic Increment, CPU Mutex Lock + Unlock |
+| `spawn` | `thread::spawn` + join, and spawning `true` and waiting for it | CPU Thread Spawn, CPU Process Spawn |
+| `handshake` | TCP connect over loopback, and a full TLS 1.3 handshake (rustls, ECDSA P-256, X25519) in memory | CPU TCP Connect, CPU TLS 1.3 Handshake |
+| `random_memory` | One pass of independent random 64 B reads/writes over 1 GiB | Memory Random Read/Write, throughput |
 | `hash`, `hash_1mib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and 1 MiB buffers | CPU Hash rows |
 | `syscall` | `getppid` (null syscall), `getpid`, `clock_gettime`, `getrusage`, `fstat` | CPU System Call |
 | `context_switch` | futex ping-pong between two threads, same core and cross core (Linux) | CPU Context Switch |
@@ -41,6 +47,15 @@ In October 2026 on a c4-standard-8 (Xeon 8581C), serialization ran at
 MiB/s (200 MiB/s into a dynamic JSON `Value`): allocating the objects, not the
 format, sets the speed.
 
+On October 24, 2026 on a c4-standard-16-lssd (Xeon 6985P-C), these ran at:
+L1/L2/L3 latency 1.4 / 4.9 / 31 ns and throughput 227 / 159 / 28 GiB/s; memset
+and memcpy 11.3 / 11.5 GiB/s; random 64 B writes 1.9 GiB/s (2.7-5.1 on the
+other hosts, hence 3 GiB/s); AES-256-GCM 10.3 GiB/s and ChaCha20-Poly1305 2.5
+GiB/s; atomic increment 6 ns (72 ns contended); mutex 12 ns (546 ns
+contended); thread spawn 52 us; process spawn 305 us; loopback TCP connect 7.8
+us; TLS 1.3 handshake 259 us of CPU for both sides. TCP connect and the TLS
+handshake each add one network round trip on top.
+
 The README collapses `memory_read`'s scalar and SIMD variants into one
 single-thread row and one threaded row for memorability. `random_memory` issues
 independent loads, so the CPU overlaps misses; that is throughput, which is why
@@ -54,7 +69,11 @@ NAPKIN_FIO_DESTROY_DEVICE=/dev/nvme1n1 script/ssd-fio /dev/nvme1n1   # an unused
 ```
 
 The README uses the max-throughput results (1 MiB QD32 for sequential, 8 KiB
-QD32x4 for random) and QD1 latency for random reads. For an HDD, test the whole
+QD32x4 for random) and QD1 latency for random reads and writes. On October 24,
+2026, Hyperdisk Balanced (80k IOPS / 1600 MiB/s) did 8 KiB random writes at
+449 us QD1 and 633 MiB/s max, the same as its reads: network disks cap random
+I/O at the provisioned IOPS either way. One GCP local NVMe disk wrote at 30 us
+QD1, capped at 335 MiB/s per disk. For an HDD, test the whole
 disk with `NAPKIN_FIO_SIZE=1800G NAPKIN_FIO_PRECONDITION=0` so random reads seek
 across all of it. The October 2026 rows came from local NVMe on GCP C4 and AWS
 m8id/m8gd, EBS gp3 at 16k IOPS / 1000 MiB/s on an m8i.4xlarge, GCP Hyperdisk
