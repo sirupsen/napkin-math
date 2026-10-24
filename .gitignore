@@ -8,3 +8,5 @@ newsletter/**/*.key
 newsletter/**/*.faiss
 newsletter/**/*.index
 newsletter/**/embeddings.json
+AGENTS.local.md
+.review/
