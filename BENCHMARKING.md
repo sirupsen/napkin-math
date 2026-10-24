@@ -130,10 +130,11 @@ provider, so it was revised down to a conservative generic `100 MiB/s`.
 
 The blob latency cells came from a small-object latency probe
 (`src/bin/s3_latency.rs`, March 10-20, 2026), with 128 requests in flight on
-warm connections from a VM in the same region. They are p50 across S3
-Standard, GCS and Azure Blob: an 8 KiB range read was 56 / 104 (XML) / 35
-(gRPC) / 45 ms, an 8 KiB PUT 49 / 141 / 71 / 32 ms and a 1000-key LIST page
-78 / 56 / 89 ms.
+warm connections from a VM in the same region. The README cells are p99 across
+S3 Standard, GCS and Azure Blob. For reference, p50 was: an 8 KiB range read 56 /
+104 (XML) / 35 (gRPC) / 45 ms, an 8 KiB PUT 49 / 141 / 71 / 32 ms and a
+1000-key LIST page 78 / 56 / 89 ms. LIST p99 was 137 / 156 / 174 ms (S3 / GCS
+XML / Azure).
 
 The Read and Write rows are p99 at the knee: the largest size
 whose p99 is still about what 8 KiB costs. Over 1 GiB objects with 128 KiB- and 1
