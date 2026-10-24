@@ -133,10 +133,22 @@ The blob latency cells came from a small-object latency probe
 warm connections from a VM in the same region. They are p50 across S3
 Standard, GCS and Azure Blob: an 8 KiB range read was 56 / 104 (XML) / 35
 (gRPC) / 45 ms, an 8 KiB PUT 49 / 141 / 71 / 32 ms and a 1000-key LIST page
-78 / 56 / 89 ms. p99 is ~1.5-3x higher. GCS Rapid read 8 KiB in 6-14 ms.
-Sequential throughput peaked at the hosts' NICs with 32-128 connections: GETs
-at 2.0 (S3), 4.3 (GCS) and 3.9 GiB/s (Azure), PUTs at 1.9, 3.1 and 2.2 GiB/s. `./script/blob-latency
-<s3|s3x|gcs|r2|tigris|azure>` swept `get`, `put`, `if_none_match` and
+78 / 56 / 89 ms.
+
+The Read and Write rows are p99 at the knee: the largest size
+whose p99 is still about what 8 KiB costs. Over 1 GiB objects with 128 KiB- and 1
+MiB-aligned ranges, S3 p99 stays at 80-90 ms up to 128 KiB and reaches 110-125
+ms at 256 KiB; Azure at 75-115 ms up to 128 KiB and 115-125 ms at 256 KiB. GCS
+gRPC stays near 100 ms up to 2 MiB, while GCS XML is noisy at 130-390 ms. Those
+runs had 128 requests in flight, so a lone request may stay flat to a larger
+size. For PUTs, p99 at 8 / 128 / 256 KiB was 100 / 140 / 186 ms on S3, 51 / 38 /
+114 ms on Azure and 271 / 229 / 338 ms on GCS XML.
+
+GCS Rapid read 8 KiB in 6-14 ms. Throughput peaked
+at the hosts' NICs with 32-128 connections: GETs at 2.0 (S3), 4.3 (GCS) and 3.9
+GiB/s (Azure), PUTs at 1.9, 3.1 and 2.2 GiB/s.
+
+`./script/blob-latency <s3|s3x|gcs|r2|tigris|azure>` swept `get`, `put`, `if_none_match` and
 `put_if_match` across an `8 KiB .. 8 MiB` size ladder, except `if_none_match`,
 which defaulted to a single `128 KiB` row because its latency was effectively
 flat across sizes. `NAPKIN_BLOB_LATENCY_OPS`, `NAPKIN_BLOB_LATENCY_SIZES` and

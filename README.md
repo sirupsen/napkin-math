@@ -59,10 +59,8 @@ to improve accuracy and as hardware improves.
 | HDD Sequential Write                             |            | 200 MiB/s  | 5 s    |
 | HDD Random Read (8 KiB)                          | 10 ms      | 2 MiB/s    | 10 min |
 | HDD Sequential Write + fsync (8 KiB)             | 1 ms       | 8 MiB/s    | 2 min  |
-| Blob Storage Sequential Read                     |            | 3 GiB/s    | 300 ms |
-| Blob Storage Sequential Write                    |            | 2 GiB/s    | 500 ms |
-| Blob Storage Random Read (8 KiB)                 | 50 ms      |            |        |
-| Blob Storage Durable Write (8 KiB)               | 50 ms      |            |        |
+| Blob Storage Read (128 KiB)                      | 100 ms     | 3 GiB/s    | 300 ms |
+| Blob Storage Write (128 KiB)                     | 100 ms     | 2 GiB/s    | 500 ms |
 | Blob Storage List (1000 keys)                    | 100 ms     |            |        |
 | Network Same-Zone                                | 100 μs     | 3 GiB/s    | 300 ms |
 | Network Cross-Zone                               | 500 μs     | 2 GiB/s    | 500 ms |
@@ -74,10 +72,11 @@ to improve accuracy and as hardware improves.
 
 Throughput is the most you can get, e.g. many requests in flight for random
 reads. Network Disk is EBS gp3 / GCP Hyperdisk Balanced provisioned to the max.
-Blob Storage is S3, GCS and Azure Blob from a VM in the same region. One
-connection gets ~100 MiB/s, so its sequential rows take 32+ connections and are
-capped by the VM's network. A PUT is durable when it returns, like write +
-fsync. GCS Rapid reads in ~10 ms. Region-to-region latencies:
+Blob Storage is S3, GCS and Azure Blob from a VM in the same region; access
+pattern doesn't matter. Read and Write latency is p99 at the largest request
+that costs no more than 8 KiB. One connection gets ~100 MiB/s, so throughput
+takes 32+ connections and is capped by the VM's network. A PUT is durable when
+it returns, like write + fsync. GCS Rapid reads in ~10 ms. Region-to-region latencies:
 [cloudping](https://www.cloudping.co/).
 
 I am aware of some inefficiencies in this suite. I intend to improve my skills
