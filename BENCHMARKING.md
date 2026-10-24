@@ -86,6 +86,14 @@ often handled on a slower path on cloud networks. Single-flow results show
 per-flow caps (5 Gbit/s on AWS outside a cluster placement group);
 multi-flow results show the VM's limit.
 
+The Network Bandwidth row is not measured; it blends the documented limits of
+current 64-128 vCPU VMs as of October 2026, in Gbit/s: AWS m8i/m8g/m8a 30 (64
+vCPU), 40 (96), 50 (128); GCP default egress c4d-standard-64 and n4-standard-64
+45, c3-standard-88 62, c4-standard-96 and c4d-standard-96 67; Azure D64s_v6 30,
+D96s_v6 41, D128s_v6 54. That averages ~45 Gbit/s, or ~5 GiB/s. Measured
+multi-flow iperf3 hit those limits: 32 Gbit/s on c4-standard-48 (documented
+34), 22 Gbit/s on m8id.12xlarge.
+
 ## Compression rows
 
 ```bash

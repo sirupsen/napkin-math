@@ -35,48 +35,51 @@ to improve accuracy and as hardware improves.
 
 | Operation                                        | Latency    | Throughput | 1 GiB  |
 | ------------------------------------------------ | ---------- | ---------- | ------ |
-| CPU Hash, not crypto-safe (64 bytes)             | 10 ns      | 5 GiB/s    | 200 ms |
-| CPU Hash, crypto-safe (64 bytes)                 | 100 ns     | 1 GiB/s    | 1 s    |
-| CPU System Call                                  | 100 ns     |            |        |
-| CPU Context Switch                               | 1 μs       |            |        |
-| CPU Serialize (JSON, Protobuf)                   |            | 1 GiB/s    | 1 s    |
-| CPU Deserialize (JSON, Protobuf)                 |            | 300 MiB/s  | 3 s    |
-| CPU Compress (lz4, zstd -1)                      |            | 500 MiB/s  | 2 s    |
-| CPU Decompress (lz4, zstd -1)                    |            | 1 GiB/s    | 1 s    |
-| CPU Sort (64-bit integers)                       |            | 500 MiB/s  | 3 s    |
-| Memory Sequential Read, 1 thread                 |            | 20 GiB/s   | 50 ms  |
 | Memory Sequential Read, all cores                |            | 200 GiB/s  | 5 ms   |
-| Memory Random Read (64 bytes)                    | 100 ns     | 3 GiB/s    | 300 ms |
+| Memory Sequential Read, 1 thread                 |            | 20 GiB/s   | 50 ms  |
+| CPU Hash, not crypto-safe (64 bytes)             | 10 ns      | 5 GiB/s    | 200 ms |
+| Network Bandwidth                                |            | 5 GiB/s    | 200 ms |
+| Network Same-Zone                                | 100 μs     | NW Limit   |        |
+| Network Cross-Zone                               | 500 μs     | NW Limit   |        |
+| Blob Storage Read (128 KiB)                      | 100 ms     | NW Limit   |        |
+| Blob Storage Write (128 KiB)                     | 100 ms     | NW Limit   |        |
 | SSD Sequential Read                              |            | 4 GiB/s    | 250 ms |
+| Memory Random Read (64 bytes)                    | 100 ns     | 3 GiB/s    | 300 ms |
 | SSD Sequential Write                             |            | 2 GiB/s    | 500 ms |
 | SSD Random Read (8 KiB)                          | 100 μs     | 2 GiB/s    | 500 ms |
-| SSD Sequential Write + fsync (8 KiB)             | 300 μs     | 30 MiB/s   | 30 s   |
+| CPU Serialize (JSON, Protobuf)                   |            | 1 GiB/s    | 1 s    |
+| CPU Decompress (lz4, zstd -1)                    |            | 1 GiB/s    | 1 s    |
 | Network Disk Sequential Read                     |            | 1 GiB/s    | 1 s    |
 | Network Disk Sequential Write                    |            | 1 GiB/s    | 1 s    |
+| CPU Hash, crypto-safe (64 bytes)                 | 100 ns     | 1 GiB/s    | 1 s    |
+| CPU Compress (lz4, zstd -1)                      |            | 500 MiB/s  | 2 s    |
+| CPU Sort (64-bit integers)                       |            | 500 MiB/s  | 3 s    |
+| CPU Deserialize (JSON, Protobuf)                 |            | 300 MiB/s  | 3 s    |
 | Network Disk Random Read (8 KiB)                 | 500 μs     | 250 MiB/s  | 4 s    |
-| Network Disk Sequential Write + fsync (8 KiB)    | 1 ms       | 8 MiB/s    | 2 min  |
 | HDD Sequential Read                              |            | 200 MiB/s  | 5 s    |
 | HDD Sequential Write                             |            | 200 MiB/s  | 5 s    |
-| HDD Random Read (8 KiB)                          | 10 ms      | 2 MiB/s    | 10 min |
-| HDD Sequential Write + fsync (8 KiB)             | 1 ms       | 8 MiB/s    | 2 min  |
-| Blob Storage Read (128 KiB)                      | 100 ms     | 3 GiB/s    | 300 ms |
-| Blob Storage Write (128 KiB)                     | 100 ms     | 2 GiB/s    | 500 ms |
-| Blob Storage List (1000 keys)                    | 150 ms     |            |        |
-| Network Same-Zone                                | 100 μs     | 3 GiB/s    | 300 ms |
-| Network Cross-Zone                               | 500 μs     | 2 GiB/s    | 500 ms |
 | Network Same-Continent                           | 25-60 ms   | 50 MiB/s   | 20 s   |
+| SSD Sequential Write + fsync (8 KiB)             | 300 μs     | 30 MiB/s   | 30 s   |
 | Network Cross-Atlantic                           | 80-100 ms  | 25 MiB/s   | 40 s   |
 | Network Cross-Pacific                            | 160-180 ms | 25 MiB/s   | 40 s   |
+| Network Disk Sequential Write + fsync (8 KiB)    | 1 ms       | 8 MiB/s    | 2 min  |
+| HDD Sequential Write + fsync (8 KiB)             | 1 ms       | 8 MiB/s    | 2 min  |
+| HDD Random Read (8 KiB)                          | 10 ms      | 2 MiB/s    | 10 min |
+| CPU System Call                                  | 100 ns     |            |        |
+| CPU Context Switch                               | 1 μs       |            |        |
 | Proxy Request (Envoy, HAProxy, Nginx, ProxySQL)  | 50 μs      |            |        |
 | Database Query (MySQL, Memcached, Redis, ...)    | 500 μs     |            |        |
+| Blob Storage List (1000 keys)                    | 150 ms     |            |        |
 
 Throughput is the most you can get, e.g. many requests in flight for random
 reads. Network Disk is EBS gp3 / GCP Hyperdisk Balanced provisioned to the max.
-Blob Storage is S3, GCS and Azure Blob from a VM in the same region; access
-pattern doesn't matter. Latency is p99; Read and Write are at the largest
-request that costs no more than 8 KiB. One connection gets ~100 MiB/s, so throughput
-takes 32+ connections and is capped by the VM's network. A PUT is durable when
-it returns, like write + fsync. GCS Rapid reads in ~10 ms. Region-to-region latencies:
+Network Bandwidth is a typical 64-128 vCPU VM (AWS m8, GCP C4/N4, Azure Dv6:
+30-67 Gbit/s); NW Limit rows max out at it, with enough connections. Blob
+Storage is S3, GCS and Azure Blob from a VM in the same region; access pattern
+doesn't matter. Its latency is p99; Read and Write are at the largest request
+that costs no more than 8 KiB. One connection gets ~100 MiB/s, so filling the
+network takes 32+ connections. A PUT is durable when it returns, like write +
+fsync. GCS Rapid reads in ~10 ms. Region-to-region latencies:
 [cloudping](https://www.cloudping.co/).
 
 I am aware of some inefficiencies in this suite. I intend to improve my skills
