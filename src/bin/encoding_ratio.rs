@@ -4,6 +4,7 @@
 // inverted and n-gram indexes, which are against their source text.
 //
 //   cargo run --release --features encodings --bin encoding_ratio -- parquet hits_0.parquet
+//   cargo run --release --features encodings --bin encoding_ratio -- cardinality hits_0.parquet
 //   cargo run --release --features encodings --bin encoding_ratio -- postings collection.tsv
 //   cargo run --release --features encodings --bin encoding_ratio -- postings --paragraphs dickens
 //   cargo run --release --features encodings --bin encoding_ratio -- timeseries nab/*.csv
@@ -11,6 +12,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::time::Instant;
 
+use arrow_array::cast::AsArray;
 use arrow_array::{Array, RecordBatch};
 use bitpacking::{BitPacker, BitPacker4x};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
@@ -84,6 +86,95 @@ fn parquet(path: &str) {
         let file = write(props);
         report(name, naive, file.len());
         println!("    {}, 1 thread", decode(&file));
+    }
+}
+
+// Checks two napkin rules against Parquet's dictionary + RLE-hybrid encoding,
+// uncompressed, one column at a time with one dictionary per column: a column
+// with d distinct values costs log2(d) bits per value plus its dictionary, and
+// a column in r runs costs about 3 bytes per run plus its dictionary,
+// whichever is smaller.
+fn cardinality(path: &str) {
+    let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(path).unwrap())
+        .unwrap()
+        .build()
+        .unwrap();
+    let batches: Vec<RecordBatch> = reader.map(|b| b.unwrap()).collect();
+    let schema = batches[0].schema();
+    let props = WriterProperties::builder()
+        .set_compression(Compression::UNCOMPRESSED)
+        .set_dictionary_page_size_limit(1 << 30)
+        .set_max_row_group_row_count(None)
+        .set_max_row_group_bytes(None)
+        .build();
+    println!(
+        "  {:<24} {:>8} {:>9} {:>9} {:>8} {:>8} {:>8} {:>8}",
+        "column", "rows", "distinct", "runs", "actual", "dict", "runs", "error"
+    );
+    for (c, field) in schema.fields().iter().enumerate() {
+        // Each non-null value as bytes, to count distinct values and runs.
+        let mut distinct = std::collections::HashSet::new();
+        let (mut n, mut runs, mut dictionary) = (0usize, 0usize, 0usize);
+        let mut prev: Option<Vec<u8>> = None;
+        for batch in &batches {
+            let a = batch.column(c);
+            let data = a.to_data();
+            let width = a.data_type().primitive_width();
+            for i in (0..a.len()).filter(|&i| a.is_valid(i)) {
+                let value: &[u8] = if let Some(w) = width {
+                    let o = (a.offset() + i) * w;
+                    &data.buffers()[0].as_slice()[o..o + w]
+                } else if let Some(b) = a.as_binary_opt::<i32>() {
+                    b.value(i)
+                } else if let Some(s) = a.as_string_opt::<i32>() {
+                    s.value(i).as_bytes()
+                } else {
+                    continue;
+                };
+                n += 1;
+                if prev.as_deref() != Some(value) {
+                    runs += 1;
+                    prev = Some(value.to_vec());
+                }
+                if distinct.insert(value.to_vec()) {
+                    // Parquet's plain dictionary page: the value, plus a 4-byte
+                    // length for strings.
+                    dictionary += value.len() + if width.is_some() { 0 } else { 4 };
+                }
+            }
+        }
+        if n == 0 {
+            continue;
+        }
+        let mut out = Vec::new();
+        let one = batches[0].project(&[c]).unwrap().schema();
+        let mut writer = ArrowWriter::try_new(&mut out, one, Some(props.clone())).unwrap();
+        for batch in &batches {
+            writer.write(&batch.project(&[c]).unwrap()).unwrap();
+        }
+        writer.close().unwrap();
+        let file = ParquetRecordBatchReaderBuilder::try_new(bytes::Bytes::from(out)).unwrap();
+        let actual: i64 = file
+            .metadata()
+            .row_groups()
+            .iter()
+            .map(|g| g.column(0).uncompressed_size())
+            .sum();
+        let bits = |bytes: f64| bytes * 8.0 / n as f64;
+        let log2 = (usize::BITS - (distinct.len() - 1).leading_zeros()) as f64;
+        let by_dict = bits(dictionary as f64) + log2;
+        let by_runs = bits((dictionary + 3 * runs) as f64);
+        println!(
+            "  {:<24} {:>8} {:>9} {:>9} {:>8.2} {:>8.2} {:>8.2} {:>7.0}%",
+            field.name(),
+            n,
+            distinct.len(),
+            runs,
+            bits(actual as f64),
+            by_dict,
+            by_runs,
+            100.0 * (bits(actual as f64) / by_dict.min(by_runs) - 1.0)
+        );
     }
 }
 
@@ -436,10 +527,11 @@ fn timeseries(paths: &[String]) {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let usage = "usage: encoding_ratio parquet|postings|timeseries <files...>";
+    let usage = "usage: encoding_ratio parquet|cardinality|postings|timeseries <files...>";
     let (mode, files) = args.split_first().expect(usage);
     match mode.as_str() {
         "parquet" => files.iter().for_each(|f| parquet(f)),
+        "cardinality" => files.iter().for_each(|f| cardinality(f)),
         "postings" => {
             let paragraphs = files.first().is_some_and(|f| f == "--paragraphs");
             let files = &files[paragraphs as usize..];

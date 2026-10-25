@@ -143,6 +143,7 @@ build doesn't pull in Parquet:
 
 ```bash
 cargo run --release --features encodings --bin encoding_ratio -- parquet taxi.parquet hits_0.parquet
+cargo run --release --features encodings --bin encoding_ratio -- cardinality taxi.parquet hits_0.parquet
 cargo run --release --features encodings --bin encoding_ratio -- postings collection.tsv Apache.log ...  # also 3-/4-gram indexes
 cargo run --release --features encodings --bin encoding_ratio -- postings --paragraphs dickens webster
 cargo run --release --features encodings --bin encoding_ratio -- timeseries nab/*.csv
@@ -217,6 +218,20 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   2.2-2.8x (~7 B/point) on float gauges like CPU utilization and temperature,
   and 7-13x (1.2-2.4 B/point) on integer-valued counts. Regular timestamps cost
   1 bit. Column-wise delta + zstd -3 gets 4.0x overall.
+
+The cardinality rows were checked with `encoding_ratio cardinality`, which
+writes each column of taxi and ClickBench `hits_0` on its own with Parquet's
+dictionary + RLE-hybrid encoding (uncompressed, one dictionary per column) and
+compares its size with the smaller of log2(distinct) bits per value and 3 bytes
+per run, each plus the dictionary (every distinct value once, strings with a
+4-byte length). Whole tables land within 6% (taxi: actual 0.94x of the rule)
+and 1% (hits: 1.01x); log2(distinct) alone overestimates them by 12% and 24%.
+Per column, among the 59 at 1 bit per value or more, the median error is 15%
+and 50 are within 50%. Low-cardinality columns with skewed values come in under
+the rule (taxi `payment_type`: 5 values, 1.9 bits instead of 3), because the
+RLE-hybrid catches short runs of the common value. Columns whose runs are
+shorter than 8 come in over it (`ClientIP`: 7.0 bits, rule 4.3), because
+Parquet only run-length encodes runs of 8 or more.
 
 The Floats / Integers / Strings rows come from `src/bin/column_codecs.rs`
 (same feature), which runs the crates Vortex builds on: spiraldb's `alp`,

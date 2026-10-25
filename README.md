@@ -181,19 +181,23 @@ Structured data, against its in-memory size (8 bytes per float64, the type's
 width per integer, the bytes plus a 4-byte offset per string), measured on real
 datasets with `encoding_ratio` and `column_codecs`:
 
-| What           | Encoding                        | Ratio |
-| -------------- | ------------------------------- | ----- |
-| Columnar table | Parquet dictionary + RLE + zstd | 10x   |
-| Floats         | ALP                             | 4x    |
-| Integers       | FOR / delta + bitpacking        | 2-4x  |
-| Strings        | FSST                            | 2x    |
+| What                       | Encoding                        | Ratio or size               |
+| -------------------------- | ------------------------------- | --------------------------- |
+| Columnar table             | Parquet dictionary + RLE + zstd | 10x                         |
+| Floats                     | ALP                             | 4x                          |
+| Integers                   | FOR / delta + bitpacking        | 2-4x                        |
+| Strings                    | FSST                            | 2x                          |
+| Low-cardinality column     | Dictionary                      | log2(distinct) bits / value |
+| Sorted or repeating column | RLE                             | 3 bytes / run               |
 
 ALP gets the same ratio as zstd on floats and decodes at ~10 GiB/s on one core.
 Floats that use the full mantissa (coordinates, model weights) barely compress
 at all. Bitpacked integers take log2 of each 1024-value range in bits and decode
 at ~15 GiB/s; sorted or low-cardinality columns need RLE or a dictionary first.
 FSST decodes at ~2 GiB/s and keeps every string decodable on its own, where zstd
-over a whole column gets 3-10x.
+over a whole column gets 3-10x. Dictionary and RLE columns also pay for the
+dictionary itself (each distinct value once); the smaller of the two rules
+predicts Parquet's dictionary + RLE size of whole tables within 10%.
 
 Search indexes, against the size of the text they index (documents of ~16 KiB
 for n-grams; at one line per document they're as big as the text):
