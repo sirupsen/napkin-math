@@ -19,12 +19,11 @@ zstd = "0.14"
 arrow-array = { version = "60", optional = true }
 bitpacking = { version = "0.9", optional = true }
 bytes = { version = "1", optional = true }
-half = { version = "2", optional = true }
 parquet = { version = "60", default-features = false, features = ["arrow", "snap", "zstd"], optional = true }
 roaring = { version = "0.11", optional = true }
 
 [features]
-encodings = ["dep:arrow-array", "dep:bitpacking", "dep:bytes", "dep:half", "dep:parquet", "dep:roaring"]
+encodings = ["dep:arrow-array", "dep:bitpacking", "dep:bytes", "dep:parquet", "dep:roaring"]
 
 [[bin]]
 name = "encoding_ratio"

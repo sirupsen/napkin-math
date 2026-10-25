@@ -927,7 +927,6 @@ dependencies = [
  "crc32fast",
  "criterion",
  "flate2",
- "half",
  "libc",
  "lz4_flex",
  "parquet",

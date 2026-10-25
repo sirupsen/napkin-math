@@ -178,8 +178,8 @@ by 10x_. E.g. on the Silesia corpus, lz4 gets 2x at ~500 MiB/s, zstd -9 3.5x at
 | Encrypted / compressed | 1x                |
 
 Structured data, against its naive in-memory size (8 bytes per int64, 4 per doc
-ID / frequency / position, 16 per timestamp + float64 point, 4 per float32
-dimension), measured with `encoding_ratio`:
+ID / frequency / position, 16 per timestamp + float64 point), measured with
+`encoding_ratio`:
 
 | What                          | Encoding                         | Ratio |
 | ----------------------------- | -------------------------------- | ----- |
@@ -190,19 +190,6 @@ dimension), measured with `encoding_ratio`:
 | Inverted index, positions     | Delta + bitpacking               | 5x    |
 | Time series, float gauges     | Gorilla                          | 2x    |
 | Time series, counters         | Gorilla                          | 10x   |
-| Vectors (float32)             | zstd                             | 1.1x  |
-
-Vector quantization, with recall@10 against exact search (1536-dimension
-OpenAI embeddings, no reranking unless noted):
-
-| Encoding                         | Ratio | Recall@10 |
-| -------------------------------- | ----- | --------- |
-| float16                          | 2x    | 100%      |
-| int8                             | 4x    | 99%       |
-| Binary                           | 32x   | 70%       |
-| Binary, rerank top 100 (float32) | 32x   | 99%       |
-| PQ, 1 byte per 8 dimensions      | 32x   | 80%       |
-| PQ, 1 byte per 32 dimensions     | 128x  | 45%       |
 
 ## Techniques
 

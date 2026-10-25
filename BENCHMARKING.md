@@ -143,9 +143,9 @@ build doesn't pull in Parquet:
 
 ```bash
 cargo run --release --features encodings --bin encoding_ratio -- parquet taxi.parquet hits_0.parquet
-cargo run --release --features encodings --bin encoding_ratio -- postings collection.tsv
+cargo run --release --features encodings --bin encoding_ratio -- postings collection.tsv Apache.log ...
+cargo run --release --features encodings --bin encoding_ratio -- postings --paragraphs dickens webster
 cargo run --release --features encodings --bin encoding_ratio -- timeseries nab/*.csv
-cargo run --release --features encodings --bin encoding_ratio -- vectors dbpedia/*.parquet
 ```
 
 On October 24, 2026 (ratios on any machine; speeds single-threaded on an AWS
@@ -157,28 +157,36 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   strings) 2.2x and 10.4x. Plain encoding is 1.0x. Decoding to Arrow: plain
   5.4 / 3.0 GiB/s, dictionary + RLE 4.2 / 2.6 GiB/s, + zstd 2.1 / 1.7 GiB/s
   (taxi / hits).
-- Inverted index over the MS MARCO passage collection (8.8M passages, 1.6M
-  terms, 358M postings, 514M positions; lowercased alphanumeric tokens),
-  against 4 bytes per doc ID, frequency and position. Doc IDs: delta +
-  bitpacking in 128-value blocks 3.3x, delta + varint 3.0x, roaring 2.1x.
-  Frequencies (minus one), bitpacked: 11.7x. Positions, delta within each
-  document then bitpacked: 4.5x. All three together: 4.9x. Unpacking the
-  full 128-ID blocks with `bitpacking`'s `BitPacker4x` ran at 3.1 billion
-  IDs/s, 11.6 GiB/s of u32 output.
+- Inverted indexes over 11 corpora, against 4 bytes per doc ID, frequency and
+  position, with lowercased alphanumeric tokens. Doc IDs are delta-coded and
+  bitpacked in 128-value blocks, frequencies (minus one) bitpacked, positions
+  delta-coded within each document and bitpacked. One document per line,
+  except per paragraph for `dickens` and `webster`:
+
+  | Corpus | Docs | Postings | Doc IDs | Freqs | Positions | All |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | MS MARCO passages | 8.8M | 358M | 3.3x | 11.7x | 4.5x | 4.9x |
+  | enwik8 (Wikipedia XML) | 1.1M | 11M | 2.5x | 8.9x | 4.1x | 4.0x |
+  | Silesia `dickens` | 33k | 1.3M | 3.7x | 7.7x | 3.8x | 4.4x |
+  | Silesia `webster` | 218k | 4.9M | 3.5x | 8.3x | 4.3x | 4.7x |
+  | Silesia `samba` (source) | 596k | 2.7M | 2.9x | 12.0x | 6.1x | 5.1x |
+  | Silesia `xml` | 58k | 322k | 3.1x | 8.2x | 4.2x | 4.3x |
+  | loghub `Apache.log` | 56k | 1.0M | 5.0x | 64.6x | 8.3x | 8.9x |
+  | loghub `Linux.log` | 26k | 426k | 4.6x | 17.7x | 6.8x | 7.1x |
+  | ClickBench `Title` | 936k | 11M | 3.2x | 21.8x | 6.3x | 5.8x |
+  | ClickBench `URL` | 1.0M | 13M | 3.7x | 18.9x | 6.2x | 6.2x |
+  | ClickBench `SearchPhrase` | 69k | 274k | 2.9x | 7.0x | 5.7x | 4.5x |
+
+  On MS MARCO, delta + varint gets 3.0x on doc IDs and roaring 2.1x. Logs
+  and ClickBench rows repeat a lot, so their doc IDs cluster and most
+  frequencies are 1. Unpacking MS MARCO's full 128-ID blocks with
+  `bitpacking`'s `BitPacker4x` ran at 3.1 billion IDs/s, 11.6 GiB/s of u32
+  output.
 - Time series from the Numenta Anomaly Benchmark (9 real CloudWatch and sensor
   series at 5-minute intervals), against 16 bytes per point: Gorilla gets
   2.2-2.8x (~7 B/point) on float gauges like CPU utilization and temperature,
   and 7-13x (1.2-2.4 B/point) on integer-valued counts. Regular timestamps cost
   1 bit. Column-wise delta + zstd -3 gets 4.0x overall.
-- Vectors: the first 3 of 26 shards of Qdrant's
-  `dbpedia-entities-openai3-text-embedding-3-large-1536-1M` on Hugging Face
-  (115k OpenAI text-embedding-3-large vectors, 1536 dimensions, normalized).
-  Lossless: zstd -3 1.1x, byte shuffle + zstd 1.2x. Recall@10 for 1000
-  held-out queries against the other 114k vectors by exact inner product:
-  float16 1.000, int8 (per-dimension min/max) 0.997, binary (sign bits,
-  Hamming) 0.703, binary then float32 rerank of the top 100 0.995 (the float32
-  vectors still have to be stored somewhere), PQ with 256 centroids per
-  subspace trained on 50k vectors: 192 bytes 0.794, 48 bytes 0.444.
 
 ## Blob storage rows (March 2026)
 

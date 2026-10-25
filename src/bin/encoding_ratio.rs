@@ -1,12 +1,12 @@
-// Compression ratios for structured data: columnar tables, inverted indexes,
-// time series and embeddings. Every ratio is against the naive in-memory
-// representation (Arrow buffers, 4 bytes per doc ID, 16 bytes per point, 4
-// bytes per dimension), not against a text export.
+// Compression ratios for structured data: columnar tables, inverted indexes
+// and time series. Every ratio is against the naive in-memory representation
+// (Arrow buffers, 4 bytes per doc ID, 16 bytes per point), not against a text
+// export.
 //
 //   cargo run --release --features encodings --bin encoding_ratio -- parquet hits_0.parquet
 //   cargo run --release --features encodings --bin encoding_ratio -- postings collection.tsv
+//   cargo run --release --features encodings --bin encoding_ratio -- postings --paragraphs dickens
 //   cargo run --release --features encodings --bin encoding_ratio -- timeseries nab/*.csv
-//   cargo run --release --features encodings --bin encoding_ratio -- vectors dbpedia/*.parquet
 use std::collections::HashMap;
 use std::fs::File;
 use std::time::Instant;
@@ -127,14 +127,20 @@ struct Postings {
     last_position: u32,
 }
 
-// MS MARCO passages: one "<id>\t<text>" line per document. Doc IDs are line
-// numbers, terms are lowercased alphanumeric runs.
-fn postings(path: &str) {
-    let text = std::fs::read_to_string(path).unwrap();
+// One document per line (MS MARCO's "<id>\t<text>", log lines, column values)
+// or, with `paragraphs`, per blank-line-separated paragraph (prose). Doc IDs
+// are document numbers, terms are lowercased alphanumeric runs.
+fn postings(path: &str, paragraphs: bool) {
+    let text = String::from_utf8_lossy(&std::fs::read(path).unwrap()).replace("\r\n", "\n");
     let mut index: HashMap<String, Postings> = HashMap::new();
     let mut word = String::new();
     let mut docs = 0u32;
-    for line in text.lines() {
+    let documents: Box<dyn Iterator<Item = &str>> = if paragraphs {
+        Box::new(text.split("\n\n").filter(|p| !p.trim().is_empty()))
+    } else {
+        Box::new(text.lines())
+    };
+    for line in documents {
         let body = line.split_once('\t').map_or(line, |(_, b)| b);
         for (position, w) in body
             .split(|c: char| !c.is_alphanumeric())
@@ -334,310 +340,18 @@ fn timeseries(paths: &[String]) {
     report("delta + zstd -3", total_naive, total_zstd);
 }
 
-// Run f(i) for i in 0..n on all cores.
-fn par_map<T: Send, F: Fn(usize) -> T + Sync>(n: usize, f: F) -> Vec<T> {
-    let threads = std::thread::available_parallelism().unwrap().get();
-    let chunk = n.div_ceil(threads);
-    std::thread::scope(|s| {
-        let handles: Vec<_> = (0..n)
-            .step_by(chunk.max(1))
-            .map(|start| {
-                let f = &f;
-                s.spawn(move || (start..(start + chunk).min(n)).map(f).collect::<Vec<T>>())
-            })
-            .collect();
-        handles
-            .into_iter()
-            .flat_map(|h| h.join().unwrap())
-            .collect()
-    })
-}
-
-fn top_k(scores: &[f32], k: usize) -> Vec<usize> {
-    let mut idx: Vec<usize> = (0..scores.len()).collect();
-    idx.select_nth_unstable_by(k, |&a, &b| scores[b].total_cmp(&scores[a]));
-    idx.truncate(k);
-    idx
-}
-
-fn dot(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b).map(|(x, y)| x * y).sum()
-}
-
-// Embedding columns: list<float> or list<double>, normalized to unit length.
-fn read_vectors(paths: &[String]) -> (usize, Vec<f32>) {
-    use arrow_array::cast::AsArray;
-    use arrow_array::types::{Float32Type, Float64Type};
-    use arrow_array::ArrayRef;
-    let mut values = Vec::new();
-    let mut dims = 0;
-    for path in paths {
-        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(path).unwrap())
-            .unwrap()
-            .build()
-            .unwrap();
-        for batch in reader {
-            let batch = batch.unwrap();
-            let schema = batch.schema();
-            let (i, _) = schema
-                .fields()
-                .iter()
-                .enumerate()
-                .find(|(_, f)| f.name().contains("embedding"))
-                .expect("no embedding column");
-            let column = batch.column(i);
-            let (inner, len): (&ArrayRef, usize) = match column.as_fixed_size_list_opt() {
-                Some(list) => (list.values(), list.value_length() as usize),
-                None => {
-                    let list = column.as_list::<i32>();
-                    (list.values(), list.value_length(0) as usize)
-                }
-            };
-            dims = len;
-            match inner.as_primitive_opt::<Float64Type>() {
-                Some(f64s) => values.extend(f64s.values().iter().map(|&v| v as f32)),
-                None => values.extend(inner.as_primitive::<Float32Type>().values().iter()),
-            }
-        }
-    }
-    for v in values.chunks_exact_mut(dims) {
-        let norm = dot(v, v).sqrt();
-        v.iter_mut().for_each(|x| *x /= norm);
-    }
-    (dims, values)
-}
-
-// Product quantization: m subspaces, 256 k-means centroids each, one byte per
-// subspace.
-struct Pq {
-    sub: usize,
-    centroids: Vec<Vec<f32>>, // per subspace, 256 * sub
-}
-
-fn nearest(centroids: &[f32], x: &[f32]) -> usize {
-    centroids
-        .chunks_exact(x.len())
-        .map(|c| c.iter().zip(x).map(|(a, b)| (a - b) * (a - b)).sum::<f32>())
-        .enumerate()
-        .min_by(|a, b| a.1.total_cmp(&b.1))
-        .unwrap()
-        .0
-}
-
-impl Pq {
-    fn train(dims: usize, m: usize, train: &[f32]) -> Pq {
-        let sub = dims / m;
-        let n = train.len() / dims;
-        let centroids = par_map(m, |s| {
-            let point = |i: usize| &train[i * dims + s * sub..i * dims + (s + 1) * sub];
-            let mut c: Vec<f32> = (0..256).flat_map(|i| point(i * n / 256).to_vec()).collect();
-            for _ in 0..15 {
-                let mut sums = vec![0f32; 256 * sub];
-                let mut counts = vec![0usize; 256];
-                for i in 0..n {
-                    let j = nearest(&c, point(i));
-                    counts[j] += 1;
-                    sums[j * sub..(j + 1) * sub]
-                        .iter_mut()
-                        .zip(point(i))
-                        .for_each(|(a, b)| *a += b);
-                }
-                for j in (0..256).filter(|&j| counts[j] > 0) {
-                    for d in 0..sub {
-                        c[j * sub + d] = sums[j * sub + d] / counts[j] as f32;
-                    }
-                }
-            }
-            c
-        });
-        Pq { sub, centroids }
-    }
-
-    fn encode(&self, v: &[f32]) -> Vec<u8> {
-        self.centroids
-            .iter()
-            .zip(v.chunks_exact(self.sub))
-            .map(|(c, x)| nearest(c, x) as u8)
-            .collect()
-    }
-
-    // Asymmetric distance: inner products of the query with every centroid.
-    fn scores(&self, q: &[f32], codes: &[u8]) -> Vec<f32> {
-        let m = self.centroids.len();
-        let table: Vec<f32> = self
-            .centroids
-            .iter()
-            .zip(q.chunks_exact(self.sub))
-            .flat_map(|(c, x)| c.chunks_exact(self.sub).map(move |c| dot(c, x)))
-            .collect();
-        codes
-            .chunks_exact(m)
-            .map(|code| {
-                code.iter()
-                    .enumerate()
-                    .map(|(s, &j)| table[s * 256 + j as usize])
-                    .sum()
-            })
-            .collect()
-    }
-}
-
-fn vectors(paths: &[String]) {
-    let (dims, values) = read_vectors(paths);
-    let n = values.len() / dims;
-    let raw: Vec<u8> = values.iter().flat_map(|v| v.to_le_bytes()).collect();
-    let naive = raw.len();
-    println!("{n} vectors of {dims} dimensions, {naive} bytes as float32");
-    // Byte-shuffle: all first bytes, then all second bytes, ... so the
-    // exponent bytes sit together, like Blosc's shuffle filter.
-    let mut shuffled = Vec::with_capacity(naive);
-    for byte in 0..4 {
-        shuffled.extend(raw.iter().skip(byte).step_by(4));
-    }
-    report(
-        "zstd -3",
-        naive,
-        zstd::bulk::compress(&raw, 3).unwrap().len(),
-    );
-    report(
-        "byte shuffle + zstd -3",
-        naive,
-        zstd::bulk::compress(&shuffled, 3).unwrap().len(),
-    );
-
-    // Lossy: recall@10 against exact inner-product search, no reranking,
-    // 1000 held-out queries.
-    const K: usize = 10;
-    let queries = 1000;
-    let (q, base) = values.split_at(queries * dims);
-    let nb = base.len() / dims;
-    fn row(data: &[f32], dims: usize, i: usize) -> &[f32] {
-        &data[i * dims..(i + 1) * dims]
-    }
-    let exact = par_map(queries, |i| {
-        let scores: Vec<f32> = (0..nb)
-            .map(|j| dot(row(q, dims, i), row(base, dims, j)))
-            .collect();
-        top_k(&scores, K)
-    });
-    let recall = |scores: &(dyn Fn(usize) -> Vec<f32> + Sync)| {
-        let found = par_map(queries, |i| {
-            let approx = top_k(&scores(i), K);
-            approx.iter().filter(|j| exact[i].contains(j)).count()
-        });
-        found.iter().sum::<usize>() as f64 / (queries * K) as f64
-    };
-    let lossy = |name: &str, bytes_per_vector: usize, r: f64| {
-        println!(
-            "  {:<34} {:>6.1}x  recall@10 {:.3}",
-            name,
-            (dims * 4) as f64 / bytes_per_vector as f64,
-            r
-        );
-    };
-
-    let f16: Vec<f32> = base
-        .iter()
-        .map(|&v| half::f16::from_f32(v).to_f32())
-        .collect();
-    lossy(
-        "float16",
-        dims * 2,
-        recall(&|i| {
-            (0..nb)
-                .map(|j| dot(row(q, dims, i), row(&f16, dims, j)))
-                .collect()
-        }),
-    );
-
-    // Scalar quantization: per-dimension min/max to 0..255.
-    let (mut lo, mut hi) = (vec![f32::MAX; dims], vec![f32::MIN; dims]);
-    for v in base.chunks_exact(dims) {
-        for d in 0..dims {
-            lo[d] = lo[d].min(v[d]);
-            hi[d] = hi[d].max(v[d]);
-        }
-    }
-    let int8: Vec<f32> = base
-        .chunks_exact(dims)
-        .flat_map(|v| {
-            (0..dims).map(|d| {
-                let step = (hi[d] - lo[d]) / 255.0;
-                lo[d] + ((v[d] - lo[d]) / step).round() * step
-            })
-        })
-        .collect();
-    lossy(
-        "int8 (scalar)",
-        dims,
-        recall(&|i| {
-            (0..nb)
-                .map(|j| dot(row(q, dims, i), row(&int8, dims, j)))
-                .collect()
-        }),
-    );
-
-    // Binary: one sign bit per dimension, Hamming distance between query and
-    // vector bits.
-    fn bits(v: &[f32]) -> Vec<u64> {
-        v.chunks(64)
-            .map(|c| {
-                c.iter()
-                    .enumerate()
-                    .fold(0u64, |acc, (b, &x)| acc | ((x > 0.0) as u64) << b)
-            })
-            .collect()
-    }
-    let base_bits: Vec<Vec<u64>> = base.chunks_exact(dims).map(bits).collect();
-    let hamming = |i: usize| -> Vec<f32> {
-        let qb = bits(row(q, dims, i));
-        base_bits
-            .iter()
-            .map(|b| {
-                -(b.iter()
-                    .zip(&qb)
-                    .map(|(x, y)| (x ^ y).count_ones())
-                    .sum::<u32>() as f32)
-            })
-            .collect()
-    };
-    lossy("binary", dims / 8, recall(&hamming));
-    // Binary, then rerank the top 100 with float32.
-    let reranked = |i: usize| -> Vec<f32> {
-        let candidates = top_k(&hamming(i), 10 * K);
-        let mut scores = vec![f32::MIN; nb];
-        for j in candidates {
-            scores[j] = dot(row(q, dims, i), row(base, dims, j));
-        }
-        scores
-    };
-    lossy(
-        "binary + float32 rerank of top 100",
-        dims / 8,
-        recall(&reranked),
-    );
-
-    let train = &base[..base.len().min(50_000 * dims)];
-    for m in [dims / 8, dims / 32] {
-        let pq = Pq::train(dims, m, train);
-        let codes: Vec<u8> = par_map(nb, |j| pq.encode(row(base, dims, j))).concat();
-        lossy(
-            &format!("PQ, {m} bytes"),
-            m,
-            recall(&|i| pq.scores(row(q, dims, i), &codes)),
-        );
-    }
-}
-
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let usage = "usage: encoding_ratio parquet|postings|timeseries|vectors <files...>";
+    let usage = "usage: encoding_ratio parquet|postings|timeseries <files...>";
     let (mode, files) = args.split_first().expect(usage);
     match mode.as_str() {
         "parquet" => files.iter().for_each(|f| parquet(f)),
-        "postings" => files.iter().for_each(|f| postings(f)),
+        "postings" => {
+            let paragraphs = files.first().is_some_and(|f| f == "--paragraphs");
+            let files = &files[paragraphs as usize..];
+            files.iter().for_each(|f| postings(f, paragraphs))
+        }
         "timeseries" => timeseries(files),
-        "vectors" => vectors(files),
         _ => panic!("{usage}"),
     }
 }
