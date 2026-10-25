@@ -42,6 +42,7 @@ to improve accuracy and as hardware improves.
 | Memory Sequential Read, 1 thread                |            | 20 GiB/s   | 50 ms  |
 | Memory Sequential Write, 1 thread               |            | 10 GiB/s   | 100 ms |
 | CPU Encrypt (AES-256-GCM)                       |            | 10 GiB/s   | 100 ms |
+| CPU Decode Bitpacked Integers                   |            | 10 GiB/s   | 100 ms |
 | CPU Hash, not crypto-safe (64 bytes)            | 10 ns      | 5 GiB/s    | 200 ms |
 | Network Bandwidth                               |            | 5 GiB/s    | 200 ms |
 | Network Same-Zone                               | 100 μs     | NW Limit   |        |
@@ -52,6 +53,7 @@ to improve accuracy and as hardware improves.
 | Memory Random Write (64 bytes)                  |            | 3 GiB/s    | 300 ms |
 | Memory Random Read (64 bytes)                   | 100 ns     | 3 GiB/s    | 300 ms |
 | SSD Sequential Write                            |            | 2 GiB/s    | 500 ms |
+| CPU Decode Parquet (dictionary + zstd)          |            | 2 GiB/s    | 500 ms |
 | SSD Random Write (8 KiB)                        | 30 μs      | 2 GiB/s    | 500 ms |
 | SSD Random Read (8 KiB)                         | 100 μs     | 2 GiB/s    | 500 ms |
 | CPU Serialize (JSON, Protobuf)                  |            | 1 GiB/s    | 1 s    |
@@ -176,18 +178,31 @@ by 10x_. E.g. on the Silesia corpus, lz4 gets 2x at ~500 MiB/s, zstd -9 3.5x at
 | Encrypted / compressed | 1x                |
 
 Structured data, against its naive in-memory size (8 bytes per int64, 4 per doc
-ID, 16 per timestamp + float64 point, 4 per float32 dimension), measured with
-`encoding_ratio`:
+ID / frequency / position, 16 per timestamp + float64 point, 4 per float32
+dimension), measured with `encoding_ratio`:
 
-| What                          | Encoding                         | Ratio          |
-| ----------------------------- | -------------------------------- | -------------- |
-| Columnar table                | Parquet dictionary + RLE         | 2-5x           |
-| Columnar table                | Parquet dictionary + RLE + zstd  | 10x            |
-| Inverted index (doc IDs)      | Delta + bitpacking               | 3-4x           |
-| Time series, float gauges     | Gorilla                          | 2x             |
-| Time series, counters         | Gorilla                          | 10x            |
-| Vectors (float32)             | zstd                             | 1.1x           |
-| Vectors (float32)             | f16 / int8 / binary quantization | 2x / 4x / 32x  |
+| What                          | Encoding                         | Ratio |
+| ----------------------------- | -------------------------------- | ----- |
+| Columnar table                | Parquet dictionary + RLE         | 2-5x  |
+| Columnar table                | Parquet dictionary + RLE + zstd  | 10x   |
+| Inverted index, doc IDs       | Delta + bitpacking               | 3x    |
+| Inverted index, frequencies   | Bitpacking                       | 10x   |
+| Inverted index, positions     | Delta + bitpacking               | 5x    |
+| Time series, float gauges     | Gorilla                          | 2x    |
+| Time series, counters         | Gorilla                          | 10x   |
+| Vectors (float32)             | zstd                             | 1.1x  |
+
+Vector quantization, with recall@10 against exact search (1536-dimension
+OpenAI embeddings, no reranking unless noted):
+
+| Encoding                         | Ratio | Recall@10 |
+| -------------------------------- | ----- | --------- |
+| float16                          | 2x    | 100%      |
+| int8                             | 4x    | 99%       |
+| Binary                           | 32x   | 70%       |
+| Binary, rerank top 100 (float32) | 32x   | 99%       |
+| PQ, 1 byte per 8 dimensions      | 32x   | 80%       |
+| PQ, 1 byte per 32 dimensions     | 128x  | 45%       |
 
 ## Techniques
 

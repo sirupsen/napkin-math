@@ -4,11 +4,12 @@
 // bytes per dimension), not against a text export.
 //
 //   cargo run --release --features encodings --bin encoding_ratio -- parquet hits_0.parquet
-//   cargo run --release --features encodings --bin encoding_ratio -- postings enwik8
+//   cargo run --release --features encodings --bin encoding_ratio -- postings collection.tsv
 //   cargo run --release --features encodings --bin encoding_ratio -- timeseries nab/*.csv
-//   cargo run --release --features encodings --bin encoding_ratio -- vectors embeddings.json
+//   cargo run --release --features encodings --bin encoding_ratio -- vectors dbpedia/*.parquet
 use std::collections::HashMap;
 use std::fs::File;
+use std::time::Instant;
 
 use arrow_array::{Array, RecordBatch};
 use bitpacking::{BitPacker, BitPacker4x};
@@ -50,7 +51,20 @@ fn parquet(path: &str) {
             writer.write(batch).unwrap();
         }
         writer.close().unwrap();
-        out.len()
+        bytes::Bytes::from(out)
+    };
+    // Single-threaded decode back to Arrow, reported against the Arrow size.
+    let decode = |file: &bytes::Bytes| {
+        let secs = best_of(3, || {
+            let reader = ParquetRecordBatchReaderBuilder::try_new(file.clone())
+                .unwrap()
+                .build()
+                .unwrap();
+            for batch in reader {
+                std::hint::black_box(batch.unwrap());
+            }
+        });
+        format!("decode {:.2} GiB/s", naive as f64 / secs / (1 << 30) as f64)
     };
     let plain = WriterProperties::builder()
         .set_dictionary_enabled(false)
@@ -62,87 +76,161 @@ fn parquet(path: &str) {
     let zstd = WriterProperties::builder()
         .set_compression(Compression::ZSTD(ZstdLevel::try_new(3).unwrap()))
         .build();
-    report("parquet plain", naive, write(plain));
-    report("parquet dictionary + RLE", naive, write(encoded));
-    report("parquet dictionary + RLE + zstd -3", naive, write(zstd));
+    for (name, props) in [
+        ("parquet plain", plain),
+        ("parquet dictionary + RLE", encoded),
+        ("parquet dictionary + RLE + zstd -3", zstd),
+    ] {
+        let file = write(props);
+        report(name, naive, file.len());
+        println!("    {}, 1 thread", decode(&file));
+    }
 }
 
-// enwik8 is a Wikipedia XML dump; each <page> is a document. Only doc IDs are
-// indexed, no term frequencies or positions.
+fn varint(mut v: u32) -> usize {
+    let mut n = 1;
+    while v >= 0x80 {
+        v >>= 7;
+        n += 1;
+    }
+    n
+}
+
+// Bytes for a stream of small integers in Lucene's layout: 128-value blocks of
+// one bit-width byte plus the packed values, and a delta + varint tail.
+fn bitpacked_size(values: &[u32]) -> usize {
+    let packer = BitPacker4x::new();
+    let mut blocks = values.chunks_exact(BitPacker4x::BLOCK_LEN);
+    let mut size = 0;
+    for block in &mut blocks {
+        size += 1 + BitPacker4x::compressed_block_size(packer.num_bits(block));
+    }
+    size + blocks.remainder().iter().map(|&v| varint(v)).sum::<usize>()
+}
+
+fn best_of<F: FnMut()>(runs: usize, mut f: F) -> f64 {
+    (0..runs)
+        .map(|_| {
+            let start = Instant::now();
+            f();
+            start.elapsed().as_secs_f64()
+        })
+        .fold(f64::MAX, f64::min)
+}
+
+#[derive(Default)]
+struct Postings {
+    docs: Vec<u32>,
+    freqs: Vec<u32>,
+    // Position deltas within each document, starting over at every document.
+    positions: Vec<u32>,
+    last_position: u32,
+}
+
+// MS MARCO passages: one "<id>\t<text>" line per document. Doc IDs are line
+// numbers, terms are lowercased alphanumeric runs.
 fn postings(path: &str) {
-    let text = std::fs::read(path).unwrap();
-    let text = String::from_utf8_lossy(&text);
-    let mut index: HashMap<String, Vec<u32>> = HashMap::new();
+    let text = std::fs::read_to_string(path).unwrap();
+    let mut index: HashMap<String, Postings> = HashMap::new();
+    let mut word = String::new();
     let mut docs = 0u32;
-    for page in text.split("<page>").skip(1) {
-        for word in page
+    for line in text.lines() {
+        let body = line.split_once('\t').map_or(line, |(_, b)| b);
+        for (position, w) in body
             .split(|c: char| !c.is_alphanumeric())
             .filter(|w| !w.is_empty())
+            .enumerate()
         {
-            let ids = index.entry(word.to_lowercase()).or_default();
-            if ids.last() != Some(&docs) {
-                ids.push(docs);
+            word.clear();
+            word.extend(w.chars().flat_map(char::to_lowercase));
+            let p = match index.get_mut(word.as_str()) {
+                Some(p) => p,
+                None => index.entry(word.clone()).or_default(),
+            };
+            let position = position as u32;
+            if p.docs.last() == Some(&docs) {
+                *p.freqs.last_mut().unwrap() += 1;
+                p.positions.push(position - p.last_position);
+            } else {
+                p.docs.push(docs);
+                p.freqs.push(1);
+                p.positions.push(position);
             }
+            p.last_position = position;
         }
         docs += 1;
     }
-    let postings: usize = index.values().map(|ids| ids.len()).sum();
-    let naive = postings * 4;
+    let postings: usize = index.values().map(|p| p.docs.len()).sum();
+    let positions: usize = index.values().map(|p| p.positions.len()).sum();
     println!(
-        "{path}: {docs} documents, {} terms, {postings} postings",
+        "{path}: {docs} documents, {} terms, {postings} postings, {positions} positions",
         index.len()
     );
 
-    let varint = |mut v: u32| {
-        let mut n = 1;
-        while v >= 0x80 {
-            v >>= 7;
-            n += 1;
-        }
-        n
-    };
-    let packer = BitPacker4x::new();
-    let (mut bitpacked, mut delta_varint, mut roaring) = (0, 0, 0);
-    for ids in index.values() {
-        delta_varint += ids
-            .iter()
-            .scan(0, |prev, &id| {
-                let delta = id - *prev;
-                *prev = id;
-                Some(varint(delta))
-            })
-            .sum::<usize>();
-
-        // 128-ID blocks: one byte of bit width plus the packed deltas; the
-        // tail that doesn't fill a block is delta + varint, like Lucene.
+    let (mut doc_bitpacked, mut doc_varint, mut doc_roaring) = (0, 0, 0);
+    let (mut freq_bitpacked, mut pos_bitpacked) = (0, 0);
+    let mut deltas = Vec::new();
+    for p in index.values() {
+        deltas.clear();
         let mut prev = 0;
-        let mut blocks = ids.chunks_exact(BitPacker4x::BLOCK_LEN);
-        for block in &mut blocks {
-            let bits = packer.num_bits_sorted(prev, block);
-            bitpacked += 1 + BitPacker4x::compressed_block_size(bits);
-            prev = *block.last().unwrap();
-        }
-        for &id in blocks.remainder() {
-            bitpacked += varint(id - prev);
+        for &id in &p.docs {
+            deltas.push(id - prev);
             prev = id;
         }
-
-        roaring += roaring::RoaringBitmap::from_sorted_iter(ids.iter().copied())
+        doc_varint += deltas.iter().map(|&d| varint(d)).sum::<usize>();
+        doc_bitpacked += bitpacked_size(&deltas);
+        doc_roaring += roaring::RoaringBitmap::from_sorted_iter(p.docs.iter().copied())
             .unwrap()
             .serialized_size();
+        let freqs: Vec<u32> = p.freqs.iter().map(|f| f - 1).collect();
+        freq_bitpacked += bitpacked_size(&freqs);
+        pos_bitpacked += bitpacked_size(&p.positions);
     }
-    let mut raw = Vec::with_capacity(naive);
-    for ids in index.values() {
-        raw.extend(ids.iter().flat_map(|id| id.to_le_bytes()));
-    }
+    println!("doc IDs, against 4 B each:");
+    report("delta + varint", postings * 4, doc_varint);
+    report("delta + bitpacking", postings * 4, doc_bitpacked);
+    report("roaring", postings * 4, doc_roaring);
+    println!("term frequencies, against 4 B each:");
+    report("bitpacking", postings * 4, freq_bitpacked);
+    println!("positions, against 4 B each:");
+    report("delta + bitpacking", positions * 4, pos_bitpacked);
+    println!("doc IDs + frequencies + positions:");
     report(
-        "zstd -3 of raw u32s",
-        naive,
-        zstd::bulk::compress(&raw, 3).unwrap().len(),
+        "bitpacking",
+        (2 * postings + positions) * 4,
+        doc_bitpacked + freq_bitpacked + pos_bitpacked,
     );
-    report("delta + varint", naive, delta_varint);
-    report("delta + bitpacking (128 blocks)", naive, bitpacked);
-    report("roaring", naive, roaring);
+
+    // Decode speed: every full 128-ID block of every doc ID list, packed
+    // contiguously, then unpacked single-threaded.
+    let packer = BitPacker4x::new();
+    let mut packed = Vec::new();
+    let mut blocks = Vec::new();
+    for p in index.values() {
+        let mut prev = 0;
+        for block in p.docs.chunks_exact(BitPacker4x::BLOCK_LEN) {
+            let bits = packer.num_bits_sorted(prev, block);
+            let offset = packed.len();
+            packed.resize(offset + BitPacker4x::compressed_block_size(bits), 0);
+            packer.compress_sorted(prev, block, &mut packed[offset..], bits);
+            blocks.push((prev, offset, bits));
+            prev = *block.last().unwrap();
+        }
+    }
+    let mut out = [0u32; BitPacker4x::BLOCK_LEN];
+    let mut checksum = 0u64;
+    let secs = best_of(5, || {
+        for &(initial, offset, bits) in &blocks {
+            packer.decompress_sorted(initial, &packed[offset..], &mut out, bits);
+            checksum = checksum.wrapping_add(out[127] as u64);
+        }
+    });
+    let ids = blocks.len() * BitPacker4x::BLOCK_LEN;
+    println!(
+        "decode bitpacked doc IDs, 1 thread: {:.0} M IDs/s, {:.1} GiB/s of u32 output (checksum {checksum})",
+        ids as f64 / secs / 1e6,
+        (ids * 4) as f64 / secs / (1 << 30) as f64
+    );
 }
 
 // Days since 1970-01-01 (Howard Hinnant's days_from_civil).
@@ -246,17 +334,160 @@ fn timeseries(paths: &[String]) {
     report("delta + zstd -3", total_naive, total_zstd);
 }
 
-fn vectors(path: &str) {
-    let vectors: Vec<Vec<f32>> =
-        serde_json::from_reader(std::io::BufReader::new(File::open(path).unwrap())).unwrap();
-    let dims = vectors[0].len();
-    let raw: Vec<u8> = vectors
-        .iter()
-        .flatten()
-        .flat_map(|v| v.to_le_bytes())
-        .collect();
+// Run f(i) for i in 0..n on all cores.
+fn par_map<T: Send, F: Fn(usize) -> T + Sync>(n: usize, f: F) -> Vec<T> {
+    let threads = std::thread::available_parallelism().unwrap().get();
+    let chunk = n.div_ceil(threads);
+    std::thread::scope(|s| {
+        let handles: Vec<_> = (0..n)
+            .step_by(chunk.max(1))
+            .map(|start| {
+                let f = &f;
+                s.spawn(move || (start..(start + chunk).min(n)).map(f).collect::<Vec<T>>())
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().unwrap())
+            .collect()
+    })
+}
+
+fn top_k(scores: &[f32], k: usize) -> Vec<usize> {
+    let mut idx: Vec<usize> = (0..scores.len()).collect();
+    idx.select_nth_unstable_by(k, |&a, &b| scores[b].total_cmp(&scores[a]));
+    idx.truncate(k);
+    idx
+}
+
+fn dot(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b).map(|(x, y)| x * y).sum()
+}
+
+// Embedding columns: list<float> or list<double>, normalized to unit length.
+fn read_vectors(paths: &[String]) -> (usize, Vec<f32>) {
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::{Float32Type, Float64Type};
+    use arrow_array::ArrayRef;
+    let mut values = Vec::new();
+    let mut dims = 0;
+    for path in paths {
+        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(path).unwrap())
+            .unwrap()
+            .build()
+            .unwrap();
+        for batch in reader {
+            let batch = batch.unwrap();
+            let schema = batch.schema();
+            let (i, _) = schema
+                .fields()
+                .iter()
+                .enumerate()
+                .find(|(_, f)| f.name().contains("embedding"))
+                .expect("no embedding column");
+            let column = batch.column(i);
+            let (inner, len): (&ArrayRef, usize) = match column.as_fixed_size_list_opt() {
+                Some(list) => (list.values(), list.value_length() as usize),
+                None => {
+                    let list = column.as_list::<i32>();
+                    (list.values(), list.value_length(0) as usize)
+                }
+            };
+            dims = len;
+            match inner.as_primitive_opt::<Float64Type>() {
+                Some(f64s) => values.extend(f64s.values().iter().map(|&v| v as f32)),
+                None => values.extend(inner.as_primitive::<Float32Type>().values().iter()),
+            }
+        }
+    }
+    for v in values.chunks_exact_mut(dims) {
+        let norm = dot(v, v).sqrt();
+        v.iter_mut().for_each(|x| *x /= norm);
+    }
+    (dims, values)
+}
+
+// Product quantization: m subspaces, 256 k-means centroids each, one byte per
+// subspace.
+struct Pq {
+    sub: usize,
+    centroids: Vec<Vec<f32>>, // per subspace, 256 * sub
+}
+
+fn nearest(centroids: &[f32], x: &[f32]) -> usize {
+    centroids
+        .chunks_exact(x.len())
+        .map(|c| c.iter().zip(x).map(|(a, b)| (a - b) * (a - b)).sum::<f32>())
+        .enumerate()
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .unwrap()
+        .0
+}
+
+impl Pq {
+    fn train(dims: usize, m: usize, train: &[f32]) -> Pq {
+        let sub = dims / m;
+        let n = train.len() / dims;
+        let centroids = par_map(m, |s| {
+            let point = |i: usize| &train[i * dims + s * sub..i * dims + (s + 1) * sub];
+            let mut c: Vec<f32> = (0..256).flat_map(|i| point(i * n / 256).to_vec()).collect();
+            for _ in 0..15 {
+                let mut sums = vec![0f32; 256 * sub];
+                let mut counts = vec![0usize; 256];
+                for i in 0..n {
+                    let j = nearest(&c, point(i));
+                    counts[j] += 1;
+                    sums[j * sub..(j + 1) * sub]
+                        .iter_mut()
+                        .zip(point(i))
+                        .for_each(|(a, b)| *a += b);
+                }
+                for j in (0..256).filter(|&j| counts[j] > 0) {
+                    for d in 0..sub {
+                        c[j * sub + d] = sums[j * sub + d] / counts[j] as f32;
+                    }
+                }
+            }
+            c
+        });
+        Pq { sub, centroids }
+    }
+
+    fn encode(&self, v: &[f32]) -> Vec<u8> {
+        self.centroids
+            .iter()
+            .zip(v.chunks_exact(self.sub))
+            .map(|(c, x)| nearest(c, x) as u8)
+            .collect()
+    }
+
+    // Asymmetric distance: inner products of the query with every centroid.
+    fn scores(&self, q: &[f32], codes: &[u8]) -> Vec<f32> {
+        let m = self.centroids.len();
+        let table: Vec<f32> = self
+            .centroids
+            .iter()
+            .zip(q.chunks_exact(self.sub))
+            .flat_map(|(c, x)| c.chunks_exact(self.sub).map(move |c| dot(c, x)))
+            .collect();
+        codes
+            .chunks_exact(m)
+            .map(|code| {
+                code.iter()
+                    .enumerate()
+                    .map(|(s, &j)| table[s * 256 + j as usize])
+                    .sum()
+            })
+            .collect()
+    }
+}
+
+fn vectors(paths: &[String]) {
+    let (dims, values) = read_vectors(paths);
+    let n = values.len() / dims;
+    let raw: Vec<u8> = values.iter().flat_map(|v| v.to_le_bytes()).collect();
     let naive = raw.len();
-    println!("{path}: {} vectors of {dims} f32 dimensions", vectors.len());
+    println!("{n} vectors of {dims} dimensions, {naive} bytes as float32");
     // Byte-shuffle: all first bytes, then all second bytes, ... so the
     // exponent bytes sit together, like Blosc's shuffle filter.
     let mut shuffled = Vec::with_capacity(naive);
@@ -269,15 +500,133 @@ fn vectors(path: &str) {
         zstd::bulk::compress(&raw, 3).unwrap().len(),
     );
     report(
-        "zstd -19",
-        naive,
-        zstd::bulk::compress(&raw, 19).unwrap().len(),
-    );
-    report(
         "byte shuffle + zstd -3",
         naive,
         zstd::bulk::compress(&shuffled, 3).unwrap().len(),
     );
+
+    // Lossy: recall@10 against exact inner-product search, no reranking,
+    // 1000 held-out queries.
+    const K: usize = 10;
+    let queries = 1000;
+    let (q, base) = values.split_at(queries * dims);
+    let nb = base.len() / dims;
+    fn row(data: &[f32], dims: usize, i: usize) -> &[f32] {
+        &data[i * dims..(i + 1) * dims]
+    }
+    let exact = par_map(queries, |i| {
+        let scores: Vec<f32> = (0..nb)
+            .map(|j| dot(row(q, dims, i), row(base, dims, j)))
+            .collect();
+        top_k(&scores, K)
+    });
+    let recall = |scores: &(dyn Fn(usize) -> Vec<f32> + Sync)| {
+        let found = par_map(queries, |i| {
+            let approx = top_k(&scores(i), K);
+            approx.iter().filter(|j| exact[i].contains(j)).count()
+        });
+        found.iter().sum::<usize>() as f64 / (queries * K) as f64
+    };
+    let lossy = |name: &str, bytes_per_vector: usize, r: f64| {
+        println!(
+            "  {:<34} {:>6.1}x  recall@10 {:.3}",
+            name,
+            (dims * 4) as f64 / bytes_per_vector as f64,
+            r
+        );
+    };
+
+    let f16: Vec<f32> = base
+        .iter()
+        .map(|&v| half::f16::from_f32(v).to_f32())
+        .collect();
+    lossy(
+        "float16",
+        dims * 2,
+        recall(&|i| {
+            (0..nb)
+                .map(|j| dot(row(q, dims, i), row(&f16, dims, j)))
+                .collect()
+        }),
+    );
+
+    // Scalar quantization: per-dimension min/max to 0..255.
+    let (mut lo, mut hi) = (vec![f32::MAX; dims], vec![f32::MIN; dims]);
+    for v in base.chunks_exact(dims) {
+        for d in 0..dims {
+            lo[d] = lo[d].min(v[d]);
+            hi[d] = hi[d].max(v[d]);
+        }
+    }
+    let int8: Vec<f32> = base
+        .chunks_exact(dims)
+        .flat_map(|v| {
+            (0..dims).map(|d| {
+                let step = (hi[d] - lo[d]) / 255.0;
+                lo[d] + ((v[d] - lo[d]) / step).round() * step
+            })
+        })
+        .collect();
+    lossy(
+        "int8 (scalar)",
+        dims,
+        recall(&|i| {
+            (0..nb)
+                .map(|j| dot(row(q, dims, i), row(&int8, dims, j)))
+                .collect()
+        }),
+    );
+
+    // Binary: one sign bit per dimension, Hamming distance between query and
+    // vector bits.
+    fn bits(v: &[f32]) -> Vec<u64> {
+        v.chunks(64)
+            .map(|c| {
+                c.iter()
+                    .enumerate()
+                    .fold(0u64, |acc, (b, &x)| acc | ((x > 0.0) as u64) << b)
+            })
+            .collect()
+    }
+    let base_bits: Vec<Vec<u64>> = base.chunks_exact(dims).map(bits).collect();
+    let hamming = |i: usize| -> Vec<f32> {
+        let qb = bits(row(q, dims, i));
+        base_bits
+            .iter()
+            .map(|b| {
+                -(b.iter()
+                    .zip(&qb)
+                    .map(|(x, y)| (x ^ y).count_ones())
+                    .sum::<u32>() as f32)
+            })
+            .collect()
+    };
+    lossy("binary", dims / 8, recall(&hamming));
+    // Binary, then rerank the top 100 with float32.
+    let reranked = |i: usize| -> Vec<f32> {
+        let candidates = top_k(&hamming(i), 10 * K);
+        let mut scores = vec![f32::MIN; nb];
+        for j in candidates {
+            scores[j] = dot(row(q, dims, i), row(base, dims, j));
+        }
+        scores
+    };
+    lossy(
+        "binary + float32 rerank of top 100",
+        dims / 8,
+        recall(&reranked),
+    );
+
+    let train = &base[..base.len().min(50_000 * dims)];
+    for m in [dims / 8, dims / 32] {
+        let pq = Pq::train(dims, m, train);
+        let codes: Vec<u8> = par_map(nb, |j| pq.encode(row(base, dims, j))).concat();
+        lossy(
+            &format!("PQ, {m} bytes"),
+            m,
+            recall(&|i| pq.scores(row(q, dims, i), &codes)),
+        );
+    }
 }
 
 fn main() {
@@ -288,7 +637,7 @@ fn main() {
         "parquet" => files.iter().for_each(|f| parquet(f)),
         "postings" => files.iter().for_each(|f| postings(f)),
         "timeseries" => timeseries(files),
-        "vectors" => files.iter().for_each(|f| vectors(f)),
+        "vectors" => vectors(files),
         _ => panic!("{usage}"),
     }
 }

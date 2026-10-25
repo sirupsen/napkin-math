@@ -137,34 +137,48 @@ sources, `/usr/bin` and a page of GitHub API JSON.
 The Logs row is loghub's full `Apache.log` (5 MiB, 11x lz4 to 29x zstd -19) and
 `Linux.log` (2 MiB, 6x to 20x).
 
-The structured-data table comes from `src/bin/encoding_ratio.rs`, built with
-`--features encodings` so the default build doesn't pull in Parquet:
+The structured-data tables and the two CPU Decode rows come from
+`src/bin/encoding_ratio.rs`, built with `--features encodings` so the default
+build doesn't pull in Parquet:
 
 ```bash
-cargo run --release --features encodings --bin encoding_ratio -- parquet hits_0.parquet
-cargo run --release --features encodings --bin encoding_ratio -- postings enwik8
+cargo run --release --features encodings --bin encoding_ratio -- parquet taxi.parquet hits_0.parquet
+cargo run --release --features encodings --bin encoding_ratio -- postings collection.tsv
 cargo run --release --features encodings --bin encoding_ratio -- timeseries nab/*.csv
-cargo run --release --features encodings --bin encoding_ratio -- vectors embeddings.json
+cargo run --release --features encodings --bin encoding_ratio -- vectors dbpedia/*.parquet
 ```
 
-On October 24, 2026:
+On October 24, 2026 (ratios on any machine; speeds single-threaded on an AWS
+m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
 
 - Parquet, against Arrow's in-memory buffers: NYC taxi (yellow, January 2024,
   3M rows x 19 columns, mostly numeric) 5.4x with dictionary + RLE and 9.0x
   with zstd -3; ClickBench `hits_0.parquet` (1M rows x 105 columns, many
-  strings) 2.2x and 10.4x. Plain encoding is 1.0x.
-- Inverted index over enwik8 (12k Wikipedia pages, 392k terms, 5.3M postings,
-  doc IDs only, no frequencies or positions), against 4 bytes per posting:
-  delta + bitpacking in 128-ID blocks 3.6x, delta + varint 3.2x, zstd of raw
-  u32s 2.4x, roaring 1.3x (most terms are rare, and each bitmap pays a header).
+  strings) 2.2x and 10.4x. Plain encoding is 1.0x. Decoding to Arrow: plain
+  5.4 / 3.0 GiB/s, dictionary + RLE 4.2 / 2.6 GiB/s, + zstd 2.1 / 1.7 GiB/s
+  (taxi / hits).
+- Inverted index over the MS MARCO passage collection (8.8M passages, 1.6M
+  terms, 358M postings, 514M positions; lowercased alphanumeric tokens),
+  against 4 bytes per doc ID, frequency and position. Doc IDs: delta +
+  bitpacking in 128-value blocks 3.3x, delta + varint 3.0x, roaring 2.1x.
+  Frequencies (minus one), bitpacked: 11.7x. Positions, delta within each
+  document then bitpacked: 4.5x. All three together: 4.9x. Unpacking the
+  full 128-ID blocks with `bitpacking`'s `BitPacker4x` ran at 3.1 billion
+  IDs/s, 11.6 GiB/s of u32 output.
 - Time series from the Numenta Anomaly Benchmark (9 real CloudWatch and sensor
   series at 5-minute intervals), against 16 bytes per point: Gorilla gets
   2.2-2.8x (~7 B/point) on float gauges like CPU utilization and temperature,
   and 7-13x (1.2-2.4 B/point) on integer-valued counts. Regular timestamps cost
   1 bit. Column-wise delta + zstd -3 gets 4.0x overall.
-- 10k 384-dimension MiniLM sentence embeddings of Wikipedia (from
-  `newsletter/21-embeddings`): zstd -3 and -19 1.1x, byte shuffle + zstd 1.2x.
-  The quantization ratios follow from the type sizes and are lossy.
+- Vectors: the first 3 of 26 shards of Qdrant's
+  `dbpedia-entities-openai3-text-embedding-3-large-1536-1M` on Hugging Face
+  (115k OpenAI text-embedding-3-large vectors, 1536 dimensions, normalized).
+  Lossless: zstd -3 1.1x, byte shuffle + zstd 1.2x. Recall@10 for 1000
+  held-out queries against the other 114k vectors by exact inner product:
+  float16 1.000, int8 (per-dimension min/max) 0.997, binary (sign bits,
+  Hamming) 0.703, binary then float32 rerank of the top 100 0.995 (the float32
+  vectors still have to be stored somewhere), PQ with 256 centroids per
+  subspace trained on 50k vectors: 192 bytes 0.794, 48 bytes 0.444.
 
 ## Blob storage rows (March 2026)
 
