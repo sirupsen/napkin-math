@@ -15,6 +15,19 @@ flate2 = "1"
 lz4_flex = "0.14"
 snap = "1"
 zstd = "0.14"
+# Used by src/bin/encoding_ratio.rs, behind the `encodings` feature.
+arrow-array = { version = "60", optional = true }
+bitpacking = { version = "0.9", optional = true }
+parquet = { version = "60", default-features = false, features = ["arrow", "snap", "zstd"], optional = true }
+roaring = { version = "0.11", optional = true }
+serde_json = { version = "1", optional = true }
+
+[features]
+encodings = ["dep:arrow-array", "dep:bitpacking", "dep:parquet", "dep:roaring", "dep:serde_json"]
+
+[[bin]]
+name = "encoding_ratio"
+required-features = ["encodings"]
 
 [dev-dependencies]
 bitpacking = "0.9"

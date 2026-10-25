@@ -172,7 +172,22 @@ by 10x_. E.g. on the Silesia corpus, lz4 gets 2x at ~500 MiB/s, zstd -9 3.5x at
 | Source Code            | 3-9x              |
 | Executables            | 2-3x              |
 | RPC (JSON)             | 5-15x             |
+| Logs                   | 6-30x             |
 | Encrypted / compressed | 1x                |
+
+Structured data, against its naive in-memory size (8 bytes per int64, 4 per doc
+ID, 16 per timestamp + float64 point, 4 per float32 dimension), measured with
+`encoding_ratio`:
+
+| What                          | Encoding                         | Ratio          |
+| ----------------------------- | -------------------------------- | -------------- |
+| Columnar table                | Parquet dictionary + RLE         | 2-5x           |
+| Columnar table                | Parquet dictionary + RLE + zstd  | 10x            |
+| Inverted index (doc IDs)      | Delta + bitpacking               | 3-4x           |
+| Time series, float gauges     | Gorilla                          | 2x             |
+| Time series, counters         | Gorilla                          | 10x            |
+| Vectors (float32)             | zstd                             | 1.1x           |
+| Vectors (float32)             | f16 / int8 / binary quantization | 2x / 4x / 32x  |
 
 ## Techniques
 

@@ -134,6 +134,37 @@ c4-standard-8: lz4 2.1x at 442/1246 MiB/s, zstd -1 2.9x at 395/819 MiB/s). The
 ratio table used Silesia's `dickens` (English), `samba` (source) and `mozilla`
 (executables), a Wikipedia article (HTML), a tarball of the cargo registry
 sources, `/usr/bin` and a page of GitHub API JSON.
+The Logs row is loghub's full `Apache.log` (5 MiB, 11x lz4 to 29x zstd -19) and
+`Linux.log` (2 MiB, 6x to 20x).
+
+The structured-data table comes from `src/bin/encoding_ratio.rs`, built with
+`--features encodings` so the default build doesn't pull in Parquet:
+
+```bash
+cargo run --release --features encodings --bin encoding_ratio -- parquet hits_0.parquet
+cargo run --release --features encodings --bin encoding_ratio -- postings enwik8
+cargo run --release --features encodings --bin encoding_ratio -- timeseries nab/*.csv
+cargo run --release --features encodings --bin encoding_ratio -- vectors embeddings.json
+```
+
+On October 24, 2026:
+
+- Parquet, against Arrow's in-memory buffers: NYC taxi (yellow, January 2024,
+  3M rows x 19 columns, mostly numeric) 5.4x with dictionary + RLE and 9.0x
+  with zstd -3; ClickBench `hits_0.parquet` (1M rows x 105 columns, many
+  strings) 2.2x and 10.4x. Plain encoding is 1.0x.
+- Inverted index over enwik8 (12k Wikipedia pages, 392k terms, 5.3M postings,
+  doc IDs only, no frequencies or positions), against 4 bytes per posting:
+  delta + bitpacking in 128-ID blocks 3.6x, delta + varint 3.2x, zstd of raw
+  u32s 2.4x, roaring 1.3x (most terms are rare, and each bitmap pays a header).
+- Time series from the Numenta Anomaly Benchmark (9 real CloudWatch and sensor
+  series at 5-minute intervals), against 16 bytes per point: Gorilla gets
+  2.2-2.8x (~7 B/point) on float gauges like CPU utilization and temperature,
+  and 7-13x (1.2-2.4 B/point) on integer-valued counts. Regular timestamps cost
+  1 bit. Column-wise delta + zstd -3 gets 4.0x overall.
+- 10k 384-dimension MiniLM sentence embeddings of Wikipedia (from
+  `newsletter/21-embeddings`): zstd -3 and -19 1.1x, byte shuffle + zstd 1.2x.
+  The quantization ratios follow from the type sizes and are lossy.
 
 ## Blob storage rows (March 2026)
 
