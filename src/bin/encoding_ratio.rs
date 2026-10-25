@@ -1,7 +1,7 @@
 // Compression ratios for structured data: columnar tables, inverted indexes
-// and time series. Every ratio is against the naive in-memory representation
-// (Arrow buffers, 4 bytes per doc ID, 16 bytes per point), not against a text
-// export.
+// and time series. Ratios are against the naive in-memory representation
+// (Arrow buffers, 4 bytes per doc ID, 16 bytes per point), except whole
+// inverted and n-gram indexes, which are against their source text.
 //
 //   cargo run --release --features encodings --bin encoding_ratio -- parquet hits_0.parquet
 //   cargo run --release --features encodings --bin encoding_ratio -- postings collection.tsv
@@ -127,6 +127,55 @@ struct Postings {
     last_position: u32,
 }
 
+// One n-gram's doc ID list, sized as it streams in (the lists for a large
+// corpus don't fit in memory), in the same layout as bitpacked_size.
+#[derive(Default)]
+struct GramList {
+    // Last doc ID plus one, 0 before the first.
+    last: u32,
+    block_len: u32,
+    block_bits: u32,
+    // Varint bytes of the current block, used if it never fills up.
+    block_varint: usize,
+    bytes: usize,
+}
+
+// A regex index in the style of Google Code Search: for every byte n-gram
+// (ASCII-lowercased), the documents that contain it, with no frequencies or
+// positions. Returns distinct n-grams, postings and index bytes, counting
+// n bytes plus a 4-byte offset per n-gram for the dictionary.
+fn ngram_index(documents: &[&str], n: usize) -> (usize, usize, usize) {
+    let mut lists: HashMap<u32, GramList> = HashMap::new();
+    let mut postings = 0;
+    for (doc, body) in documents.iter().enumerate() {
+        let id = doc as u32 + 1;
+        for gram in body.as_bytes().windows(n) {
+            let key = gram
+                .iter()
+                .fold(0u32, |k, b| k << 8 | b.to_ascii_lowercase() as u32);
+            let l = lists.entry(key).or_default();
+            if l.last == id {
+                continue;
+            }
+            let delta = id - l.last;
+            l.last = id;
+            l.block_len += 1;
+            l.block_bits = l.block_bits.max(32 - delta.leading_zeros());
+            l.block_varint += varint(delta);
+            if l.block_len as usize == BitPacker4x::BLOCK_LEN {
+                l.bytes += 1 + BitPacker4x::compressed_block_size(l.block_bits as u8);
+                (l.block_len, l.block_bits, l.block_varint) = (0, 0, 0);
+            }
+            postings += 1;
+        }
+    }
+    let size = lists
+        .values()
+        .map(|l| n + 4 + l.bytes + l.block_varint)
+        .sum();
+    (lists.len(), postings, size)
+}
+
 // One document per line (MS MARCO's "<id>\t<text>", log lines, column values)
 // or, with `paragraphs`, per blank-line-separated paragraph (prose). Doc IDs
 // are document numbers, terms are lowercased alphanumeric runs.
@@ -136,13 +185,18 @@ fn postings(path: &str, paragraphs: bool) {
     let mut index: HashMap<String, Postings> = HashMap::new();
     let mut word = String::new();
     let mut docs = 0u32;
-    let documents: Box<dyn Iterator<Item = &str>> = if paragraphs {
-        Box::new(text.split("\n\n").filter(|p| !p.trim().is_empty()))
+    let documents: Vec<&str> = if paragraphs {
+        text.split("\n\n")
+            .filter(|p| !p.trim().is_empty())
+            .collect()
     } else {
-        Box::new(text.lines())
+        text.lines().collect()
     };
-    for line in documents {
-        let body = line.split_once('\t').map_or(line, |(_, b)| b);
+    let documents: Vec<&str> = documents
+        .into_iter()
+        .map(|d| d.split_once('\t').map_or(d, |(_, b)| b))
+        .collect();
+    for &body in &documents {
         for (position, w) in body
             .split(|c: char| !c.is_alphanumeric())
             .filter(|w| !w.is_empty())
@@ -216,14 +270,36 @@ fn postings(path: &str, paragraphs: bool) {
     println!("whole index, against {} bytes of source text:", raw.len());
     report(
         "dictionary + doc IDs + frequencies",
-        text.len(),
+        raw.len(),
         without_positions,
     );
     report(
         "  + positions",
-        text.len(),
+        raw.len(),
         without_positions + pos_bitpacked,
     );
+    // Per document, and with documents merged into ~16 KiB chunks, about the
+    // size of a source file, which is what code search indexes.
+    let mut chunks = vec![String::new()];
+    for d in &documents {
+        if chunks.last().unwrap().len() >= 16 << 10 {
+            chunks.push(String::new());
+        }
+        let chunk = chunks.last_mut().unwrap();
+        chunk.push_str(d);
+        chunk.push('\n');
+    }
+    let chunks: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    for (unit, docs) in [("document", &documents), ("16 KiB chunk", &chunks)] {
+        for n in [3, 4] {
+            let (grams, postings, size) = ngram_index(docs, n);
+            report(
+                &format!("{n}-grams per {unit} ({grams} grams, {postings} postings)"),
+                raw.len(),
+                size,
+            );
+        }
+    }
 
     // Decode speed: every full 128-ID block of every doc ID list, packed
     // contiguously, then unpacked single-threaded.

@@ -143,7 +143,7 @@ build doesn't pull in Parquet:
 
 ```bash
 cargo run --release --features encodings --bin encoding_ratio -- parquet taxi.parquet hits_0.parquet
-cargo run --release --features encodings --bin encoding_ratio -- postings collection.tsv Apache.log ...
+cargo run --release --features encodings --bin encoding_ratio -- postings collection.tsv Apache.log ...  # also 3-/4-gram indexes
 cargo run --release --features encodings --bin encoding_ratio -- postings --paragraphs dickens webster
 cargo run --release --features encodings --bin encoding_ratio -- timeseries nab/*.csv
 ```
@@ -167,9 +167,9 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   | --- | --- | --- | --- | --- | --- | --- | --- | --- |
   | MS MARCO passages | 8.8M | 358M | 3.3x | 11.7x | 4.5x | 4.9x | 5.3x | 3.0x |
   | enwik8 (Wikipedia XML) | 1.1M | 11M | 2.5x | 8.9x | 4.1x | 4.0x | 3.6x | 2.3x |
-  | Silesia `dickens` | 33k | 1.3M | 3.7x | 7.7x | 3.8x | 4.4x | 4.0x | 2.3x |
+  | Silesia `dickens` | 33k | 1.3M | 3.7x | 7.7x | 3.8x | 4.4x | 4.1x | 2.3x |
   | Silesia `webster` | 218k | 4.9M | 3.5x | 8.3x | 4.3x | 4.7x | 4.1x | 2.4x |
-  | Silesia `samba` (source) | 596k | 2.7M | 2.9x | 12.0x | 6.1x | 5.1x | 3.9x | 2.9x |
+  | Silesia `samba` (source) | 596k | 2.7M | 2.9x | 12.0x | 6.1x | 5.1x | 3.7x | 2.8x |
   | Silesia `xml` | 58k | 322k | 3.1x | 8.2x | 4.2x | 4.3x | 6.8x | 3.3x |
   | loghub `Apache.log` | 56k | 1.0M | 5.0x | 64.6x | 8.3x | 8.9x | 5.4x | 3.5x |
   | loghub `Linux.log` | 26k | 426k | 4.6x | 17.7x | 6.8x | 7.1x | 3.7x | 2.6x |
@@ -182,6 +182,30 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   offset per term) plus bitpacked doc IDs and frequencies, then also
   positions. The index without positions is ~25% of the text, with
   positions ~35%.
+
+  Regex indexes in the style of Google Code Search: every byte trigram or
+  fourgram (ASCII-lowercased) with the bitpacked doc IDs that contain it, no
+  frequencies or positions, plus n bytes and a 4-byte offset per n-gram.
+  Again text size / index size, per document as above and with consecutive
+  documents merged into ~16 KiB chunks:
+
+  | Corpus | 3-grams per doc | 4-grams per doc | 3-grams per 16 KiB | 4-grams per 16 KiB |
+  | --- | --- | --- | --- | --- |
+  | MS MARCO passages | 1.8x | 1.2x | 12.5x | 4.4x |
+  | enwik8 (Wikipedia XML) | 1.1x | 0.8x | 7.3x | 2.6x |
+  | Silesia `dickens` | 1.7x | 1.1x | 10.2x | 3.1x |
+  | Silesia `webster` | 1.5x | 1.1x | 10.6x | 3.7x |
+  | Silesia `samba` (source) | 1.0x | 0.8x | 4.2x | 1.9x |
+  | Silesia `xml` | 2.2x | 1.5x | 8.6x | 3.5x |
+  | loghub `Apache.log` | 1.4x | 1.2x | 28.6x | 14.0x |
+  | loghub `Linux.log` | 1.3x | 1.1x | 10.3x | 4.7x |
+  | ClickBench `Title` | 1.6x | 1.2x | 27.7x | 14.0x |
+  | ClickBench `URL` | 1.1x | 0.9x | 9.0x | 4.5x |
+  | ClickBench `SearchPhrase` | 1.4x | 1.0x | 16.3x | 6.7x |
+
+  The 16 KiB medians are 10x and 4x. Source code is the hardest case (4.2x
+  trigrams on `samba`, close to the ~20% of source Russ Cox reported for Code
+  Search), and repetitive logs and tables the easiest.
 
   On MS MARCO, delta + varint gets 3.0x on doc IDs and roaring 2.1x. Logs
   and ClickBench rows repeat a lot, so their doc IDs cluster and most

@@ -188,10 +188,18 @@ ID / frequency / position, 16 per timestamp + float64 point), measured with
 | Inverted index, doc IDs       | Delta + bitpacking               | 3x    |
 | Inverted index, frequencies   | Bitpacking                       | 10x   |
 | Inverted index, positions     | Delta + bitpacking               | 5x    |
-| Inverted index vs. its text   | Doc IDs + frequencies + terms    | 4x    |
-| Inverted index vs. its text   | + positions                      | 3x    |
 | Time series, float gauges     | Gorilla                          | 2x    |
 | Time series, counters         | Gorilla                          | 10x   |
+
+Search indexes, against the size of the text they index (documents of ~16 KiB
+for n-grams; at one line per document they're as big as the text):
+
+| What                       | Stores                                 | Ratio |
+| -------------------------- | -------------------------------------- | ----- |
+| Inverted index             | Terms, doc IDs, frequencies            | 4x    |
+| Inverted index + positions | Terms, doc IDs, frequencies, positions | 3x    |
+| Trigram index (regex)      | Trigrams, doc IDs                      | 10x   |
+| Fourgram index (regex)     | Fourgrams, doc IDs                     | 4x    |
 
 ## Techniques
 
