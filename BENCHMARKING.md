@@ -163,19 +163,25 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   delta-coded within each document and bitpacked. One document per line,
   except per paragraph for `dickens` and `webster`:
 
-  | Corpus | Docs | Postings | Doc IDs | Freqs | Positions | All |
-  | --- | --- | --- | --- | --- | --- | --- |
-  | MS MARCO passages | 8.8M | 358M | 3.3x | 11.7x | 4.5x | 4.9x |
-  | enwik8 (Wikipedia XML) | 1.1M | 11M | 2.5x | 8.9x | 4.1x | 4.0x |
-  | Silesia `dickens` | 33k | 1.3M | 3.7x | 7.7x | 3.8x | 4.4x |
-  | Silesia `webster` | 218k | 4.9M | 3.5x | 8.3x | 4.3x | 4.7x |
-  | Silesia `samba` (source) | 596k | 2.7M | 2.9x | 12.0x | 6.1x | 5.1x |
-  | Silesia `xml` | 58k | 322k | 3.1x | 8.2x | 4.2x | 4.3x |
-  | loghub `Apache.log` | 56k | 1.0M | 5.0x | 64.6x | 8.3x | 8.9x |
-  | loghub `Linux.log` | 26k | 426k | 4.6x | 17.7x | 6.8x | 7.1x |
-  | ClickBench `Title` | 936k | 11M | 3.2x | 21.8x | 6.3x | 5.8x |
-  | ClickBench `URL` | 1.0M | 13M | 3.7x | 18.9x | 6.2x | 6.2x |
-  | ClickBench `SearchPhrase` | 69k | 274k | 2.9x | 7.0x | 5.7x | 4.5x |
+  | Corpus | Docs | Postings | Doc IDs | Freqs | Positions | All | Text / index | With positions |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | MS MARCO passages | 8.8M | 358M | 3.3x | 11.7x | 4.5x | 4.9x | 5.3x | 3.0x |
+  | enwik8 (Wikipedia XML) | 1.1M | 11M | 2.5x | 8.9x | 4.1x | 4.0x | 3.6x | 2.3x |
+  | Silesia `dickens` | 33k | 1.3M | 3.7x | 7.7x | 3.8x | 4.4x | 4.0x | 2.3x |
+  | Silesia `webster` | 218k | 4.9M | 3.5x | 8.3x | 4.3x | 4.7x | 4.1x | 2.4x |
+  | Silesia `samba` (source) | 596k | 2.7M | 2.9x | 12.0x | 6.1x | 5.1x | 3.9x | 2.9x |
+  | Silesia `xml` | 58k | 322k | 3.1x | 8.2x | 4.2x | 4.3x | 6.8x | 3.3x |
+  | loghub `Apache.log` | 56k | 1.0M | 5.0x | 64.6x | 8.3x | 8.9x | 5.4x | 3.5x |
+  | loghub `Linux.log` | 26k | 426k | 4.6x | 17.7x | 6.8x | 7.1x | 3.7x | 2.6x |
+  | ClickBench `Title` | 936k | 11M | 3.2x | 21.8x | 6.3x | 5.8x | 7.6x | 5.4x |
+  | ClickBench `URL` | 1.0M | 13M | 3.7x | 18.9x | 6.2x | 6.2x | 4.0x | 2.9x |
+  | ClickBench `SearchPhrase` | 69k | 274k | 2.9x | 7.0x | 5.7x | 4.5x | 3.2x | 2.8x |
+
+  The last two columns divide the source file's size by the whole index:
+  an uncompressed term dictionary (term bytes, a length byte and a 4-byte
+  offset per term) plus bitpacked doc IDs and frequencies, then also
+  positions. The index without positions is ~25% of the text, with
+  positions ~35%.
 
   On MS MARCO, delta + varint gets 3.0x on doc IDs and roaring 2.1x. Logs
   and ClickBench rows repeat a lot, so their doc IDs cluster and most

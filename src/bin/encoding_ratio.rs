@@ -131,7 +131,8 @@ struct Postings {
 // or, with `paragraphs`, per blank-line-separated paragraph (prose). Doc IDs
 // are document numbers, terms are lowercased alphanumeric runs.
 fn postings(path: &str, paragraphs: bool) {
-    let text = String::from_utf8_lossy(&std::fs::read(path).unwrap()).replace("\r\n", "\n");
+    let raw = std::fs::read(path).unwrap();
+    let text = String::from_utf8_lossy(&raw).replace("\r\n", "\n");
     let mut index: HashMap<String, Postings> = HashMap::new();
     let mut word = String::new();
     let mut docs = 0u32;
@@ -205,6 +206,23 @@ fn postings(path: &str, paragraphs: bool) {
         "bitpacking",
         (2 * postings + positions) * 4,
         doc_bitpacked + freq_bitpacked + pos_bitpacked,
+    );
+
+    // The whole index against the source text. The term dictionary is
+    // uncompressed: each term's bytes, a length byte and a 4-byte offset
+    // into the postings.
+    let dictionary: usize = index.keys().map(|t| t.len() + 1 + 4).sum();
+    let without_positions = dictionary + doc_bitpacked + freq_bitpacked;
+    println!("whole index, against {} bytes of source text:", raw.len());
+    report(
+        "dictionary + doc IDs + frequencies",
+        text.len(),
+        without_positions,
+    );
+    report(
+        "  + positions",
+        text.len(),
+        without_positions + pos_bitpacked,
     );
 
     // Decode speed: every full 128-ID block of every doc ID list, packed

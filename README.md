@@ -188,6 +188,8 @@ ID / frequency / position, 16 per timestamp + float64 point), measured with
 | Inverted index, doc IDs       | Delta + bitpacking               | 3x    |
 | Inverted index, frequencies   | Bitpacking                       | 10x   |
 | Inverted index, positions     | Delta + bitpacking               | 5x    |
+| Inverted index vs. its text   | Doc IDs + frequencies + terms    | 4x    |
+| Inverted index vs. its text   | + positions                      | 3x    |
 | Time series, float gauges     | Gorilla                          | 2x    |
 | Time series, counters         | Gorilla                          | 10x   |
 
