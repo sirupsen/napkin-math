@@ -183,7 +183,6 @@ datasets with `encoding_ratio` and `column_codecs`:
 
 | What           | Encoding                        | Ratio |
 | -------------- | ------------------------------- | ----- |
-| Columnar table | Parquet dictionary + RLE        | 2-5x  |
 | Columnar table | Parquet dictionary + RLE + zstd | 10x   |
 | Floats         | ALP                             | 4x    |
 | Integers       | FOR / delta + bitpacking        | 2-4x  |
