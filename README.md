@@ -195,15 +195,15 @@ at ~15 GiB/s; sorted or low-cardinality columns need RLE or a dictionary first.
 FSST decodes at ~2 GiB/s and keeps every string decodable on its own, where zstd
 over a whole column gets 3-10x.
 
-Search indexes, as a share of the text they index (documents of ~16 KiB for
-n-grams; at one line per document they're as big as the text):
+Search indexes, against the size of the text they index (documents of ~16 KiB
+for n-grams; at one line per document they're as big as the text):
 
-| What                       | Stores                                 | Size |
-| -------------------------- | -------------------------------------- | ---- |
-| Inverted index             | Terms, doc IDs, frequencies            | 25%  |
-| Inverted index + positions | Terms, doc IDs, frequencies, positions | 35%  |
-| Trigram index (regex)      | Trigrams, doc IDs                      | 10%  |
-| Fourgram index (regex)     | Fourgrams, doc IDs                     | 25%  |
+| What                       | Stores                                 | Ratio |
+| -------------------------- | -------------------------------------- | ----- |
+| Inverted index             | Terms, doc IDs, frequencies            | 4x    |
+| Inverted index + positions | Terms, doc IDs, frequencies, positions | 3x    |
+| Trigram index (regex)      | Trigrams, doc IDs                      | 10x   |
+| Fourgram index (regex)     | Fourgrams, doc IDs                     | 4x    |
 
 ## Techniques
 
