@@ -73,7 +73,12 @@ QD32x4 for random) and QD1 latency for random reads and writes. On October 24,
 2026, Hyperdisk Balanced (80k IOPS / 1600 MiB/s) did 8 KiB random writes at
 449 us QD1 and 633 MiB/s max, the same as its reads: network disks cap random
 I/O at the provisioned IOPS either way. One GCP local NVMe disk wrote at 30 us
-QD1, capped at 335 MiB/s per disk. For an HDD, test the whole
+QD1, capped at 335 MiB/s per disk. An m8id.12xlarge instance-store disk did
+8 KiB random writes at 30 us QD1 and 2.8 GiB/s max (reads: 84 us, 5.9 GiB/s);
+writes land in the drive's DRAM cache, so they beat reads at QD1. A d3.xlarge
+HDD did 8 KiB random writes at 4.2 ms QD1 and 2 MiB/s max (237 IOPS); the
+drive's write cache reorders them, so they beat random reads (12 ms). For an
+HDD, test the whole
 disk with `NAPKIN_FIO_SIZE=1800G NAPKIN_FIO_PRECONDITION=0` so random reads seek
 across all of it. The October 2026 rows came from local NVMe on GCP C4 and AWS
 m8id/m8gd, EBS gp3 at 16k IOPS / 1000 MiB/s on an m8i.4xlarge, GCP Hyperdisk

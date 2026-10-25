@@ -52,6 +52,7 @@ to improve accuracy and as hardware improves.
 | Memory Random Write (64 bytes)                  |            | 3 GiB/s    | 300 ms |
 | Memory Random Read (64 bytes)                   | 100 ns     | 3 GiB/s    | 300 ms |
 | SSD Sequential Write                            |            | 2 GiB/s    | 500 ms |
+| SSD Random Write (8 KiB)                        | 30 μs      | 2 GiB/s    | 500 ms |
 | SSD Random Read (8 KiB)                         | 100 μs     | 2 GiB/s    | 500 ms |
 | CPU Serialize (JSON, Protobuf)                  |            | 1 GiB/s    | 1 s    |
 | CPU Decompress (lz4, zstd -1)                   |            | 1 GiB/s    | 1 s    |
@@ -71,6 +72,7 @@ to improve accuracy and as hardware improves.
 | Network Cross-Pacific                           | 160-180 ms | 25 MiB/s   | 40 s   |
 | Network Disk Sequential Write + fsync (8 KiB)   | 1 ms       | 8 MiB/s    | 2 min  |
 | HDD Sequential Write + fsync (8 KiB)            | 1 ms       | 8 MiB/s    | 2 min  |
+| HDD Random Write (8 KiB)                        | 5 ms       | 2 MiB/s    | 10 min |
 | HDD Random Read (8 KiB)                         | 10 ms      | 2 MiB/s    | 10 min |
 | CPU Atomic Increment                            | 5 ns       |            |        |
 | CPU Mutex Lock + Unlock                         | 10 ns      |            |        |
