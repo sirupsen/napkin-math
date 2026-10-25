@@ -177,29 +177,34 @@ by 10x_. E.g. on the Silesia corpus, lz4 gets 2x at ~500 MiB/s, zstd -9 3.5x at
 | Logs                   | 6-30x             |
 | Encrypted / compressed | 1x                |
 
-Structured data, against its naive in-memory size (8 bytes per int64, 4 per doc
-ID / frequency / position, 16 per timestamp + float64 point), measured with
-`encoding_ratio`:
+Structured data, against its in-memory size (8 bytes per float64, the type's
+width per integer, the bytes plus a 4-byte offset per string), measured on real
+datasets with `encoding_ratio` and `column_codecs`:
 
-| What                          | Encoding                         | Ratio |
-| ----------------------------- | -------------------------------- | ----- |
-| Columnar table                | Parquet dictionary + RLE         | 2-5x  |
-| Columnar table                | Parquet dictionary + RLE + zstd  | 10x   |
-| Inverted index, doc IDs       | Delta + bitpacking               | 3x    |
-| Inverted index, frequencies   | Bitpacking                       | 10x   |
-| Inverted index, positions     | Delta + bitpacking               | 5x    |
-| Time series, float gauges     | Gorilla                          | 2x    |
-| Time series, counters         | Gorilla                          | 10x   |
+| What           | Encoding                        | Ratio |
+| -------------- | ------------------------------- | ----- |
+| Columnar table | Parquet dictionary + RLE        | 2-5x  |
+| Columnar table | Parquet dictionary + RLE + zstd | 10x   |
+| Floats         | ALP                             | 4x    |
+| Integers       | FOR / delta + bitpacking        | 2-4x  |
+| Strings        | FSST                            | 2x    |
 
-Search indexes, against the size of the text they index (documents of ~16 KiB
-for n-grams; at one line per document they're as big as the text):
+ALP gets the same ratio as zstd on floats and decodes at ~10 GiB/s on one core.
+Floats that use the full mantissa (coordinates, model weights) barely compress
+at all. Bitpacked integers take log2 of each 1024-value range in bits and decode
+at ~15 GiB/s; sorted or low-cardinality columns need RLE or a dictionary first.
+FSST decodes at ~2 GiB/s and keeps every string decodable on its own, where zstd
+over a whole column gets 3-10x.
 
-| What                       | Stores                                 | Ratio |
-| -------------------------- | -------------------------------------- | ----- |
-| Inverted index             | Terms, doc IDs, frequencies            | 4x    |
-| Inverted index + positions | Terms, doc IDs, frequencies, positions | 3x    |
-| Trigram index (regex)      | Trigrams, doc IDs                      | 10x   |
-| Fourgram index (regex)     | Fourgrams, doc IDs                     | 4x    |
+Search indexes, as a share of the text they index (documents of ~16 KiB for
+n-grams; at one line per document they're as big as the text):
+
+| What                       | Stores                                 | Size |
+| -------------------------- | -------------------------------------- | ---- |
+| Inverted index             | Terms, doc IDs, frequencies            | 25%  |
+| Inverted index + positions | Terms, doc IDs, frequencies, positions | 35%  |
+| Trigram index (regex)      | Trigrams, doc IDs                      | 10%  |
+| Fourgram index (regex)     | Fourgrams, doc IDs                     | 25%  |
 
 ## Techniques
 

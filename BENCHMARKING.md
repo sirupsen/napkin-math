@@ -218,6 +218,53 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   and 7-13x (1.2-2.4 B/point) on integer-valued counts. Regular timestamps cost
   1 bit. Column-wise delta + zstd -3 gets 4.0x overall.
 
+The Floats / Integers / Strings rows come from `src/bin/column_codecs.rs`
+(same feature), which runs the crates Vortex builds on: spiraldb's `alp`,
+`fastlanes` and `fsst-rs`. Every column is round-tripped and compared bit for
+bit, and decode is timed single-threaded, best of 5, against the decoded size:
+
+```bash
+cargo run --release --features encodings --bin column_codecs -- floats taxi.parquet gov10.bin ...
+cargo run --release --features encodings --bin column_codecs -- ints taxi.parquet hits_0.parquet
+cargo run --release --features encodings --bin column_codecs -- strings hits_0.parquet passages.txt ...
+```
+
+On October 25, 2026 (ratios on any machine; speeds on an AWS m8id.12xlarge,
+Xeon 6975P-C, built with `-C target-cpu=native`):
+
+- Floats: ALP per 1024-value vector, cascaded into frame of reference and
+  bitpacking, with exceptions at 10 bytes each, or ALP-RD where that is smaller
+  (full-precision values). Two departures from the `alp` crate's defaults:
+  its `bit_width` charges constant vectors 1 bit per value instead of 0, and
+  its exponent search on a 32-value sample misses rare outliers that are
+  cheaper as exceptions, so exponents are searched exhaustively per vector.
+  On the ALP paper's 30 double datasets (raw files from the authors' data
+  folder) that reproduces the paper's published bits per value with a median
+  difference of 0.0 bits (Gov/26 0.4 vs 0.41, Stocks-USA 7.9 vs 7.9, POI-lat
+  55.6 vs 55.5; worst Blockchain 41.3 vs 36.2 and Gov/30 8.9 vs 7.5). The
+  median ratio across the folder's 31 double files is 3.9x, the same as
+  zstd -3 over the raw bytes (3.9x). Decimals like prices and
+  temperatures take 8-16 bits per value (4-8x); full-precision coordinates
+  55 bits (1.15x, ALP-RD). Low-cardinality taxi columns (`mta_tax`,
+  `improvement_surcharge`) get 15-30x from ALP and 100-200x from zstd: they
+  want a dictionary or RLE. Decode: 13-17 GiB/s when the column fits in
+  cache, 7-9 GiB/s on the 1 GB datasets, ALP-RD ~7 GiB/s.
+- Integers: frame of reference + FastLanes bitpacking per 1024-value vector,
+  or FastLanes delta (transposed, one base per lane) under it where smaller.
+  Each value takes about log2 of its vector's range: taxi timestamps 33-35
+  bits (1.9x), ClickBench `EventTime` 17 bits (3.8x), location IDs 9 bits,
+  flags 0-2 bits, hashes and random IDs their full width. Overall 4.2x on
+  taxi's 8 integer columns (zstd 5.2x) and 2.5x on ClickBench's 76 (zstd
+  7.7x: `hits` is sorted by counter, date and user, so its values come in
+  runs that RLE or a dictionary would catch first). Decode 12-18 GiB/s, delta
+  ~6 GiB/s.
+- Strings: FSST with one symbol table per 64 Ki strings, compressed lengths
+  bitpacked so every string decodes on its own, against the bytes plus a
+  4-byte offset each. ClickBench `Title` 2.06x, `URL` 1.97x, `Referer` 1.86x,
+  `OriginalURL` 2.33x; loghub `Apache.log` 2.9x and `Linux.log` 2.2x, one
+  string per line; enwik8 lines 1.71x; MS MARCO passages 1.79x. zstd -3 over
+  each whole column gets 3-11x. Decode 2-4 GiB/s.
+
 ## Blob storage rows (March 2026)
 
 The blob storage benchmark code isn't in this repository yet; this describes

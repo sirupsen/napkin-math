@@ -14,6 +14,7 @@ IPs, bucket names or credentials.
 - `benches/napkin_math.rs` registers the Criterion groups in `benches/benchmarks/`.
 - `src/bin/compression_corpus.rs` measures compression ratio and speed on real files.
 - `src/bin/encoding_ratio.rs` (`--features encodings`) measures Parquet, posting-list and Gorilla ratios.
+- `src/bin/column_codecs.rs` (`--features encodings`) measures ALP, FastLanes FOR/delta and FSST per column, with round-trip checks and decode speed.
 - `run` applies Linux host tuning, then runs `cargo bench`. It calls `sudo` itself; don't wrap it in `sudo`.
 - `script/ssd-fio` (disks), `script/net-pair` (network), `script/toggle-hyperthreading`.
 - `script/provision.sh` is a full workstation bootstrap, not a minimal bench setup.
