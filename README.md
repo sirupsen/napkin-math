@@ -26,13 +26,6 @@ in October 2026 on GCP `c4-standard-48-lssd` and AWS `m8id.12xlarge` /
 `m8gd.12xlarge` (Graviton4). See [BENCHMARKING.md](BENCHMARKING.md) to run them
 yourself.
 
-**Note 1:** Some throughput and latency numbers don't line up, this is
-intentional for ease of calculations.
-
-**Note 2:** Take the numbers with a grain of salt. E.g. for I/O, [`fio`][fio] is
-the state-of-the-art. I am continuously updating these numbers as I learn more
-to improve accuracy and as hardware improves.
-
 | Operation                                       | Latency    | Throughput | 1 GiB  |
 | ----------------------------------------------- | ---------- | ---------- | ------ |
 | Memory Sequential Read, all cores               |            | 200 GiB/s  | 5 ms   |
@@ -101,11 +94,6 @@ that costs no more than 8 KiB. One connection gets ~100 MiB/s, so filling the
 network takes 32+ connections. A PUT is durable when it returns, like write +
 fsync. GCS Rapid reads in ~10 ms. Region-to-region latencies:
 [cloudping](https://www.cloudping.co/).
-
-I am aware of some inefficiencies in this suite. I intend to improve my skills
-in this area, in order to ensure the numbers are the upper-bound of performance
-you may be able to squeeze out in production. I find it highly unlikely any of
-them will be more than 2-3x off, which shouldn't be a problem for most users.
 
 ## Cost Numbers
 
@@ -231,4 +219,3 @@ for n-grams; at one line per document they're as big as the text):
 * [Systems Performance (book)](https://www.amazon.com/Systems-Performance-Enterprise-Brendan-Gregg/dp/0133390098/ref=sr_1_1?keywords=systems+performance&qid=1580733419&sr=8-1). Fantastic book about analyzing system performance, finding bottlenecks, and understanding operating systems.
 * [Files are hard](https://danluu.com/file-consistency/)
 
-[fio]: https://github.com/axboe/fio
