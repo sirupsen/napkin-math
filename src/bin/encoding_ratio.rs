@@ -55,7 +55,8 @@ fn parquet(path: &str) {
         writer.close().unwrap();
         bytes::Bytes::from(out)
     };
-    // Single-threaded decode back to Arrow, reported against the Arrow size.
+    // Single-threaded encode from and decode back to Arrow, both reported
+    // against the Arrow size.
     let decode = |file: &bytes::Bytes| {
         let secs = best_of(3, || {
             let reader = ParquetRecordBatchReaderBuilder::try_new(file.clone())
@@ -83,9 +84,14 @@ fn parquet(path: &str) {
         ("parquet dictionary + RLE", encoded),
         ("parquet dictionary + RLE + zstd -3", zstd),
     ] {
-        let file = write(props);
+        let mut file = bytes::Bytes::new();
+        let secs = best_of(3, || file = write(props.clone()));
         report(name, naive, file.len());
-        println!("    {}, 1 thread", decode(&file));
+        println!(
+            "    encode {:.2} GiB/s, {}, 1 thread",
+            naive as f64 / secs / (1 << 30) as f64,
+            decode(&file)
+        );
     }
 }
 
@@ -392,31 +398,43 @@ fn postings(path: &str, paragraphs: bool) {
         }
     }
 
-    // Decode speed: every full 128-ID block of every doc ID list, packed
-    // contiguously, then unpacked single-threaded.
+    // Encode and decode speed: every full 128-ID block of every doc ID list,
+    // packed contiguously, then unpacked, single-threaded.
     let packer = BitPacker4x::new();
-    let mut packed = Vec::new();
     let mut blocks = Vec::new();
+    let mut packed_len = 0;
     for p in index.values() {
         let mut prev = 0;
         for block in p.docs.chunks_exact(BitPacker4x::BLOCK_LEN) {
             let bits = packer.num_bits_sorted(prev, block);
-            let offset = packed.len();
-            packed.resize(offset + BitPacker4x::compressed_block_size(bits), 0);
-            packer.compress_sorted(prev, block, &mut packed[offset..], bits);
-            blocks.push((prev, offset, bits));
+            blocks.push((prev, packed_len, bits, block));
+            packed_len += BitPacker4x::compressed_block_size(bits);
             prev = *block.last().unwrap();
         }
     }
+    let mut packed = vec![0u8; packed_len];
+    let encode_secs = best_of(5, || {
+        let mut offset = 0;
+        for &(initial, _, _, block) in &blocks {
+            let bits = packer.num_bits_sorted(initial, block);
+            offset += packer.compress_sorted(initial, block, &mut packed[offset..], bits);
+        }
+        std::hint::black_box(&packed);
+    });
     let mut out = [0u32; BitPacker4x::BLOCK_LEN];
     let mut checksum = 0u64;
     let secs = best_of(5, || {
-        for &(initial, offset, bits) in &blocks {
+        for &(initial, offset, bits, _) in &blocks {
             packer.decompress_sorted(initial, &packed[offset..], &mut out, bits);
             checksum = checksum.wrapping_add(out[127] as u64);
         }
     });
     let ids = blocks.len() * BitPacker4x::BLOCK_LEN;
+    println!(
+        "encode bitpacked doc IDs, 1 thread: {:.0} M IDs/s, {:.1} GiB/s of u32 input",
+        ids as f64 / encode_secs / 1e6,
+        (ids * 4) as f64 / encode_secs / (1 << 30) as f64
+    );
     println!(
         "decode bitpacked doc IDs, 1 thread: {:.0} M IDs/s, {:.1} GiB/s of u32 output (checksum {checksum})",
         ids as f64 / secs / 1e6,

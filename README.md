@@ -31,16 +31,20 @@ yourself.
 | Memory Sequential Read, all cores               |            | 200 GiB/s  | 5 ms   |
 | L1 Cache Read                                   | 1 ns       | 200 GiB/s  | 5 ms   |
 | L2 Cache Read                                   | 5 ns       | 150 GiB/s  | 7 ms   |
+| Memory Sequential Write, all cores              |            | 150 GiB/s  | 7 ms   |
 | L3 Cache Read                                   | 30 ns      | 30 GiB/s   | 30 ms  |
 | Memory Sequential Read, 1 thread                |            | 20 GiB/s   | 50 ms  |
 | Memory Sequential Write, 1 thread               |            | 10 GiB/s   | 100 ms |
-| CPU Encrypt (AES-256-GCM)                       |            | 10 GiB/s   | 100 ms |
-| CPU Decode Bitpacked Integers                   |            | 10 GiB/s   | 100 ms |
+| CPU Encrypt / Decrypt (AES-256-GCM)             |            | 10 GiB/s   | 100 ms |
+| CPU Encode / Decode Bitpacked Integers          |            | 10 GiB/s   | 100 ms |
 | CPU Hash, not crypto-safe (64 bytes)            | 10 ns      | 5 GiB/s    | 200 ms |
 | SSD Sequential Read                             |            | 4 GiB/s    | 250 ms |
 | Network Bandwidth                               |            | 3 GiB/s    | 300 ms |
 | Network Same-Zone                               | 100 μs     | NW Limit   |        |
 | Network Cross-Zone                              | 500 μs     | NW Limit   |        |
+| Network Same-Continent                          | 25-60 ms   | NW Limit\* |        |
+| Network Cross-Atlantic                          | 80-100 ms  | NW Limit\* |        |
+| Network Cross-Pacific                           | 160-180 ms | NW Limit\* |        |
 | Blob Storage Read (128 KiB)                     | 100 ms     | NW Limit   |        |
 | Blob Storage Write (128 KiB)                    | 100 ms     | NW Limit   |        |
 | Memory Random Write (64 bytes)                  |            | 3 GiB/s    | 300 ms |
@@ -57,14 +61,12 @@ yourself.
 | CPU Compress (lz4, zstd -1)                     |            | 500 MiB/s  | 2 s    |
 | CPU Sort (64-bit integers)                      |            | 500 MiB/s  | 3 s    |
 | CPU Deserialize (JSON, Protobuf)                |            | 300 MiB/s  | 3 s    |
+| CPU Encode Parquet (dictionary + zstd)          |            | 300 MiB/s  | 3 s    |
 | Network Disk Random Read (8 KiB)                | 500 μs     | 250 MiB/s  | 4 s    |
 | Network Disk Random Write (8 KiB)               | 500 μs     | 250 MiB/s  | 4 s    |
 | HDD Sequential Read                             |            | 200 MiB/s  | 5 s    |
 | HDD Sequential Write                            |            | 200 MiB/s  | 5 s    |
-| Network Same-Continent                          | 25-60 ms   | 50 MiB/s   | 20 s   |
 | SSD Sequential Write + fsync (8 KiB)            | 300 μs     | 30 MiB/s   | 30 s   |
-| Network Cross-Atlantic                          | 80-100 ms  | 25 MiB/s   | 40 s   |
-| Network Cross-Pacific                           | 160-180 ms | 25 MiB/s   | 40 s   |
 | Network Disk Sequential Write + fsync (8 KiB)   | 1 ms       | 8 MiB/s    | 2 min  |
 | HDD Sequential Write + fsync (8 KiB)            | 1 ms       | 8 MiB/s    | 2 min  |
 | HDD Random Write (8 KiB)                        | 5 ms       | 2 MiB/s    | 10 min |
@@ -83,6 +85,9 @@ yourself.
 | Database Query (MySQL, Memcached, Redis, ...)   | 500 μs     |            |        |
 | Blob Storage Conditional Write (128 KiB)        | 100 ms     |            |        |
 | Blob Storage List (1000 keys)                   | 150 ms     |            |        |
+
+\* One TCP connection moves ~2 MiB per round trip, so 2 MiB / RTT: 20 MiB/s
+at 100 ms. Add connections to go faster.
 
 Throughput is the most you can get, e.g. many requests in flight for random
 reads. Network Disk is EBS gp3 / GCP Hyperdisk Balanced provisioned to the max.

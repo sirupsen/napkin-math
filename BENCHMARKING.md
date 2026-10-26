@@ -27,8 +27,8 @@ debug build.
 | `memory_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD | Memory Sequential Read |
 | `memory_latency` | Dependent pointer chase over 16 KiB to 1 GiB, with and without huge pages | L1/L2/L3 Cache Read and Memory Random Read, latency |
 | `cache_read` | The `memory_read` SIMD loop over 16 KiB, 256 KiB and 8 MiB buffers | L1/L2/L3 Cache Read, throughput |
-| `memory_write` | memset and memcpy of 1 GiB, 1 thread | Memory Sequential Write |
-| `encrypt` | ring AES-256-GCM and ChaCha20-Poly1305 on 16 KiB | CPU Encrypt |
+| `memory_write` | memset and memcpy of 1 GiB on 1 thread, memset of 16 GiB on all cores | Memory Sequential Write |
+| `encrypt` | ring AES-256-GCM and ChaCha20-Poly1305 seal and open on 16 KiB | CPU Encrypt / Decrypt |
 | `sync` | Atomic increment and `Mutex` lock + unlock, alone and with a second core on the same line | CPU Atomic Increment, CPU Mutex Lock + Unlock |
 | `spawn` | `thread::spawn` + join, and spawning `true` and waiting for it | CPU Thread Spawn, CPU Process Spawn |
 | `handshake` | TCP connect over loopback, and a full TLS 1.3 handshake (rustls, ECDSA P-256, X25519) in memory | CPU TCP Connect, CPU TLS 1.3 Handshake |
@@ -55,6 +55,11 @@ GiB/s; atomic increment 6 ns (72 ns contended); mutex 12 ns (546 ns
 contended); thread spawn 52 us; process spawn 305 us; loopback TCP connect 7.8
 us; TLS 1.3 handshake 259 us of CPU for both sides. TCP connect and the TLS
 handshake each add one network round trip on top.
+
+On October 26, 2026 on an m8id.12xlarge (Xeon 6975P-C, 48 vCPU), AES-256-GCM
+decrypted at 9.7 GiB/s and encrypted at 9.5 GiB/s (ChaCha20-Poly1305 2.3 GiB/s
+both ways), and a 16 GiB memset across 48 pinned threads ran at 145 GiB/s
+(11.5 GiB/s on one thread).
 
 The README collapses `memory_read`'s scalar and SIMD variants into one
 single-thread row and one threaded row for memorability. `random_memory` issues
@@ -212,7 +217,11 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   and ClickBench rows repeat a lot, so their doc IDs cluster and most
   frequencies are 1. Unpacking MS MARCO's full 128-ID blocks with
   `bitpacking`'s `BitPacker4x` ran at 3.1 billion IDs/s, 11.6 GiB/s of u32
-  output.
+  output. Packing them ran at 8.8 GiB/s of u32 input, against 12.2 GiB/s
+  for unpacking on the same October 26 run, so one row covers both. Writing
+  Parquet from Arrow with dictionary + RLE + zstd -3 ran at 0.43 GiB/s on taxi
+  and 0.17 GiB/s on ClickBench (105 columns, many strings), against 2.1 and 1.8
+  GiB/s for reading it back: encoding is 5-10x slower than decoding.
 - Time series from the Numenta Anomaly Benchmark (9 real CloudWatch and sensor
   series at 5-minute intervals), against 16 bytes per point: Gorilla gets
   2.2-2.8x (~7 B/point) on float gauges like CPU utilization and temperature,
