@@ -92,11 +92,31 @@ HDDs of an AWS d3.xlarge.
 
 `script/ssd-fio` runs `fio` for sequential 1 MiB and buffered 8 KiB reads,
 random 8 KiB reads at QD1 and QD32, sequential writes, buffered 8 KiB writes and
-8 KiB writes with `fdatasync`. It preconditions the range first (reads of
+8 KiB commits: `O_DIRECT` overwrites of a written 1 GiB region, each followed by
+`fdatasync`, from 1 and from 32 writers. It preconditions the range first (reads of
 never-written blocks can skip the flash), checks that the file system the file
 actually lands on has 2x the test size free, and refuses to write to a mounted
 or formatted device. A file target includes the file system's fsync cost
 (the README fsync rows are ext4); a raw device does not.
+
+On October 26, 2026, the commit jobs on ext4 gave (1 writer / 32 writers):
+
+| Disk | Latency | 32 writers |
+| --- | --- | --- |
+| m8id.12xlarge instance store | 31 us | 2.7 GiB/s (355k commits/s) |
+| m8gd.12xlarge instance store | 17 us | 0.9 GiB/s |
+| GCP C4 local SSD (one disk) | 32 us | 318 MiB/s (per-disk write cap) |
+| EBS gp3, 16k IOPS / 1000 MiB/s | 1.0 ms | 133 MiB/s (IOPS cap) |
+| Hyperdisk Balanced, 80k IOPS / 1600 MiB/s | 470 us | 364 MiB/s |
+| d3.xlarge HDD | 1.2 ms | 2 MiB/s |
+
+`fdatasync` took ~0.5 us on every SSD and network disk: they all report
+`write through` in `/sys/block/*/queue/write_cache`, so the kernel sends no
+flush and a commit costs one write. The d3 HDDs report `write back`; their
+`fdatasync` is a ~0.7 ms cache flush, and 32 writers drop them from ~850 to
+~280 commits/s. The old fsync rows (300 us, 30 MiB/s) were buffered appends from
+one writer, where ext4 commits its journal on every `fdatasync` (~250 us on
+m8id, 88 us on m8gd).
 
 These rows used to come from a Rust harness in `src/main.rs`, whose sequential
 read benchmark reread the same 1 GiB file from page cache after the first pass.
