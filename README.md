@@ -44,12 +44,12 @@ to improve accuracy and as hardware improves.
 | CPU Encrypt (AES-256-GCM)                       |            | 10 GiB/s   | 100 ms |
 | CPU Decode Bitpacked Integers                   |            | 10 GiB/s   | 100 ms |
 | CPU Hash, not crypto-safe (64 bytes)            | 10 ns      | 5 GiB/s    | 200 ms |
-| Network Bandwidth                               |            | 5 GiB/s    | 200 ms |
+| SSD Sequential Read                             |            | 4 GiB/s    | 250 ms |
+| Network Bandwidth                               |            | 3 GiB/s    | 300 ms |
 | Network Same-Zone                               | 100 μs     | NW Limit   |        |
 | Network Cross-Zone                              | 500 μs     | NW Limit   |        |
 | Blob Storage Read (128 KiB)                     | 100 ms     | NW Limit   |        |
 | Blob Storage Write (128 KiB)                    | 100 ms     | NW Limit   |        |
-| SSD Sequential Read                             |            | 4 GiB/s    | 250 ms |
 | Memory Random Write (64 bytes)                  |            | 3 GiB/s    | 300 ms |
 | Memory Random Read (64 bytes)                   | 100 ns     | 3 GiB/s    | 300 ms |
 | SSD Sequential Write                            |            | 2 GiB/s    | 500 ms |
@@ -93,8 +93,8 @@ to improve accuracy and as hardware improves.
 
 Throughput is the most you can get, e.g. many requests in flight for random
 reads. Network Disk is EBS gp3 / GCP Hyperdisk Balanced provisioned to the max.
-Network Bandwidth is a typical 64-128 vCPU VM (AWS m8, GCP C4/N4, Azure Dv6:
-30-67 Gbit/s); NW Limit rows max out at it, with enough connections. Blob
+Network Bandwidth is a 48 vCPU VM (AWS m8, GCP C4, Azure Dv5/Dv6:
+22-32 Gbit/s); NW Limit rows max out at it, with enough connections. Blob
 Storage is S3, GCS and Azure Blob from a VM in the same region; access pattern
 doesn't matter. Its latency is p99; Read and Write are at the largest request
 that costs no more than 8 KiB. One connection gets ~100 MiB/s, so filling the
