@@ -127,7 +127,7 @@ Approximate numbers that should be consistent between Cloud providers.
 | What                          | Amount | \$ / Month | Spot \$ /month |
 | ----------------------------- | ------ | ---------- | -------------- |
 | CPU                           | 1 vCPU | \$25       | \$10           |
-| GPU (H100)                    | 1      | \$7000     | \$3000         |
+| GPU (B200)                    | 1      | \$9000     | \$5000         |
 | Memory                        | 1 GB   | \$2.5      | \$1            |
 | Storage                       |        |            |                |
 | ├ Warehouse Storage           | 1 GB   | \$0.02     |                |
@@ -175,12 +175,12 @@ Zonal buckets also charge \$0.003 per GB written and \$0.0006 per GB read.
 
 Reading 1 TiB costs the VM time it takes at the row's throughput (48 vCPU + 192
 GB is \$1,700/month, \$0.0006/s; the 1-thread row is one vCPU; the GPU
-row is an H100 at its 3.35 TB/s spec), plus the transfer and request fees above:
+row is a B200 at its 8 TB/s spec), plus the transfer and request fees above:
 
 | What                                            | \$ / TiB read |
 | ----------------------------------------------- | ------------- |
+| GPU Memory Sequential Read (B200)               | \$0.0005      |
 | Memory Sequential Read, 1 thread                | \$0.0005      |
-| GPU Memory Sequential Read (H100)               | \$0.0009      |
 | Memory Sequential Read, all cores               | \$0.003       |
 | SSD Sequential Read                             | \$0.2         |
 | Network Same-Zone                               | \$0.2         |
