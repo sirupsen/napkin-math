@@ -176,17 +176,17 @@ Zonal buckets also charge \$0.003 per GB written and \$0.0006 per GB read.
 Instance shapes are the same few ratios on every cloud, here per vCPU at list
 price (one B200 per 25 vCPU):
 
-| Shape         | vCPU | Memory (GiB) | VRAM (GB) | SSD (GB) | Network (GB/s) | \$ / mo / vCPU |
-| ------------- | ---- | ------------ | --------- | -------- | -------------- | -------------- |
-| CPU           | 1    | 2            |           |          | 0.07           | \$35           |
-| General       | 1    | 4            |           |          | 0.07           | \$35           |
-| General, SSD  | 1    | 4            |           | 60       | 0.07           | \$45           |
-| Memory        | 1    | 8            |           |          | 0.07           | \$50           |
-| Memory, High  | 1    | 16           |           |          | 0.06           | \$80           |
-| Memory, Ultra | 1    | 32           |           |          | 0.1            | \$150          |
-| SSD           | 1    | 8            |           | 250      | 0.07           | \$70           |
-| SSD, High     | 1    | 8            |           | 600      | 0.15           | \$95           |
-| GPU (B200)    | 1    | 14           | 7         | 100      | 2              | \$350          |
+| Shape         | vCPU | Memory (GiB) | VRAM (GB) | SSD (GB) | Network (GB/s) | \$ / mo / vCPU | Max (vCPU) |
+| ------------- | ---- | ------------ | --------- | -------- | -------------- | -------------- | ---------- |
+| CPU           | 1    | 2            |           |          | 0.07           | \$35           | 300        |
+| General       | 1    | 4            |           |          | 0.07           | \$35           | 300        |
+| General, SSD  | 1    | 4            |           | 60       | 0.07           | \$45           | 300        |
+| Memory        | 1    | 8            |           |          | 0.07           | \$50           | 300        |
+| Memory, High  | 1    | 16           |           |          | 0.06           | \$80           | 200        |
+| Memory, Ultra | 1    | 32           |           |          | 0.1            | \$150          | 128        |
+| SSD           | 1    | 8            |           | 250      | 0.07           | \$70           | 200        |
+| SSD, High     | 1    | 8            |           | 600      | 0.15           | \$95           | 200        |
+| GPU (B200)    | 1    | 14           | 7         | 100      | 2              | \$350          | 200        |
 
 Reading 1 TiB costs the VM time it takes at the row's throughput (48 vCPU + 192
 GB is \$1,700/month, \$0.0006/s; the 1-thread row is one vCPU; the GPU
