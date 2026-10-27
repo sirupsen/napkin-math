@@ -26,84 +26,84 @@ in October 2026 on GCP `c4-standard-48-lssd` and AWS `m8id.12xlarge` /
 `m8gd.12xlarge` (Graviton4). See [BENCHMARKING.md](BENCHMARKING.md) to run them
 yourself.
 
-| Operation                                                      | Latency    | Throughput | 1 GiB  |
-| -------------------------------------------------------------- | ---------- | ---------- | ------ |
-| Memory Sequential Read, all cores                              |            | 200 GiB/s  | 5 ms   |
-| L1 Cache Read                                                  | 1 ns       | 200 GiB/s  | 5 ms   |
-| Memory Sequential Write, all cores                             |            | 150 GiB/s  | 7 ms   |
-| L2 Cache Read                                                  | 5 ns       | 150 GiB/s  | 7 ms   |
-| L3 Cache Read                                                  | 30 ns      | 30 GiB/s   | 30 ms  |
-| Memory Sequential Read, 1 thread                               |            | 20 GiB/s   | 50 ms  |
-| Memory Sequential Write, 1 thread                              |            | 10 GiB/s   | 100 ms |
-| CPU Encrypt / Decrypt (AES-256-GCM)                            |            | 10 GiB/s   | 100 ms |
-| CPU Encode / Decode Bitpacked Integers                         |            | 10 GiB/s   | 100 ms |
-| CPU Hash, not crypto-safe (64 bytes)                           | 10 ns      | 5 GiB/s    | 200 ms |
-| SSD Sequential Read                                            |            | 4 GiB/s    | 250 ms |
-| Network Bandwidth                                              |            | 3 GiB/s    | 300 ms |
-| Network Same-Zone                                              | 100 μs     | NW Limit   |        |
-| Network Cross-Zone                                             | 500 μs     | NW Limit   |        |
-| Network Cross-Region, Same-Continent                           | 25-60 ms   | NW Limit\* |        |
-| Network Cross-Region, Cross-Atlantic                           | 80-100 ms  | NW Limit\* |        |
-| Network Cross-Region, Cross-Pacific                            | 160-180 ms | NW Limit\* |        |
-| Blob Storage, Zonal Read (128 KiB)                             | 50 ms      | NW Limit   |        |
-| Blob Storage, Regional Read (128 KiB)                          | 100 ms     | NW Limit   |        |
-| Blob Storage, Regional Write (128 KiB)                         | 100 ms     | NW Limit   |        |
-| Blob Storage, Zonal Write (128 KiB)                            | 100 ms     | NW Limit   |        |
-| Memory Random Write (64 bytes)                                 |            | 3 GiB/s    | 300 ms |
-| Memory Random Read (64 bytes)                                  | 100 ns     | 3 GiB/s    | 300 ms |
-| SSD Sequential Write                                           |            | 2 GiB/s    | 500 ms |
-| CPU Decode Parquet (dictionary + zstd)                         |            | 2 GiB/s    | 500 ms |
-| SSD Random Write (8 KiB)                                       | 30 μs      | 2 GiB/s    | 500 ms |
-| SSD Sequential Durable Write (64 KiB)†                         | 50 μs      | 2 GiB/s    | 500 ms |
-| SSD Random Read (8 KiB)                                        | 100 μs     | 2 GiB/s    | 500 ms |
-| CPU Serialize (JSON, Protobuf)                                 |            | 1 GiB/s    | 1 s    |
-| CPU Decompress (lz4, zstd -1)                                  |            | 1 GiB/s    | 1 s    |
-| Network Disk, Zonal Sequential Read                            |            | 1 GiB/s    | 1 s    |
-| Network Disk, Regional Sequential Read                         |            | 1 GiB/s    | 1 s    |
-| Network Disk, Zonal Sequential Write                           |            | 1 GiB/s    | 1 s    |
-| Network Disk, Regional Sequential Write                        |            | 1 GiB/s    | 1 s    |
-| CPU Hash, crypto-safe (64 bytes)                               | 100 ns     | 1 GiB/s    | 1 s    |
-| Network Disk, Zonal Sequential Durable Write (64 KiB)†         | 1 ms       | 1 GiB/s    | 1 s    |
-| Network Disk, Regional Sequential Durable Write (64 KiB)†      | 2 ms       | 1 GiB/s    | 1 s    |
-| CPU Compress (lz4, zstd -1)                                    |            | 500 MiB/s  | 2 s    |
-| CPU Sort (64-bit integers)                                     |            | 500 MiB/s  | 3 s    |
-| CPU Deserialize (JSON, Protobuf)                               |            | 300 MiB/s  | 3 s    |
-| CPU Encode Parquet (dictionary + zstd)                         |            | 300 MiB/s  | 3 s    |
-| Network Disk, Zonal, HDD Sequential Read                       |            | 250 MiB/s  | 4 s    |
-| Network Disk, Zonal, HDD Sequential Write                      |            | 250 MiB/s  | 4 s    |
-| Network Disk, Regional, HDD Sequential Read                    |            | 250 MiB/s  | 4 s    |
-| Network Disk, Zonal Random Read (8 KiB)                        | 500 μs     | 250 MiB/s  | 4 s    |
-| Network Disk, Regional Random Read (8 KiB)                     | 500 μs     | 250 MiB/s  | 4 s    |
-| Network Disk, Zonal Random Write (8 KiB)                       | 500 μs     | 250 MiB/s  | 4 s    |
-| Network Disk, Regional Random Write (8 KiB)                    | 1 ms       | 250 MiB/s  | 4 s    |
-| HDD Sequential Read                                            |            | 200 MiB/s  | 5 s    |
-| HDD Sequential Write                                           |            | 200 MiB/s  | 5 s    |
-| Network Disk, Regional, HDD Sequential Write                   |            | 200 MiB/s  | 5 s    |
-| Network Disk, Zonal, HDD Sequential Durable Write (64 KiB)†    | 500 μs     | 200 MiB/s  | 5 s    |
-| Network Disk, Regional, HDD Sequential Durable Write (64 KiB)† | 1 ms       | 200 MiB/s  | 5 s    |
-| Network Disk, Zonal, HDD Random Write (8 KiB)                  | 500 μs     | 20 MiB/s   | 1 min  |
-| Network Disk, Regional, HDD Random Write (8 KiB)               | 1 ms       | 20 MiB/s   | 1 min  |
-| Network Disk, Zonal, HDD Random Read (8 KiB)                   | 20 ms      | 10 MiB/s   | 2 min  |
-| Network Disk, Regional, HDD Random Read (8 KiB)                | 20 ms      | 10 MiB/s   | 2 min  |
-| HDD Sequential Durable Write (8 KiB)†                          | 1 ms       | 8 MiB/s    | 2 min  |
-| HDD Random Write (8 KiB)                                       | 5 ms       | 2 MiB/s    | 9 min  |
-| HDD Random Read (8 KiB)                                        | 10 ms      | 2 MiB/s    | 9 min  |
-| CPU Atomic Increment                                           | 5 ns       |            |        |
-| CPU Mutex Lock + Unlock                                        | 10 ns      |            |        |
-| CPU System Call                                                | 100 ns     |            |        |
-| CPU Atomic Increment, contended                                | 100 ns     |            |        |
-| CPU Mutex Lock + Unlock, contended                             | 500 ns     |            |        |
-| CPU Context Switch                                             | 1 μs       |            |        |
-| CPU TCP Connect (+1 RTT)                                       | 10 μs      |            |        |
-| Proxy Request (Envoy, HAProxy, Nginx, ProxySQL)                | 50 μs      |            |        |
-| CPU Thread Spawn                                               | 50 μs      |            |        |
-| CPU TLS 1.3 Handshake (+1 RTT)                                 | 250 μs     |            |        |
-| CPU Process Spawn                                              | 300 μs     |            |        |
-| Database Query (MySQL, Memcached, Redis, ...)                  | 500 μs     |            |        |
-| Blob Storage, Regional Conditional Write (128 KiB)             | 100 ms     |            |        |
-| Blob Storage, Zonal List (1000 keys)                           | 100 ms     |            |        |
-| Blob Storage, Regional List (1000 keys)                        | 150 ms     |            |        |
-| Blob Storage, Zonal Conditional Write (128 KiB)                | 500 ms     |            |        |
+| Operation                                                      | Latency    | Throughput |
+| -------------------------------------------------------------- | ---------- | ---------- |
+| Memory Sequential Read, all cores                              |            | 200 GiB/s  |
+| L1 Cache Read                                                  | 1 ns       | 200 GiB/s  |
+| Memory Sequential Write, all cores                             |            | 150 GiB/s  |
+| L2 Cache Read                                                  | 5 ns       | 150 GiB/s  |
+| L3 Cache Read                                                  | 30 ns      | 30 GiB/s   |
+| Memory Sequential Read, 1 thread                               |            | 20 GiB/s   |
+| Memory Sequential Write, 1 thread                              |            | 10 GiB/s   |
+| CPU Encrypt / Decrypt (AES-256-GCM)                            |            | 10 GiB/s   |
+| CPU Encode / Decode Bitpacked Integers                         |            | 10 GiB/s   |
+| CPU Hash, not crypto-safe (64 bytes)                           | 10 ns      | 5 GiB/s    |
+| SSD Sequential Read                                            |            | 4 GiB/s    |
+| Network Bandwidth                                              |            | 3 GiB/s    |
+| Network Same-Zone                                              | 100 μs     | NW Limit   |
+| Network Cross-Zone                                             | 500 μs     | NW Limit   |
+| Network Cross-Region, Same-Continent                           | 25-60 ms   | NW Limit\* |
+| Network Cross-Region, Cross-Atlantic                           | 80-100 ms  | NW Limit\* |
+| Network Cross-Region, Cross-Pacific                            | 160-180 ms | NW Limit\* |
+| Blob Storage, Zonal Read (128 KiB)                             | 50 ms      | NW Limit   |
+| Blob Storage, Regional Read (128 KiB)                          | 100 ms     | NW Limit   |
+| Blob Storage, Regional Write (128 KiB)                         | 100 ms     | NW Limit   |
+| Blob Storage, Zonal Write (128 KiB)                            | 100 ms     | NW Limit   |
+| Memory Random Write (64 bytes)                                 |            | 3 GiB/s    |
+| Memory Random Read (64 bytes)                                  | 100 ns     | 3 GiB/s    |
+| SSD Sequential Write                                           |            | 2 GiB/s    |
+| CPU Decode Parquet (dictionary + zstd)                         |            | 2 GiB/s    |
+| SSD Random Write (8 KiB)                                       | 30 μs      | 2 GiB/s    |
+| SSD Sequential Durable Write (64 KiB)†                         | 50 μs      | 2 GiB/s    |
+| SSD Random Read (8 KiB)                                        | 100 μs     | 2 GiB/s    |
+| CPU Serialize (JSON, Protobuf)                                 |            | 1 GiB/s    |
+| CPU Decompress (lz4, zstd -1)                                  |            | 1 GiB/s    |
+| Network Disk, Zonal Sequential Read                            |            | 1 GiB/s    |
+| Network Disk, Regional Sequential Read                         |            | 1 GiB/s    |
+| Network Disk, Zonal Sequential Write                           |            | 1 GiB/s    |
+| Network Disk, Regional Sequential Write                        |            | 1 GiB/s    |
+| CPU Hash, crypto-safe (64 bytes)                               | 100 ns     | 1 GiB/s    |
+| Network Disk, Zonal Sequential Durable Write (64 KiB)†         | 1 ms       | 1 GiB/s    |
+| Network Disk, Regional Sequential Durable Write (64 KiB)†      | 2 ms       | 1 GiB/s    |
+| CPU Compress (lz4, zstd -1)                                    |            | 500 MiB/s  |
+| CPU Sort (64-bit integers)                                     |            | 500 MiB/s  |
+| CPU Deserialize (JSON, Protobuf)                               |            | 300 MiB/s  |
+| CPU Encode Parquet (dictionary + zstd)                         |            | 300 MiB/s  |
+| Network Disk, Zonal, HDD Sequential Read                       |            | 250 MiB/s  |
+| Network Disk, Zonal, HDD Sequential Write                      |            | 250 MiB/s  |
+| Network Disk, Regional, HDD Sequential Read                    |            | 250 MiB/s  |
+| Network Disk, Zonal Random Read (8 KiB)                        | 500 μs     | 250 MiB/s  |
+| Network Disk, Regional Random Read (8 KiB)                     | 500 μs     | 250 MiB/s  |
+| Network Disk, Zonal Random Write (8 KiB)                       | 500 μs     | 250 MiB/s  |
+| Network Disk, Regional Random Write (8 KiB)                    | 1 ms       | 250 MiB/s  |
+| HDD Sequential Read                                            |            | 200 MiB/s  |
+| HDD Sequential Write                                           |            | 200 MiB/s  |
+| Network Disk, Regional, HDD Sequential Write                   |            | 200 MiB/s  |
+| Network Disk, Zonal, HDD Sequential Durable Write (64 KiB)†    | 500 μs     | 200 MiB/s  |
+| Network Disk, Regional, HDD Sequential Durable Write (64 KiB)† | 1 ms       | 200 MiB/s  |
+| Network Disk, Zonal, HDD Random Write (8 KiB)                  | 500 μs     | 20 MiB/s   |
+| Network Disk, Regional, HDD Random Write (8 KiB)               | 1 ms       | 20 MiB/s   |
+| Network Disk, Zonal, HDD Random Read (8 KiB)                   | 20 ms      | 10 MiB/s   |
+| Network Disk, Regional, HDD Random Read (8 KiB)                | 20 ms      | 10 MiB/s   |
+| HDD Sequential Durable Write (8 KiB)†                          | 1 ms       | 8 MiB/s    |
+| HDD Random Write (8 KiB)                                       | 5 ms       | 2 MiB/s    |
+| HDD Random Read (8 KiB)                                        | 10 ms      | 2 MiB/s    |
+| CPU Atomic Increment                                           | 5 ns       |            |
+| CPU Mutex Lock + Unlock                                        | 10 ns      |            |
+| CPU System Call                                                | 100 ns     |            |
+| CPU Atomic Increment, contended                                | 100 ns     |            |
+| CPU Mutex Lock + Unlock, contended                             | 500 ns     |            |
+| CPU Context Switch                                             | 1 μs       |            |
+| CPU TCP Connect (+1 RTT)                                       | 10 μs      |            |
+| Proxy Request (Envoy, HAProxy, Nginx, ProxySQL)                | 50 μs      |            |
+| CPU Thread Spawn                                               | 50 μs      |            |
+| CPU TLS 1.3 Handshake (+1 RTT)                                 | 250 μs     |            |
+| CPU Process Spawn                                              | 300 μs     |            |
+| Database Query (MySQL, Memcached, Redis, ...)                  | 500 μs     |            |
+| Blob Storage, Regional Conditional Write (128 KiB)             | 100 ms     |            |
+| Blob Storage, Zonal List (1000 keys)                           | 100 ms     |            |
+| Blob Storage, Regional List (1000 keys)                        | 150 ms     |            |
+| Blob Storage, Zonal Conditional Write (128 KiB)                | 500 ms     |            |
 
 † pwrite + fdatasync into a preallocated file. Cloud SSDs and network disks
 have no write cache to flush (Azure Premium SSD flushes in ~30 μs), so a durable

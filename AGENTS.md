@@ -59,8 +59,9 @@ make test                                        # each benchmark once, smoke te
 - Round for memorability: `200 MiB/s`, `20 GiB/s`, `50 ns`, `30 ms`, never
   `173 MiB/s`. Near a boundary, pick the simple number that keeps the order of
   magnitude honest.
-- Row names are `[Device] [Access pattern] [Operation]`, grouped by device.
-- Throughput is the most you can get (many requests in flight). The 1 GiB
-  column is 1 GiB divided by throughput; keep it consistent.
+- Row names are `[Device] [Access pattern] [Operation]`, with `, Zonal` /
+  `, Regional` after the device where both exist. Rows sort by throughput, then
+  by latency, lowest first.
+- Throughput is the most you can get (many requests in flight).
 - Keep prose terse and unhedged. Methodology goes in BENCHMARKING.md, not the README.
 - Show README changes for review before pushing.
