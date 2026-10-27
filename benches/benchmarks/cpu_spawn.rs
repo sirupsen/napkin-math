@@ -2,8 +2,8 @@ use criterion::*;
 use std::process::Command;
 use std::thread;
 
-fn spawn_benchmark(c: &mut Criterion) {
-    let mut group = c.benchmark_group("spawn");
+fn cpu_spawn_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("cpu_spawn");
     group.bench_function("thread spawn + join", |b| {
         b.iter(|| thread::spawn(|| {}).join().unwrap())
     });
@@ -14,4 +14,4 @@ fn spawn_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, spawn_benchmark);
+criterion_group!(benches, cpu_spawn_benchmark);

@@ -1,6 +1,8 @@
 use criterion::*;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName};
-use rustls::{ClientConfig, ClientConnection, Connection, RootCertStore, ServerConfig, ServerConnection};
+use rustls::{
+    ClientConfig, ClientConnection, Connection, RootCertStore, ServerConfig, ServerConnection,
+};
 use std::hint::black_box;
 use std::io::Read;
 use std::net::{TcpListener, TcpStream};
@@ -16,7 +18,9 @@ fn tls_configs() -> (Arc<ClientConfig>, Arc<ServerConfig>) {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let certified = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
     let cert: CertificateDer<'static> = certified.cert.der().clone();
-    let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(certified.signing_key.serialize_der()));
+    let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+        certified.signing_key.serialize_der(),
+    ));
 
     let server = ServerConfig::builder_with_provider(provider.clone())
         .with_safe_default_protocol_versions()
@@ -65,7 +69,10 @@ fn reset_on_close(stream: &TcpStream) {
     // SO_LINGER 0 closes with a RST, so connections don't pile up in TIME_WAIT
     // and exhaust ephemeral ports over a long run.
     use std::os::fd::AsRawFd;
-    let linger = libc::linger { l_onoff: 1, l_linger: 0 };
+    let linger = libc::linger {
+        l_onoff: 1,
+        l_linger: 0,
+    };
     unsafe {
         libc::setsockopt(
             stream.as_raw_fd(),
@@ -77,8 +84,8 @@ fn reset_on_close(stream: &TcpStream) {
     }
 }
 
-fn handshake_benchmark(c: &mut Criterion) {
-    let mut group = c.benchmark_group("handshake");
+fn cpu_handshake_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("cpu_handshake");
 
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
@@ -107,4 +114,4 @@ fn handshake_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, handshake_benchmark);
+criterion_group!(benches, cpu_handshake_benchmark);

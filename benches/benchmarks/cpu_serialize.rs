@@ -1,8 +1,10 @@
-use prost::Message;
 use super::MIB;
+use criterion::*;
+use prost::Message;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use serde::{Deserialize, Serialize};
+use std::hint::black_box;
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Message)]
 pub struct BenchPayload {
@@ -40,12 +42,6 @@ pub struct SerializationCorpus {
     pub payload: BenchPayload,
     pub protobuf: Vec<u8>,
     pub json: Vec<u8>,
-}
-
-pub struct CompressionCorpus {
-    pub bytes: Vec<u8>,
-    pub compressed: Vec<u8>,
-    pub level: i32,
 }
 
 pub fn serialization_corpus() -> SerializationCorpus {
@@ -119,22 +115,74 @@ pub fn serialization_corpus() -> SerializationCorpus {
     }
 }
 
-pub fn compression_corpus() -> CompressionCorpus {
-    const TARGET_UNCOMPRESSED_BYTES: usize = 4 * MIB;
-    const LEVEL: i32 = 3;
+fn cpu_serialize_benchmark(c: &mut Criterion) {
+    let corpus = serialization_corpus();
+    let payload = corpus.payload;
+    let protobuf = corpus.protobuf;
+    let json = corpus.json;
 
-    let serialization = serialization_corpus();
-    let mut bytes = Vec::with_capacity(TARGET_UNCOMPRESSED_BYTES);
-    while bytes.len() < TARGET_UNCOMPRESSED_BYTES {
-        bytes.extend_from_slice(&serialization.json);
+    let mut group = c.benchmark_group("cpu_serialize");
+
+    {
+        let mut buffer = Vec::with_capacity(protobuf.len());
+        group.throughput(Throughput::Bytes(protobuf.len() as u64));
+        group.bench_function("protobuf/serialize", |b| {
+            b.iter(|| {
+                buffer.clear();
+                payload.encode(&mut buffer).unwrap();
+                black_box(buffer.len())
+            })
+        });
     }
-    bytes.truncate(TARGET_UNCOMPRESSED_BYTES);
 
-    let compressed = zstd::bulk::compress(&bytes, LEVEL).unwrap();
+    group.throughput(Throughput::Bytes(protobuf.len() as u64));
+    group.bench_function("protobuf/deserialize", |b| {
+        b.iter(|| black_box(BenchPayload::decode(protobuf.as_slice()).unwrap()))
+    });
 
-    CompressionCorpus {
-        bytes,
-        compressed,
-        level: LEVEL,
+    {
+        let mut buffer = Vec::with_capacity(json.len());
+        group.throughput(Throughput::Bytes(json.len() as u64));
+        group.bench_function("json/serialize", |b| {
+            b.iter(|| {
+                buffer.clear();
+                serde_json::to_writer(&mut buffer, &payload).unwrap();
+                black_box(buffer.len())
+            })
+        });
     }
+
+    group.throughput(Throughput::Bytes(json.len() as u64));
+    group.bench_function("json/deserialize", |b| {
+        b.iter(|| black_box(serde_json::from_slice::<BenchPayload>(&json).unwrap()))
+    });
+
+    // Into a dynamic tree, like JSON.parse in Ruby, Python or JavaScript.
+    group.throughput(Throughput::Bytes(json.len() as u64));
+    group.bench_function("json/deserialize to Value", |b| {
+        b.iter(|| black_box(serde_json::from_slice::<serde_json::Value>(&json).unwrap()))
+    });
+
+    // A compact binary format that writes fields in order with no tags.
+    let postcard = postcard::to_allocvec(&payload).unwrap();
+    {
+        let mut buffer = Vec::with_capacity(postcard.len());
+        group.throughput(Throughput::Bytes(postcard.len() as u64));
+        group.bench_function("postcard/serialize", |b| {
+            b.iter(|| {
+                buffer.clear();
+                buffer = postcard::to_extend(&payload, std::mem::take(&mut buffer)).unwrap();
+                black_box(buffer.len())
+            })
+        });
+    }
+
+    group.throughput(Throughput::Bytes(postcard.len() as u64));
+    group.bench_function("postcard/deserialize", |b| {
+        b.iter(|| black_box(postcard::from_bytes::<BenchPayload>(&postcard).unwrap()))
+    });
+
+    group.finish();
 }
+
+criterion_group!(benches, cpu_serialize_benchmark);

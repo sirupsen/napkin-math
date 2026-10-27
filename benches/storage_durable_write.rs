@@ -2,8 +2,8 @@
 // pair, the way a database commits to its log. No dependencies, so it
 // is easy to read exactly what is measured.
 //
-//   cargo bench --bench durable_write -- /mnt/disk/commit.dat
-//   cargo bench --bench durable_write -- /mnt/disk/commit.dat --sizes 8k,64k,1m --writers 1,32 --secs 15
+//   cargo bench --bench storage_durable_write -- /mnt/disk/commit.dat
+//   cargo bench --bench storage_durable_write -- /mnt/disk/commit.dat --sizes 8k,64k,1m --writers 1,32 --secs 15
 //
 // Every writer overwrites its own 64 MiB slice of a file that is fully written
 // and synced first, sequentially and wrapping around, with O_DIRECT on Linux.
@@ -76,7 +76,8 @@ fn device_counters(file: &File) -> Option<(u64, u64)> {
     let stats = std::fs::read_to_string("/proc/diskstats").ok()?;
     for line in stats.lines() {
         let f: Vec<&str> = line.split_whitespace().collect();
-        if f.len() >= 20 && f[0].parse::<u64>().ok()? == major && f[1].parse::<u64>().ok()? == minor {
+        if f.len() >= 20 && f[0].parse::<u64>().ok()? == major && f[1].parse::<u64>().ok()? == minor
+        {
             return Some((f[18].parse().ok()?, f[7].parse().ok()?));
         }
     }
@@ -89,7 +90,8 @@ fn open(path: &str, append: bool) -> File {
     if append {
         opts.create(true).truncate(true);
     }
-    opts.open(path).unwrap_or_else(|e| panic!("open {}: {}", path, e))
+    opts.open(path)
+        .unwrap_or_else(|e| panic!("open {}: {}", path, e))
 }
 
 fn prepare(path: &str, len: u64) {
@@ -110,7 +112,12 @@ struct Result {
 
 fn writer(file: Arc<File>, base: u64, size: usize, append: bool, stop: Arc<AtomicBool>) -> Result {
     let buf = Buf::new(size);
-    let mut r = Result { commits: 0, latencies: Vec::with_capacity(1 << 20), write_ns: 0, sync_ns: 0 };
+    let mut r = Result {
+        commits: 0,
+        latencies: Vec::with_capacity(1 << 20),
+        write_ns: 0,
+        sync_ns: 0,
+    };
     let mut offset = 0;
     while !stop.load(Ordering::Relaxed) {
         if !append && offset + size as u64 > SLICE {
@@ -125,7 +132,8 @@ fn writer(file: Arc<File>, base: u64, size: usize, append: bool, stop: Arc<Atomi
         r.commits += 1;
         r.write_ns += (written - start).as_nanos() as u64;
         r.sync_ns += (done - written).as_nanos() as u64;
-        r.latencies.push((done - start).as_nanos().min(u32::MAX as u128) as u32);
+        r.latencies
+            .push((done - start).as_nanos().min(u32::MAX as u128) as u32);
     }
     r
 }
@@ -140,7 +148,11 @@ fn run(path: &str, size: usize, writers: usize, secs: u64, append: bool) {
             let (file, stop) = (file.clone(), stop.clone());
             // Appending writers would race for the end of the file; give each
             // one a region far apart instead (the file grows sparse between).
-            let base = if append { i as u64 * (1 << 40) } else { i as u64 * SLICE };
+            let base = if append {
+                i as u64 * (1 << 40)
+            } else {
+                i as u64 * SLICE
+            };
             std::thread::spawn(move || writer(file, base, size, append, stop))
         })
         .collect();
@@ -151,7 +163,10 @@ fn run(path: &str, size: usize, writers: usize, secs: u64, append: bool) {
     let after = device_counters(&file);
 
     let commits: u64 = results.iter().map(|r| r.commits).sum();
-    let mut lat: Vec<u32> = results.iter().flat_map(|r| r.latencies.iter().copied()).collect();
+    let mut lat: Vec<u32> = results
+        .iter()
+        .flat_map(|r| r.latencies.iter().copied())
+        .collect();
     lat.sort_unstable();
     let pct = |p: f64| lat[((lat.len() - 1) as f64 * p) as usize] as f64 / 1e3;
     let write_us = results.iter().map(|r| r.write_ns).sum::<u64>() as f64 / commits as f64 / 1e3;
@@ -185,7 +200,8 @@ fn run(path: &str, size: usize, writers: usize, secs: u64, append: bool) {
 
 fn main() {
     let args: Vec<String> = std::env::args().filter(|a| a != "--bench").collect();
-    let usage = "usage: durable_write <file> [--sizes 8k,64k,1m] [--writers 1,32] [--secs 15]";
+    let usage =
+        "usage: storage_durable_write <file> [--sizes 8k,64k,1m] [--writers 1,32] [--secs 15]";
     // `cargo bench --bench <name>` adds --bench to the arguments; without any
     // other arguments there is nothing to measure, so skip quietly.
     if args.len() < 2 {
@@ -194,10 +210,19 @@ fn main() {
     }
     let path = args[1].clone();
     let flag = |name: &str, default: &str| -> String {
-        args.iter().position(|a| a == name).map(|i| args[i + 1].clone()).unwrap_or(default.to_string())
+        args.iter()
+            .position(|a| a == name)
+            .map(|i| args[i + 1].clone())
+            .unwrap_or(default.to_string())
     };
-    let sizes: Vec<usize> = flag("--sizes", "8k,64k,1m").split(',').map(parse_size).collect();
-    let writers: Vec<usize> = flag("--writers", "1,32").split(',').map(|w| w.parse().unwrap()).collect();
+    let sizes: Vec<usize> = flag("--sizes", "8k,64k,1m")
+        .split(',')
+        .map(parse_size)
+        .collect();
+    let writers: Vec<usize> = flag("--writers", "1,32")
+        .split(',')
+        .map(|w| w.parse().unwrap())
+        .collect();
     let secs: u64 = flag("--secs", "15").parse().unwrap();
 
     prepare(&path, SLICE * *writers.iter().max().unwrap() as u64);

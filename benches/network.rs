@@ -1,9 +1,9 @@
 // Network rows between two hosts: TCP round trips and bulk streams. No
 // dependencies.
 //
-//   cargo bench --bench net -- --server              # on host A, listens on TCP 5900
-//   cargo bench --bench net -- 10.0.0.12             # on host B, with A's private IP
-//   cargo bench --bench net -- 10.0.0.12 --secs 15 --flows 1,8,32
+//   cargo bench --bench network -- --server              # on host A, listens on TCP 5900
+//   cargo bench --bench network -- 10.0.0.12             # on host B, with A's private IP
+//   cargo bench --bench network -- 10.0.0.12 --secs 15 --flows 1,8,32
 //
 // Round trips: one connection with TCP_NODELAY sends a message and waits for
 // the same number of bytes back, for 1 B and 32 KiB messages. Streams: N
@@ -47,7 +47,8 @@ fn serve(mut conn: TcpStream) -> std::io::Result<()> {
 }
 
 fn connect(host: &str, mode: u8, len: u32) -> TcpStream {
-    let mut conn = TcpStream::connect((host, PORT)).unwrap_or_else(|e| panic!("connect {}:{}: {}", host, PORT, e));
+    let mut conn = TcpStream::connect((host, PORT))
+        .unwrap_or_else(|e| panic!("connect {}:{}: {}", host, PORT, e));
     conn.set_nodelay(true).unwrap();
     let mut header = vec![mode];
     header.extend_from_slice(&len.to_le_bytes());
@@ -118,7 +119,7 @@ fn streams(host: &str, flows: usize, secs: u64) {
 
 fn main() {
     let args: Vec<String> = std::env::args().filter(|a| a != "--bench").collect();
-    let usage = "usage: net --server | net <server-ip> [--secs 15] [--flows 1,8,32]";
+    let usage = "usage: network --server | network <server-ip> [--secs 15] [--flows 1,8,32]";
     // `cargo bench --bench <name>` adds --bench to the arguments; without any
     // other arguments there is nothing to measure, so skip quietly.
     if args.len() < 2 {
@@ -136,10 +137,24 @@ fn main() {
         }
         return;
     }
-    let flag = |name: &str| args.iter().position(|a| a == name).map(|i| args[i + 1].clone());
+    let flag = |name: &str| {
+        args.iter()
+            .position(|a| a == name)
+            .map(|i| args[i + 1].clone())
+    };
     let secs: u64 = flag("--secs").map(|s| s.parse().unwrap()).unwrap_or(15);
-    let flows: Vec<usize> = flag("--flows").unwrap_or("1,8,32".into()).split(',').map(|f| f.parse().unwrap()).collect();
-    println!("{} -> {}", std::fs::read_to_string("/etc/hostname").unwrap_or_default().trim(), target);
+    let flows: Vec<usize> = flag("--flows")
+        .unwrap_or("1,8,32".into())
+        .split(',')
+        .map(|f| f.parse().unwrap())
+        .collect();
+    println!(
+        "{} -> {}",
+        std::fs::read_to_string("/etc/hostname")
+            .unwrap_or_default()
+            .trim(),
+        target
+    );
     for size in [1, 32 << 10] {
         round_trips(&target, size, secs);
     }

@@ -1,7 +1,7 @@
 use criterion::*;
 use std::hint::black_box;
 
-use super::{GIB, KIB, MIB};
+use super::GIB;
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::{asm, x86_64::*};
@@ -10,7 +10,7 @@ use std::sync::{Arc, Barrier};
 use std::thread;
 use std::time::Duration;
 
-type Int = u64;
+pub(super) type Int = u64;
 
 // One pinned reader thread per core, parked on a barrier between runs. The threads are shut down
 // on drop: left running, they made every later group run in a ~100-thread process, which skews
@@ -106,7 +106,7 @@ impl Drop for ThreadedMemoryReadBenchmark {
 
 #[inline(never)]
 #[no_mangle]
-fn memory_read_sequential_single_thread_vectorized(vec: &[Int]) -> u64 {
+pub(super) fn memory_read_sequential_single_thread_vectorized(vec: &[Int]) -> u64 {
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
@@ -212,7 +212,7 @@ unsafe fn memory_read_sequential_single_thread_non_vectorized_x86(vec: &[Int]) -
     sum
 }
 
-fn memory_read_benchmark(c: &mut Criterion) {
+fn memory_sequential_read_benchmark(c: &mut Criterion) {
     let bytes_per_iteration = 8usize;
     let size_bytes = GIB;
     let size_in_elements = size_bytes / bytes_per_iteration;
@@ -231,7 +231,7 @@ fn memory_read_benchmark(c: &mut Criterion) {
         memory_read_sequential_single_thread_vectorized,
     );
 
-    let mut group = c.benchmark_group("memory_read");
+    let mut group = c.benchmark_group("memory_sequential_read");
     group.sample_size(10);
     group.warm_up_time(Duration::from_secs(10));
     group.measurement_time(Duration::from_secs(10));
@@ -255,18 +255,4 @@ fn memory_read_benchmark(c: &mut Criterion) {
     group.finish()
 }
 
-// The same single-thread SIMD read over buffers that fit in L1, L2 and L3,
-// read again and again.
-fn cache_read_benchmark(c: &mut Criterion) {
-    let mut group = c.benchmark_group("cache_read");
-    for (name, bytes) in [("16 KiB", 16 * KIB), ("256 KiB", 256 * KIB), ("8 MiB", 8 * MIB)] {
-        let vec: Vec<Int> = (0..bytes / 8).map(|i| i as Int).collect();
-        group.throughput(Throughput::Bytes(bytes as u64));
-        group.bench_function(name, |b| {
-            b.iter(|| black_box(memory_read_sequential_single_thread_vectorized(black_box(&vec))))
-        });
-    }
-    group.finish()
-}
-
-criterion_group!(benches, memory_read_benchmark, cache_read_benchmark);
+criterion_group!(benches, memory_sequential_read_benchmark);

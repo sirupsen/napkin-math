@@ -80,12 +80,12 @@ mod futex {
 }
 
 #[cfg(target_os = "linux")]
-fn context_switch_benchmark(c: &mut Criterion) {
+fn cpu_context_switch_benchmark(c: &mut Criterion) {
     let cores = core_affinity::get_core_ids().unwrap();
     let first = cores[0];
     let last = *cores.last().unwrap();
 
-    let mut group = c.benchmark_group("context_switch");
+    let mut group = c.benchmark_group("cpu_context_switch");
     group.bench_function("futex round trip, same core", |b| {
         b.iter_custom(|iters| futex::ping_pong(iters, first, first))
     });
@@ -96,6 +96,6 @@ fn context_switch_benchmark(c: &mut Criterion) {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn context_switch_benchmark(_c: &mut Criterion) {}
+fn cpu_context_switch_benchmark(_c: &mut Criterion) {}
 
-criterion_group!(benches, context_switch_benchmark);
+criterion_group!(benches, cpu_context_switch_benchmark);

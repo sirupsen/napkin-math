@@ -15,7 +15,8 @@ fn contended<T: Send + Sync + 'static>(
 ) -> std::time::Duration {
     let stop = Arc::new(AtomicBool::new(false));
     let ready = Arc::new(Barrier::new(2));
-    let (t_shared, t_stop, t_ready, t_core) = (shared.clone(), stop.clone(), ready.clone(), cores[1]);
+    let (t_shared, t_stop, t_ready, t_core) =
+        (shared.clone(), stop.clone(), ready.clone(), cores[1]);
     let other = thread::spawn(move || {
         core_affinity::set_for_current(t_core);
         t_ready.wait();
@@ -51,9 +52,9 @@ fn lock(mutex: &Mutex<u64>) {
     *mutex.lock().unwrap() += 1;
 }
 
-fn sync_benchmark(c: &mut Criterion) {
+fn cpu_atomic_mutex_benchmark(c: &mut Criterion) {
     let cores = core_affinity::get_core_ids().unwrap();
-    let mut group = c.benchmark_group("sync");
+    let mut group = c.benchmark_group("cpu_atomic_mutex");
 
     let counter = Arc::new(AtomicU64::new(0));
     group.bench_function("atomic increment", |b| b.iter(|| increment(&counter)));
@@ -75,4 +76,4 @@ fn sync_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, sync_benchmark);
+criterion_group!(benches, cpu_atomic_mutex_benchmark);

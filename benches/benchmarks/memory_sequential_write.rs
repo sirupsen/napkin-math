@@ -8,11 +8,11 @@ use super::GIB;
 // memset over 16 GiB split across one pinned thread per core (16 GiB so the
 // per-thread slices don't fit in L3). Buffers are touched first so page faults
 // are not measured. Throughput is bytes written.
-fn memory_write_benchmark(c: &mut Criterion) {
+fn memory_sequential_write_benchmark(c: &mut Criterion) {
     let mut dst = vec![1u8; GIB];
     let src = vec![2u8; GIB];
 
-    let mut group = c.benchmark_group("memory_write");
+    let mut group = c.benchmark_group("memory_sequential_write");
     group.sample_size(10);
     group.warm_up_time(Duration::from_secs(5));
     group.measurement_time(Duration::from_secs(10));
@@ -41,7 +41,9 @@ fn memory_write_benchmark(c: &mut Criterion) {
                 for (slice, core) in big.chunks_mut(chunk).zip(core_ids.iter().copied()) {
                     scope.spawn(move || {
                         core_affinity::set_for_current(core);
-                        unsafe { std::ptr::write_bytes(slice.as_mut_ptr(), black_box(3), slice.len()) };
+                        unsafe {
+                            std::ptr::write_bytes(slice.as_mut_ptr(), black_box(3), slice.len())
+                        };
                         black_box(slice.as_ptr());
                     });
                 }
@@ -51,4 +53,4 @@ fn memory_write_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, memory_write_benchmark);
+criterion_group!(benches, memory_sequential_write_benchmark);

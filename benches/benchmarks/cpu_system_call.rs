@@ -1,6 +1,6 @@
 use criterion::*;
-use std::hint::black_box;
 use std::fs;
+use std::hint::black_box;
 use std::process;
 use std::time::Instant;
 use std::time::SystemTime;
@@ -30,7 +30,7 @@ fn getrusage_loop(ptr: *mut libc::rusage, iters: u64) -> std::time::Duration {
     start.elapsed()
 }
 
-fn syscall_benchmark(c: &mut Criterion) {
+fn cpu_system_call_benchmark(c: &mut Criterion) {
     let tmp = fs::File::open("/tmp").unwrap();
     let usage = Box::new(unsafe { std::mem::zeroed::<libc::rusage>() });
     let usage_ptr = Box::into_raw(usage);
@@ -41,7 +41,7 @@ fn syscall_benchmark(c: &mut Criterion) {
         }
     }
 
-    let mut group = c.benchmark_group("syscall");
+    let mut group = c.benchmark_group("cpu_system_call");
     group.bench_function("getpid", |b| b.iter(|| black_box(process::id())));
     group.bench_function("getppid", |b| b.iter_custom(getppid_loop));
     group.bench_function("time", |b| b.iter(|| black_box(SystemTime::now())));
@@ -52,4 +52,4 @@ fn syscall_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, syscall_benchmark);
+criterion_group!(benches, cpu_system_call_benchmark);

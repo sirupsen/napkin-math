@@ -7,9 +7,9 @@
 // 8 bytes per f64, the type's width per integer, and the bytes plus a 4-byte
 // offset per string. zstd -3 over the same bytes is printed for reference.
 //
-//   cargo bench --features encodings --bench column_codecs -- floats taxi.parquet
-//   cargo bench --features encodings --bench column_codecs -- ints hits_0.parquet
-//   cargo bench --features encodings --bench column_codecs -- strings hits_0.parquet logs.txt
+//   cargo bench --features encodings --bench compression_ratio_columns -- floats taxi.parquet
+//   cargo bench --features encodings --bench compression_ratio_columns -- ints hits_0.parquet
+//   cargo bench --features encodings --bench compression_ratio_columns -- strings hits_0.parquet logs.txt
 use std::fs::File;
 use std::time::Instant;
 
@@ -558,8 +558,11 @@ fn strings(path: &str) {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).filter(|a| a != "--bench").collect();
-    let usage = "usage: column_codecs floats|ints|strings <files...>";
+    let args: Vec<String> = std::env::args()
+        .skip(1)
+        .filter(|a| a != "--bench")
+        .collect();
+    let usage = "usage: compression_ratio_columns floats|ints|strings <files...>";
     // `cargo bench --bench <name>` adds --bench to the arguments; without any
     // other arguments there is nothing to measure, so skip quietly.
     if args.is_empty() {

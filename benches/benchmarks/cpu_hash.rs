@@ -39,14 +39,14 @@ fn hash_group(c: &mut Criterion, name: &str, bytes: &[u8]) {
     group.finish();
 }
 
-fn hash_benchmark(c: &mut Criterion) {
+fn cpu_hash_benchmark(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0xfeed_face);
     let bytes: Vec<u8> = (0..MIB).map(|_| rng.random()).collect();
 
     // The README rows are per 64-byte call, where per-call setup dominates.
-    hash_group(c, "hash", &bytes[..64]);
+    hash_group(c, "cpu_hash", &bytes[..64]);
     // Bulk throughput over a buffer that still fits in L2/L3.
-    hash_group(c, "hash_1mib", &bytes);
+    hash_group(c, "cpu_hash_1mib", &bytes);
 }
 
-criterion_group!(benches, hash_benchmark);
+criterion_group!(benches, cpu_hash_benchmark);

@@ -5,10 +5,10 @@ use super::{GIB, MIB};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
-fn sort_benchmark(c: &mut Criterion) {
+fn cpu_sort_benchmark(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0x1337);
 
-    let mut group = c.benchmark_group("sort");
+    let mut group = c.benchmark_group("cpu_sort");
     group.sample_size(10);
     group.sampling_mode(SamplingMode::Flat);
 
@@ -40,4 +40,4 @@ fn sort_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, sort_benchmark);
+criterion_group!(benches, cpu_sort_benchmark);

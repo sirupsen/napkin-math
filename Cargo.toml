@@ -8,14 +8,14 @@ edition = "2021"
 debug = true
 overflow-checks = false
 
-# Used by benches/compression_corpus.rs.
+# Used by benches/cpu_compress.rs.
 [dependencies]
 brotli = "9"
 flate2 = "1"
 lz4_flex = "0.14"
 snap = "1"
 zstd = "0.14"
-# Used by benches/encoding_ratio.rs and column_codecs.rs, behind the
+# Used by benches/compression_ratio.rs and compression_ratio_columns.rs, behind the
 # `encodings` feature.
 alp = { version = "0.0.4", optional = true }
 arrow-array = { version = "60", optional = true }
@@ -30,7 +30,6 @@ roaring = { version = "0.11", optional = true }
 encodings = ["dep:alp", "dep:arrow-array", "dep:bitpacking", "dep:bytes", "dep:fastlanes", "dep:fsst-rs", "dep:parquet", "dep:roaring"]
 
 [dev-dependencies]
-bitpacking = "0.9"
 blake3 = "1"
 core_affinity = "0.8"
 crc32fast = "1"
@@ -54,36 +53,36 @@ harness = false
 
 # Standalone tools that take arguments (paths, devices, a server address).
 # `bench = false` keeps plain `cargo bench` and its filters to napkin_math;
-# run a tool by name: cargo bench --bench disk -- <args>.
+# run a tool by name: cargo bench --bench storage -- <args>.
 
 [[bench]]
-name = "compression_corpus"
+name = "cpu_compress"
 harness = false
 bench = false
 
 [[bench]]
-name = "disk"
+name = "storage"
 harness = false
 bench = false
 
 [[bench]]
-name = "durable_write"
+name = "storage_durable_write"
 harness = false
 bench = false
 
 [[bench]]
-name = "net"
+name = "network"
 harness = false
 bench = false
 
 [[bench]]
-name = "encoding_ratio"
+name = "compression_ratio"
 harness = false
 bench = false
 required-features = ["encodings"]
 
 [[bench]]
-name = "column_codecs"
+name = "compression_ratio_columns"
 harness = false
 bench = false
 required-features = ["encodings"]

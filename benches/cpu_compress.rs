@@ -3,7 +3,7 @@
 // builds. Speeds are best-of-N over at least one second, reported against the
 // uncompressed size, like lzbench.
 //
-//   cargo bench --bench compression_corpus -- silesia.tar dickens ...
+//   cargo bench --bench cpu_compress -- silesia.tar dickens ...
 use std::io::{Read, Write};
 use std::time::{Duration, Instant};
 
@@ -131,11 +131,14 @@ fn main() {
         .ok()
         .map(|s| s.split(',').map(|c| c.trim().to_string()).collect());
 
-    let paths: Vec<String> = std::env::args().skip(1).filter(|a| a != "--bench").collect();
+    let paths: Vec<String> = std::env::args()
+        .skip(1)
+        .filter(|a| a != "--bench")
+        .collect();
     // `cargo bench --bench <name>` adds --bench to the arguments; without any
     // other arguments there is nothing to measure, so skip quietly.
     if paths.is_empty() {
-        eprintln!("usage: compression_corpus <files...> (no arguments, skipping)");
+        eprintln!("usage: cpu_compress <files...> (no arguments, skipping)");
         return;
     }
     println!("| file | MiB | codec | ratio | compress MiB/s | decompress MiB/s |");

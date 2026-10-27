@@ -23,25 +23,22 @@ stat`; on locked-down cloud images that needs `sudo sysctl -w
 kernel.perf_event_paranoid=-1` first. You won't get the right numbers from a
 debug build.
 
-| Group | Measures | README row |
+| Group (file in `benches/benchmarks/`) | Measures | README row |
 | ----- | -------- | ---------- |
-| `memory_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD | Memory Sequential Read |
-| `memory_latency` | Dependent pointer chase over 16 KiB to 1 GiB, with and without huge pages | L1/L2/L3 Cache Read and Memory Random Read, latency |
-| `cache_read` | The `memory_read` SIMD loop over 16 KiB, 256 KiB and 8 MiB buffers | L1/L2/L3 Cache Read, throughput |
-| `memory_write` | memset and memcpy of 1 GiB on 1 thread, memset of 16 GiB on all cores | Memory Sequential Write |
-| `encrypt` | ring AES-256-GCM and ChaCha20-Poly1305 seal and open on 16 KiB | CPU Encrypt / Decrypt |
-| `sync` | Atomic increment and `Mutex` lock + unlock, alone and with a second core on the same line | CPU Atomic Increment, CPU Mutex Lock + Unlock |
-| `spawn` | `thread::spawn` + join, and spawning `true` and waiting for it | CPU Thread Spawn, CPU Process Spawn |
-| `handshake` | TCP connect over loopback, and a full TLS 1.3 handshake (rustls, ECDSA P-256, X25519) in memory | CPU TCP Connect, CPU TLS 1.3 Handshake |
-| `random_memory` | One pass of independent random 64 B reads/writes over 1 GiB | Memory Random Read/Write, throughput |
-| `hash`, `hash_1mib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and 1 MiB buffers | CPU Hash rows |
-| `syscall` | `getppid` (null syscall), `getpid`, `clock_gettime`, `getrusage`, `fstat` | CPU System Call |
-| `context_switch` | futex ping-pong between two threads, same core and cross core (Linux) | CPU Context Switch |
-| `sort` | `sort_unstable` on random `u64`, 1 MiB to 1 GiB | CPU Sort |
-| `tcp` | 32 KiB echo over loopback | none (loopback only) |
-| `serialization` | Protobuf (prost), JSON (serde_json, to structs and to a dynamic `Value`) and postcard on a 1 MiB batch of events | CPU Serialize, CPU Deserialize |
-| `compression` | zstd -3 on the event corpus as JSON | none (see `compression_corpus`) |
-| `bitpacking` | `BitPacker8x` integer unpack | none (not the `[11]` rows) |
+| `memory_sequential_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD | Memory Sequential Read |
+| `memory_sequential_write` | memset and memcpy of 1 GiB on 1 thread, memset of 16 GiB on all cores | Memory Sequential Write |
+| `memory_random` | One pass of independent random 64 B reads/writes over 1 GiB | Memory Random Read/Write, throughput |
+| `memory_random_read_latency` (in `memory_random.rs`) | Dependent pointer chase over 1 GiB, with and without huge pages | Memory Random Read, latency |
+| `cache_read`, `cache_read_latency` | The `memory_sequential_read` SIMD loop, and the pointer chase, over 16 KiB, 256 KiB and 8 MiB | L1/L2/L3 Cache Read |
+| `cpu_encrypt` | ring AES-256-GCM and ChaCha20-Poly1305 seal and open on 16 KiB | CPU Encrypt / Decrypt |
+| `cpu_hash`, `cpu_hash_1mib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and 1 MiB buffers | CPU Hash rows |
+| `cpu_serialize` | Protobuf (prost), JSON (serde_json, to structs and to a dynamic `Value`) and postcard on a 1 MiB batch of events | CPU Serialize, CPU Deserialize |
+| `cpu_sort` | `sort_unstable` on random `u64`, 1 MiB to 1 GiB | CPU Sort |
+| `cpu_atomic_mutex` | Atomic increment and `Mutex` lock + unlock, alone and with a second core on the same line | CPU Atomic Increment, CPU Mutex Lock + Unlock |
+| `cpu_system_call` | `getppid` (null syscall), `getpid`, `clock_gettime`, `getrusage`, `fstat` | CPU System Call |
+| `cpu_context_switch` | futex ping-pong between two threads, same core and cross core (Linux) | CPU Context Switch |
+| `cpu_handshake` | TCP connect over loopback, and a full TLS 1.3 handshake (rustls, ECDSA P-256, X25519) in memory | CPU TCP Connect, CPU TLS 1.3 Handshake |
+| `cpu_spawn` | `thread::spawn` + join, and spawning `true` and waiting for it | CPU Thread Spawn, CPU Process Spawn |
 
 In October 2026 on a c4-standard-8 (Xeon 8581C), serialization ran at
 0.9-1.2 GiB/s for every format and deserialization into structs at 350-400
@@ -62,19 +59,19 @@ decrypted at 9.7 GiB/s and encrypted at 9.5 GiB/s (ChaCha20-Poly1305 2.3 GiB/s
 both ways), and a 16 GiB memset across 48 pinned threads ran at 145 GiB/s
 (11.5 GiB/s on one thread).
 
-The README collapses `memory_read`'s scalar and SIMD variants into one
-single-thread row and one threaded row for memorability. `random_memory` issues
+The README collapses `memory_sequential_read`'s scalar and SIMD variants into one
+single-thread row and one threaded row for memorability. `memory_random` issues
 independent loads, so the CPU overlaps misses; that is throughput, which is why
-the latency cell comes from `memory_latency` instead.
+the latency cell comes from `memory_random_read_latency` instead.
 
 ## SSD, Network Disk and HDD rows
 
 ```bash
-cargo bench --bench disk -- /mnt/nvme/disk.dat                       # a file on a mounted file system
-cargo bench --bench disk -- /dev/nvme1n1 --destroy /dev/nvme1n1      # an unused raw device
+cargo bench --bench storage -- /mnt/nvme/disk.dat                       # a file on a mounted file system
+cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1      # an unused raw device
 ```
 
-`benches/disk.rs` has no dependencies. It runs sequential 1 MiB reads and
+`benches/storage.rs` has no dependencies. It runs sequential 1 MiB reads and
 writes at QD32, random 8 KiB reads and writes at QD1 and QD128, and buffered
 8 KiB sequential reads and writes, all with `O_DIRECT` except the buffered ones.
 Queue depth is N threads, each with one `pread` or `pwrite` in flight. It writes
@@ -100,7 +97,7 @@ AWS m8id/m8gd, EBS gp3 at 16k IOPS / 1000 MiB/s, GCP Hyperdisk Balanced at
 80k IOPS / 1600 MiB/s on a c4-standard-16, and the instance-store HDDs of an AWS
 d3.xlarge.
 
-Those numbers were first measured with `fio`. On October 27, 2026, `disk` and
+Those numbers were first measured with `fio`. On October 27, 2026, `storage` and
 `fio` ran side by side on m8id instance store, EBS gp3, C4 local SSD, Hyperdisk
 Balanced and a d3 HDD, raw and on ext4. Every `O_DIRECT` test agreed within
 ~5% on throughput and a few us on latency (QD128 on an ext4 file on m8id came
@@ -115,10 +112,10 @@ That is where the README's old `8 GiB/s` sequential SSD read came from.
 ## Durable write rows
 
 ```bash
-cargo bench --bench durable_write -- /mnt/disk/dw.dat --sizes 8k,64k,1m --writers 1,4,32
+cargo bench --bench storage_durable_write -- /mnt/disk/dw.dat --sizes 8k,64k,1m --writers 1,4,32
 ```
 
-`benches/durable_write.rs` has no dependencies. Each writer loops `pwrite` +
+`benches/storage_durable_write.rs` has no dependencies. Each writer loops `pwrite` +
 `fdatasync` over its own 64 MiB slice of a file that was fully written and
 synced first, with `O_DIRECT`, and times the pair. It then does the same while
 appending to a new file. Before and after each run it reads the disk's flush
@@ -153,11 +150,11 @@ rows were buffered 8 KiB appends from one writer (300 us, 30 MiB/s on SSD).
 ## Network rows
 
 ```bash
-cargo bench --bench net -- --server        # on host A, listens on TCP 5900
-cargo bench --bench net -- 10.0.0.12       # on host B, with A's private IP
+cargo bench --bench network -- --server        # on host A, listens on TCP 5900
+cargo bench --bench network -- 10.0.0.12       # on host B, with A's private IP
 ```
 
-`benches/net.rs` has no dependencies. It times 1 B and 32 KiB TCP round trips
+`benches/network.rs` has no dependencies. It times 1 B and 32 KiB TCP round trips
 on one connection with `TCP_NODELAY`, then streams on 1, 8 and 32 connections,
 counting bytes on the receiving side. Single-flow results show per-flow caps
 (5 Gbit/s on AWS outside a cluster placement group); multi-flow results show
@@ -185,21 +182,21 @@ VMs: 22-32 Gbit/s. One cross-region flow moved 1.5-3.4 MiB per round trip
 to 2 MiB with earlier 22.04 runs (1.8-2.6 MiB). More flows add up: 32 flows from
 `us-central1` to `us-east4` reached 10.7 Gbit/s.
 
-`net` was checked against `netperf` TCP_RR and `iperf3` on every pair above.
+`network` was checked against `netperf` TCP_RR and `iperf3` on every pair above.
 Streams matched iperf3 within ~5%, except the GCP cross-zone single flow
 (25.5 vs 19.3 Gbit/s), which moves around from run to run. Round trips matched netperf within ~5% on GCP and the WAN pairs; on AWS
-both were noisy and `net` came out lower (p50 140 vs 242 us same-AZ, 578 vs
+both were noisy and `network` came out lower (p50 140 vs 242 us same-AZ, 578 vs
 673 us cross-AZ). An October 23 run on m8id measured 81 us same-AZ and 456 us
 cross-AZ, so treat the AWS round trips as 100-500 us.
 
 ## Compression rows
 
 ```bash
-cargo bench --bench compression_corpus -- silesia.tar dickens ...
-NAPKIN_COMPRESSION_CODECS="lz4_flex,zstd -3" cargo bench --bench compression_corpus -- file
+cargo bench --bench cpu_compress -- silesia.tar dickens ...
+NAPKIN_COMPRESSION_CODECS="lz4_flex,zstd -3" cargo bench --bench cpu_compress -- file
 ```
 
-`benches/compression_corpus.rs` reports the ratio and single-threaded
+`benches/cpu_compress.rs` reports the ratio and single-threaded
 compress/decompress speed of lz4, snappy, zstd (-1, -3, -9, -19), gzip (-1, -6)
 and brotli (-5, -11) for each file, as best of N runs over at least a second.
 The CPU Compress/Decompress rows use the
@@ -212,15 +209,15 @@ The Logs row is loghub's full `Apache.log` (5 MiB, 11x lz4 to 29x zstd -19) and
 `Linux.log` (2 MiB, 6x to 20x).
 
 The structured-data tables and the two CPU Decode rows come from
-`benches/encoding_ratio.rs`, built with `--features encodings` so the default
+`benches/compression_ratio.rs`, built with `--features encodings` so the default
 build doesn't pull in Parquet:
 
 ```bash
-cargo bench --features encodings --bench encoding_ratio -- parquet taxi.parquet hits_0.parquet
-cargo bench --features encodings --bench encoding_ratio -- cardinality taxi.parquet hits_0.parquet
-cargo bench --features encodings --bench encoding_ratio -- postings collection.tsv Apache.log ...  # also 3-/4-gram indexes
-cargo bench --features encodings --bench encoding_ratio -- postings --paragraphs dickens webster
-cargo bench --features encodings --bench encoding_ratio -- timeseries nab/*.csv
+cargo bench --features encodings --bench compression_ratio -- parquet taxi.parquet hits_0.parquet
+cargo bench --features encodings --bench compression_ratio -- cardinality taxi.parquet hits_0.parquet
+cargo bench --features encodings --bench compression_ratio -- postings collection.tsv Apache.log ...  # also 3-/4-gram indexes
+cargo bench --features encodings --bench compression_ratio -- postings --paragraphs dickens webster
+cargo bench --features encodings --bench compression_ratio -- timeseries nab/*.csv
 ```
 
 On October 24, 2026 (ratios on any machine; speeds single-threaded on an AWS
@@ -297,7 +294,7 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   and 7-13x (1.2-2.4 B/point) on integer-valued counts. Regular timestamps cost
   1 bit. Column-wise delta + zstd -3 gets 4.0x overall.
 
-The cardinality rows were checked with `encoding_ratio cardinality`, which
+The cardinality rows were checked with `compression_ratio cardinality`, which
 writes each column of taxi and ClickBench `hits_0` on its own with Parquet's
 dictionary + RLE-hybrid encoding (uncompressed, one dictionary per column) and
 compares its size with the smaller of log2(distinct) bits per value and 3 bytes
@@ -311,15 +308,15 @@ RLE-hybrid catches short runs of the common value. Columns whose runs are
 shorter than 8 come in over it (`ClientIP`: 7.0 bits, rule 4.3), because
 Parquet only run-length encodes runs of 8 or more.
 
-The Floats / Integers / Strings rows come from `benches/column_codecs.rs`
+The Floats / Integers / Strings rows come from `benches/compression_ratio_columns.rs`
 (same feature), which runs the crates Vortex builds on: spiraldb's `alp`,
 `fastlanes` and `fsst-rs`. Every column is round-tripped and compared bit for
 bit, and decode is timed single-threaded, best of 5, against the decoded size:
 
 ```bash
-cargo bench --features encodings --bench column_codecs -- floats taxi.parquet gov10.bin ...
-cargo bench --features encodings --bench column_codecs -- ints taxi.parquet hits_0.parquet
-cargo bench --features encodings --bench column_codecs -- strings hits_0.parquet passages.txt ...
+cargo bench --features encodings --bench compression_ratio_columns -- floats taxi.parquet gov10.bin ...
+cargo bench --features encodings --bench compression_ratio_columns -- ints taxi.parquet hits_0.parquet
+cargo bench --features encodings --bench compression_ratio_columns -- strings hits_0.parquet passages.txt ...
 ```
 
 On October 25, 2026 (ratios on any machine; speeds on an AWS m8id.12xlarge,
