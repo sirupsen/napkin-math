@@ -395,12 +395,15 @@ an open object handle) gave p99 (p50), median over runs:
 | Read 128 KiB | 77 (58) ms | 56 (16) | 97 (66) | 60 (50) | 26-27 (12-13) |
 | Write 128 KiB | 154 (64) | 373 (66) | 38 (22) | 104 (51) | 164-333 (80-85) |
 | Conditional write (if-match) 128 KiB | - | 105 (63) | 20 (8) | 33 (6) | 3.9-7.4 s (61-64 ms) |
+| Conditional write (if-none-match) 128 KiB | 124 (46) | 153 (60) | 330 (23) | 484 (35) | 149-469 (72-75) |
 | List 1000 keys | 131 (78) | 87 (42) | 174 (88) | 27 (23) | 152-189 (69) |
 
-Zonal buckets only win on reads: the README's Blob Storage, Zonal Read row is
-50 ms. Zonal writes are no faster than regional ones, and S3 Express and GCS
-Rapid disagree by 5x or more on conditional writes and lists, so those rows
-stay regional. Both zonal tiers cost about \$0.11 per GB-month, ~5x regional.
+Zonal buckets only win on reads (Blob Storage, Zonal Read: 50 ms). Zonal
+writes are no faster than regional ones (100 ms, from S3 Express; GCS Rapid is
+slower). The Zonal Conditional Write row (500 ms) uses if-none-match, where
+both tiers land at 150-500 ms; GCS Rapid's if-match p99 runs to seconds. The
+Zonal List row (100 ms) splits S3 Express (27 ms) and GCS Rapid (150-190 ms).
+Both zonal tiers cost about \$0.11 per GB-month, ~5x regional.
 
 
 The blob storage benchmark code isn't in this repository yet; this describes

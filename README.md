@@ -48,6 +48,7 @@ yourself.
 | Blob Storage, Zonal Read (128 KiB)                        | 50 ms      | NW Limit   |        |
 | Blob Storage, Regional Read (128 KiB)                     | 100 ms     | NW Limit   |        |
 | Blob Storage, Regional Write (128 KiB)                    | 100 ms     | NW Limit   |        |
+| Blob Storage, Zonal Write (128 KiB)                       | 100 ms     | NW Limit   |        |
 | Memory Random Write (64 bytes)                            |            | 3 GiB/s    | 300 ms |
 | Memory Random Read (64 bytes)                             | 100 ns     | 3 GiB/s    | 300 ms |
 | SSD Sequential Write                                      |            | 2 GiB/s    | 500 ms |
@@ -58,7 +59,9 @@ yourself.
 | CPU Serialize (JSON, Protobuf)                            |            | 1 GiB/s    | 1 s    |
 | CPU Decompress (lz4, zstd -1)                             |            | 1 GiB/s    | 1 s    |
 | Network Disk, Zonal Sequential Read                       |            | 1 GiB/s    | 1 s    |
+| Network Disk, Regional Sequential Read                    |            | 1 GiB/s    | 1 s    |
 | Network Disk, Zonal Sequential Write                      |            | 1 GiB/s    | 1 s    |
+| Network Disk, Regional Sequential Write                   |            | 1 GiB/s    | 1 s    |
 | CPU Hash, crypto-safe (64 bytes)                          | 100 ns     | 1 GiB/s    | 1 s    |
 | Network Disk, Zonal Sequential Durable Write (64 KiB)†    | 1 ms       | 1 GiB/s    | 1 s    |
 | Network Disk, Regional Sequential Durable Write (64 KiB)† | 2 ms       | 1 GiB/s    | 1 s    |
@@ -67,6 +70,7 @@ yourself.
 | CPU Deserialize (JSON, Protobuf)                          |            | 300 MiB/s  | 3 s    |
 | CPU Encode Parquet (dictionary + zstd)                    |            | 300 MiB/s  | 3 s    |
 | Network Disk, Zonal Random Read (8 KiB)                   | 500 μs     | 250 MiB/s  | 4 s    |
+| Network Disk, Regional Random Read (8 KiB)                | 500 μs     | 250 MiB/s  | 4 s    |
 | Network Disk, Zonal Random Write (8 KiB)                  | 500 μs     | 250 MiB/s  | 4 s    |
 | Network Disk, Regional Random Write (8 KiB)               | 1 ms       | 250 MiB/s  | 4 s    |
 | HDD Sequential Read                                       |            | 200 MiB/s  | 5 s    |
@@ -87,7 +91,9 @@ yourself.
 | CPU Process Spawn                                         | 300 μs     |            |        |
 | Database Query (MySQL, Memcached, Redis, ...)             | 500 μs     |            |        |
 | Blob Storage, Regional Conditional Write (128 KiB)        | 100 ms     |            |        |
+| Blob Storage, Zonal List (1000 keys)                      | 100 ms     |            |        |
 | Blob Storage, Regional List (1000 keys)                   | 150 ms     |            |        |
+| Blob Storage, Zonal Conditional Write (128 KiB)           | 500 ms     |            |        |
 
 † pwrite + fdatasync into a preallocated file. Cloud SSDs and network disks
 have no write cache to flush (Azure Premium SSD flushes in ~30 μs), so a durable
@@ -98,7 +104,7 @@ at 100 ms. Add connections to go faster.
 
 Throughput is with enough requests in flight to max out a 48 vCPU VM (AWS m8,
 GCP C4) and its disks (EBS gp3, Hyperdisk Balanced at max provisioning). Regional
-disks copy every write to a second zone; reads and throughput match Zonal. Blob
+disks copy every write to a second zone, so only their write latency differs. Blob
 Storage latency is p99 from the same region; Zonal is S3 Express One Zone and
 GCS Rapid. Region-to-region latencies:
 [cloudping](https://www.cloudping.co/).
