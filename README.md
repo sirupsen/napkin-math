@@ -189,8 +189,8 @@ row is an H100 at its 3.35 TB/s spec), plus the transfer and request fees above:
 | SSD Random Read (8 KiB)                         | \$0.2         |
 | Network Disk, Zonal Sequential Read             | \$0.4         |
 | Network Disk, Regional Sequential Read          | \$0.4         |
-| Blob Storage, Zonal Read (8 MiB)                | \$0.8         |
-| Blob Storage, Zonal Read (128 KiB)              | \$1           |
+| Blob Storage, Zonal Read (8 MiB)§               | \$0.8         |
+| Blob Storage, Zonal Read (128 KiB)§             | \$1           |
 | Network Disk, Zonal, HDD Sequential Read        | \$2           |
 | Network Disk, Regional, HDD Sequential Read     | \$2           |
 | Network Disk, Zonal Random Read (8 KiB)         | \$2           |
@@ -203,6 +203,9 @@ row is an H100 at its 3.35 TB/s spec), plus the transfer and request fees above:
 | Network Disk, Regional, HDD Random Read (8 KiB) | \$40          |
 | Network Internet Egress                         | \$100         |
 | HDD Random Read (8 KiB)                         | \$200         |
+
+§ Zonal GETs cost 13x less, but every byte read costs \$0.6/TiB, so zonal is
+cheaper below ~600 KiB per request and regional above.
 
 ## Compression Ratios
 
