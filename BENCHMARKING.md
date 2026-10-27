@@ -112,31 +112,51 @@ That is where the README's old `8 GiB/s` sequential SSD read came from.
 ### Network Disk, Zonal and Regional
 
 On October 27, 2026, `storage` (raw device) and `storage_durable_write` (ext4)
-ran on a zonal and a regional disk with the same provisioning on one VM each:
-Hyperdisk Balanced and Hyperdisk Balanced High Availability (replicas in
-`us-central1-c` and `us-central1-a`, 80k IOPS / 1600 MiB/s) on a
-c4-standard-16, and Azure Premium SSD P30 LRS and ZRS (5000 IOPS / 200 MB/s) on
-a Standard_D16ds_v6 in `eastus2` (p50):
+ran on a zonal and a regional disk with the same provisioning, attached to one
+48 vCPU VM per cloud: Hyperdisk Balanced and Hyperdisk Balanced High
+Availability (replicas in `us-central1-c` and `us-central1-a`, 80k IOPS / 1600
+MiB/s) on a c4-standard-48, and Azure Premium SSD P30 LRS and ZRS (5000 IOPS /
+200 MB/s) on a Standard_D48ds_v6 in `eastus2` (p50). An earlier run on 16 vCPU
+VMs gave the same numbers within a few percent.
 
 | | Hyperdisk Zonal | Hyperdisk Regional | Azure LRS | Azure ZRS |
 | --- | --- | --- | --- | --- |
-| Random read 8 KiB, QD1 | 499 us | 497 us | 2.99 ms | 2.57 ms |
-| Random write 8 KiB, QD1 | 442 us | 1.33 ms | 1.70 ms | 1.52 ms |
-| Random read / write 8 KiB, QD128 | 630 / 629 MiB/s | 629 / 629 MiB/s | 41 / 41 MiB/s | 41 / 41 MiB/s |
-| Sequential read / write 1 MiB, QD32 | 1.6 / 1.6 GiB/s | 1.6 / 1.6 GiB/s | 195 / 203 MiB/s | 195 / 202 MiB/s |
-| Durable write 64 KiB, 1 writer | 549 us | 1.38 ms | 1.92 ms | 1.81 ms |
-| Durable write 64 KiB, 32 writers | 1.6 GiB/s | 1.3 GiB/s | 195 MiB/s | 193 MiB/s |
-| Appending durable write 8 KiB | 1.34 ms | 3.92 ms | 5.41 ms | 4.68 ms |
+| Random read 8 KiB, QD1 | 458 us | 481 us | 3.01 ms | 2.25 ms |
+| Random write 8 KiB, QD1 | 392 us | 1.28 ms | 1.54 ms | 1.69 ms |
+| Random read / write 8 KiB, QD128 | 633 / 633 MiB/s | 633 / 631 MiB/s | 39 / 40 MiB/s | 41 / 42 MiB/s |
+| Sequential read / write 1 MiB, QD32 | 1.6 / 1.6 GiB/s | 1.6 / 1.6 GiB/s | 195 / 195 MiB/s | 195 / 203 MiB/s |
+| Durable write 64 KiB, 1 writer | 548 us | 1.37 ms | 1.89 ms | 2.01 ms |
+| Durable write 64 KiB, 32 writers | 1.6 GiB/s | 1.3 GiB/s | 119 MiB/s | 195 MiB/s |
+| Appending durable write 8 KiB | 1.21 ms | 3.93 ms | 6.12 ms | 5.16 ms |
 
 The regional Hyperdisk adds ~0.9 ms to every write, the round trip to its
 second zone, and matches the zonal one on reads and throughput. Azure ZRS
-costs nothing over LRS on the same size, but a P30 is slower than either
+writes within ~10% of LRS on the same size, but a P30 is slower than either
 Hyperdisk at every queue depth. The README rows use the Hyperdisk Regional
 latencies, rounded: 1 ms for an 8 KiB random write and 2 ms for a 64 KiB durable
-write (1.4-1.8 ms on both clouds). Azure Premium SSD reports `write back` and
+write (1.4-2.0 ms on both clouds). Azure Premium SSD reports `write back` and
 gets one flush per `fdatasync`, ~30 us from one writer and several ms with 32;
 every other cloud disk here is `write through`. AWS has no regional block
 storage: EBS volumes live in one zone.
+
+Network HDDs, the same day: 2 TB pd-standard zonal and regional (replicas in
+`us-central1-c` and `us-central1-a`) on an n2d-standard-48 (C4 can't attach
+Persistent Disk), and a 2 TiB EBS st1 on an m8i.12xlarge (p50):
+
+| | pd-standard Zonal | pd-standard Regional | st1 |
+| --- | --- | --- | --- |
+| Sequential read / write 1 MiB, QD32 | 245 / 245 MiB/s | 245 / 200 MiB/s | 444 / 468 MiB/s |
+| Random read 8 KiB, QD1 / QD128 | 16.6 ms / 12 MiB/s | 17.1 ms / 12 MiB/s | 5.4 ms / 4 MiB/s |
+| Random write 8 KiB, QD1 / QD128 | 433 us / 24 MiB/s | 1.09 ms / 24 MiB/s | 1.9 ms / 4 MiB/s |
+| Durable write 64 KiB, 1 writer / 32 | 675 us / 192 MiB/s | 1.39 ms / 193 MiB/s | 1.56 ms / 33 MiB/s |
+| Durable write 1 MiB, 32 writers | 246 MiB/s | 200 MiB/s | 343 MiB/s |
+
+Both scale with size: pd-standard by ~0.12 MB/s and 0.75 read IOPS per GB, st1
+by 40 MB/s per TB baseline and 250 MB/s per TB burst (these runs fit in the
+burst). The README's Network Disk HDD rows are pd-standard, so Zonal and
+Regional compare like for like. st1 streams faster but is worse at small
+random I/O, which it isn't built for. Writes to pd-standard land fast and are
+destaged later, so its random writes beat its random reads by ~40x.
 
 ## Durable write rows
 
