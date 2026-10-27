@@ -173,6 +173,35 @@ operation (fewer, large files is cheaper):
 
 Zonal buckets also charge \$0.003 per GB written and \$0.0006 per GB read.
 
+Reading 1 TiB costs the VM time it takes at the row's throughput (48 vCPU + 192
+GB is \$1,100/month, \$0.0004/s; CPU rows are one vCPU; the GPU row is an H100
+at its 3.35 TB/s spec), plus the transfer and request fees above:
+
+| What                                         | \$ / TiB read |
+| -------------------------------------------- | ------------- |
+| GPU Memory Sequential Read (H100)            | \$0.0006      |
+| Memory Sequential Read, all cores            | \$0.002       |
+| CPU Decode Parquet (dictionary + zstd)       | \$0.003       |
+| CPU Decompress (lz4, zstd -1)                | \$0.006       |
+| CPU Deserialize (JSON, Protobuf)             | \$0.02        |
+| SSD Sequential Read                          | \$0.1         |
+| Network Same-Zone                            | \$0.1         |
+| Memory Random Read (64 bytes)                | \$0.1         |
+| Blob Storage, Regional Read (8 MiB)          | \$0.2         |
+| SSD Random Read (8 KiB)                      | \$0.2         |
+| Network Disk, Zonal Sequential Read          | \$0.4         |
+| Blob Storage, Zonal Read (8 MiB)             | \$0.8         |
+| Blob Storage, Zonal Read (128 KiB)           | \$1           |
+| Network Disk, Zonal, HDD Sequential Read     | \$2           |
+| Network Disk, Zonal Random Read (8 KiB)      | \$2           |
+| HDD Sequential Read                          | \$2           |
+| Blob Storage, Regional Read (128 KiB)        | \$3           |
+| Network Cross-Zone                           | \$10          |
+| Network Cross-Region                         | \$20          |
+| Network Disk, Zonal, HDD Random Read (8 KiB) | \$40          |
+| Network Internet Egress                      | \$100         |
+| HDD Random Read (8 KiB)                      | \$200         |
+
 ## Compression Ratios
 
 Measured with `cpu_compress`; each range spans lz4 to zstd -19. Note
