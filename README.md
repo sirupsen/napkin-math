@@ -124,35 +124,35 @@ GCS Rapid. Region-to-region latencies:
 
 Approximate numbers that should be consistent between Cloud providers.
 
-| What                          | Amount | \$ / Month | Spot \$ /month | Hourly Spot \$ |
-| ----------------------------- | ------ | ---------- | -------------- | -------------- |
-| CPU                           | 1 vCPU | \$25       | \$10           | \$0.01         |
-| GPU (H100)                    | 1      | \$7000     | \$3000         | \$4            |
-| Memory                        | 1 GB   | \$2.5      | \$1            | \$0.001        |
-| Storage                       |        |            |                |                |
-| ├ Warehouse Storage           | 1 GB   | \$0.02     |                |                |
-| ├ Blob Storage, Regional      | 1 GB   | \$0.02     |                |                |
-| ├ Blob Storage, Zonal         | 1 GB   | \$0.1      |                |                |
-| ├ Network Disk, Zonal, HDD    | 1 GB   | \$0.04     |                |                |
-| ├ SSD                         | 1 GB   | \$0.15     | \$0.04         | \$0.00005      |
-| ├ HDD                         | 1 GB   | \$0.01     | \$0.001        | \$0.000001     |
-| ├ Network Disk, Regional, HDD | 1 GB   | \$0.08     |                |                |
-| ├ Network Disk, Zonal         | 1 GB   | \$0.1      |                |                |
-| ├ Network Disk, Regional      | 1 GB   | \$0.2      |                |                |
-| Network                       |        |            |                |                |
-| ├ Same-Zone                   | 1 GB   | \$0        |                |                |
-| ├ Blob Storage, Same-Region   | 1 GB   | \$0        |                |                |
-| ├ Ingress                     | 1 GB   | \$0        |                |                |
-| ├ L4 Load Balancer            | 1 GB   | \$0.005    |                |                |
-| ├ Cross-Zone                  | 1 GB   | \$0.01     |                |                |
-| ├ Cross-Region                | 1 GB   | \$0.02     |                |                |
-| ├ Internet Egress ††          | 1 GB   | \$0.1      |                |                |
-| CDN Egress                    | 1 GB   | \$0.08     |                |                |
-| CDN Fill ‡                    | 1 GB   | \$0.01     |                |                |
-| Warehouse Query               | 1 GB   | \$0.005    |                |                |
-| Logs/Traces ♣                 | 1 GB   | \$0.5      |                |                |
-| Metrics (series)              | 1000   | \$20       |                |                |
-| KMS Keys                      | 1      | \$1        |                |                |
+| What                          | Amount | \$ / Month | Spot \$ /month |
+| ----------------------------- | ------ | ---------- | -------------- |
+| CPU                           | 1 vCPU | \$25       | \$10           |
+| GPU (H100)                    | 1      | \$7000     | \$3000         |
+| Memory                        | 1 GB   | \$2.5      | \$1            |
+| Storage                       |        |            |                |
+| ├ Warehouse Storage           | 1 GB   | \$0.02     |                |
+| ├ Blob Storage, Regional      | 1 GB   | \$0.02     |                |
+| ├ Blob Storage, Zonal         | 1 GB   | \$0.1      |                |
+| ├ Network Disk, Zonal, HDD    | 1 GB   | \$0.04     |                |
+| ├ SSD                         | 1 GB   | \$0.15     | \$0.04         |
+| ├ HDD                         | 1 GB   | \$0.01     | \$0.001        |
+| ├ Network Disk, Regional, HDD | 1 GB   | \$0.08     |                |
+| ├ Network Disk, Zonal         | 1 GB   | \$0.1      |                |
+| ├ Network Disk, Regional      | 1 GB   | \$0.2      |                |
+| Network                       |        |            |                |
+| ├ Same-Zone                   | 1 GB   | \$0        |                |
+| ├ Blob Storage, Same-Region   | 1 GB   | \$0        |                |
+| ├ Ingress                     | 1 GB   | \$0        |                |
+| ├ L4 Load Balancer            | 1 GB   | \$0.005    |                |
+| ├ Cross-Zone                  | 1 GB   | \$0.01     |                |
+| ├ Cross-Region                | 1 GB   | \$0.02     |                |
+| ├ Internet Egress ††          | 1 GB   | \$0.1      |                |
+| CDN Egress                    | 1 GB   | \$0.08     |                |
+| CDN Fill ‡                    | 1 GB   | \$0.01     |                |
+| Warehouse Query               | 1 GB   | \$0.005    |                |
+| Logs/Traces ♣                 | 1 GB   | \$0.5      |                |
+| Metrics (series)              | 1000   | \$20       |                |
+| KMS Keys                      | 1      | \$1        |                |
 
 †† This refers to network leaving your cloud provider, e.g. sending data to S3
 from GCP or egress network for sending HTML from AWS to a client.
