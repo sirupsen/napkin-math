@@ -86,8 +86,8 @@ yourself.
 | Network Disk, Zonal, HDD Random Read (8 KiB)                   | 20 ms      | 10 MiB/s   | 2 min  |
 | Network Disk, Regional, HDD Random Read (8 KiB)                | 20 ms      | 10 MiB/s   | 2 min  |
 | HDD Sequential Durable Write (8 KiB)†                          | 1 ms       | 8 MiB/s    | 2 min  |
-| HDD Random Write (8 KiB)                                       | 5 ms       | 2 MiB/s    | 10 min |
-| HDD Random Read (8 KiB)                                        | 10 ms      | 2 MiB/s    | 10 min |
+| HDD Random Write (8 KiB)                                       | 5 ms       | 2 MiB/s    | 9 min  |
+| HDD Random Read (8 KiB)                                        | 10 ms      | 2 MiB/s    | 9 min  |
 | CPU Atomic Increment                                           | 5 ns       |            |        |
 | CPU Mutex Lock + Unlock                                        | 10 ns      |            |        |
 | CPU System Call                                                | 100 ns     |            |        |
@@ -128,7 +128,7 @@ Approximate numbers that should be consistent between Cloud providers.
 | ----------------------------- | ------ | ---------- | -------------- | -------------- |
 | CPU                           | 1 vCPU | \$25       | \$10           | \$0.01         |
 | GPU (H100)                    | 1      | \$7000     | \$3000         | \$4            |
-| Memory                        | 1 GB   | \$2.5      | \$1            | \$0.0015       |
+| Memory                        | 1 GB   | \$2.5      | \$1            | \$0.001        |
 | Storage                       |        |            |                |                |
 | ├ Warehouse Storage           | 1 GB   | \$0.02     |                |                |
 | ├ Blob Storage, Regional      | 1 GB   | \$0.02     |                |                |
