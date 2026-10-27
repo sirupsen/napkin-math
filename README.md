@@ -173,17 +173,16 @@ operation (fewer, large files is cheaper):
 
 Zonal buckets also charge \$0.003 per GB written and \$0.0006 per GB read.
 
-Instance shapes are a few fixed ratios on every cloud, per vCPU, with ~0.5
-Gbit/s of network each (GPU nodes: per GPU):
+Instance shapes are the same few ratios on every cloud:
 
-| Shape                               | Memory  | Local SSD | Examples             |
-| ----------------------------------- | ------- | --------- | -------------------- |
-| Compute                             | 2 GiB   |           | c8, C4 highcpu, Fv6  |
-| General                             | 4 GiB   |           | m8, C4 standard, Dv6 |
-| General + local SSD                 | 4 GiB   | 60 GB     | m8id, C4-lssd, Ddv6  |
-| Memory                              | 8 GiB   |           | r8, C4 highmem, Ev6  |
-| Storage                             | 8 GiB   | 250 GB    | i8g, Z3, Lsv3        |
-| GPU (per B200: 25 vCPU, 400 Gbit/s) | 300 GiB | 2 TB      | p6-b200, A4          |
+| Shape                    | vCPU : GiB memory : GB local SSD : Gbit/s | Examples             |
+| ------------------------ | ----------------------------------------- | -------------------- |
+| Compute                  | 1 : 2 : 0 : 0.5                           | c8, C4 highcpu, Fv6  |
+| General                  | 1 : 4 : 0 : 0.5                           | m8, C4 standard, Dv6 |
+| General + local SSD      | 1 : 4 : 60 : 0.5                          | m8id, C4-lssd, Ddv6  |
+| Memory                   | 1 : 8 : 0 : 0.5                           | r8, C4 highmem, Ev6  |
+| Storage                  | 1 : 8 : 250 : 1                           | i8g, Z3, Lsv3        |
+| GPU (1 B200 per 25 vCPU) | 1 : 12 : 80 : 16                          | p6-b200, A4          |
 
 Reading 1 TiB costs the VM time it takes at the row's throughput (48 vCPU + 192
 GB is \$1,700/month, \$0.0006/s; the 1-thread row is one vCPU; the GPU
