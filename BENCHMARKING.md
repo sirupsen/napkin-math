@@ -70,11 +70,11 @@ the latency cell comes from `memory_latency` instead.
 ## SSD, Network Disk and HDD rows
 
 ```bash
-cargo run --release --bin disk -- /mnt/nvme/disk.dat                       # a file on a mounted file system
-cargo run --release --bin disk -- /dev/nvme1n1 --destroy /dev/nvme1n1      # an unused raw device
+cargo bench --bench disk -- /mnt/nvme/disk.dat                       # a file on a mounted file system
+cargo bench --bench disk -- /dev/nvme1n1 --destroy /dev/nvme1n1      # an unused raw device
 ```
 
-`src/bin/disk.rs` has no dependencies. It runs sequential 1 MiB reads and
+`benches/disk.rs` has no dependencies. It runs sequential 1 MiB reads and
 writes at QD32, random 8 KiB reads and writes at QD1 and QD128, and buffered
 8 KiB sequential reads and writes, all with `O_DIRECT` except the buffered ones.
 Queue depth is N threads, each with one `pread` or `pwrite` in flight. It writes
@@ -115,10 +115,10 @@ That is where the README's old `8 GiB/s` sequential SSD read came from.
 ## Durable write rows
 
 ```bash
-cargo run --release --bin durable_write -- /mnt/disk/dw.dat --sizes 8k,64k,1m --writers 1,4,32
+cargo bench --bench durable_write -- /mnt/disk/dw.dat --sizes 8k,64k,1m --writers 1,4,32
 ```
 
-`src/bin/durable_write.rs` has no dependencies. Each writer loops `pwrite` +
+`benches/durable_write.rs` has no dependencies. Each writer loops `pwrite` +
 `fdatasync` over its own 64 MiB slice of a file that was fully written and
 synced first, with `O_DIRECT`, and times the pair. It then does the same while
 appending to a new file. Before and after each run it reads the disk's flush
@@ -153,11 +153,11 @@ rows were buffered 8 KiB appends from one writer (300 us, 30 MiB/s on SSD).
 ## Network rows
 
 ```bash
-cargo run --release --bin net -- --server        # on host A, listens on TCP 5900
-cargo run --release --bin net -- 10.0.0.12       # on host B, with A's private IP
+cargo bench --bench net -- --server        # on host A, listens on TCP 5900
+cargo bench --bench net -- 10.0.0.12       # on host B, with A's private IP
 ```
 
-`src/bin/net.rs` has no dependencies. It times 1 B and 32 KiB TCP round trips
+`benches/net.rs` has no dependencies. It times 1 B and 32 KiB TCP round trips
 on one connection with `TCP_NODELAY`, then streams on 1, 8 and 32 connections,
 counting bytes on the receiving side. Single-flow results show per-flow caps
 (5 Gbit/s on AWS outside a cluster placement group); multi-flow results show
@@ -195,11 +195,11 @@ cross-AZ, so treat the AWS round trips as 100-500 us.
 ## Compression rows
 
 ```bash
-cargo run --release --bin compression_corpus -- silesia.tar dickens ...
-NAPKIN_COMPRESSION_CODECS="lz4_flex,zstd -3" cargo run --release --bin compression_corpus -- file
+cargo bench --bench compression_corpus -- silesia.tar dickens ...
+NAPKIN_COMPRESSION_CODECS="lz4_flex,zstd -3" cargo bench --bench compression_corpus -- file
 ```
 
-`src/bin/compression_corpus.rs` reports the ratio and single-threaded
+`benches/compression_corpus.rs` reports the ratio and single-threaded
 compress/decompress speed of lz4, snappy, zstd (-1, -3, -9, -19), gzip (-1, -6)
 and brotli (-5, -11) for each file, as best of N runs over at least a second.
 The CPU Compress/Decompress rows use the
@@ -212,15 +212,15 @@ The Logs row is loghub's full `Apache.log` (5 MiB, 11x lz4 to 29x zstd -19) and
 `Linux.log` (2 MiB, 6x to 20x).
 
 The structured-data tables and the two CPU Decode rows come from
-`src/bin/encoding_ratio.rs`, built with `--features encodings` so the default
+`benches/encoding_ratio.rs`, built with `--features encodings` so the default
 build doesn't pull in Parquet:
 
 ```bash
-cargo run --release --features encodings --bin encoding_ratio -- parquet taxi.parquet hits_0.parquet
-cargo run --release --features encodings --bin encoding_ratio -- cardinality taxi.parquet hits_0.parquet
-cargo run --release --features encodings --bin encoding_ratio -- postings collection.tsv Apache.log ...  # also 3-/4-gram indexes
-cargo run --release --features encodings --bin encoding_ratio -- postings --paragraphs dickens webster
-cargo run --release --features encodings --bin encoding_ratio -- timeseries nab/*.csv
+cargo bench --features encodings --bench encoding_ratio -- parquet taxi.parquet hits_0.parquet
+cargo bench --features encodings --bench encoding_ratio -- cardinality taxi.parquet hits_0.parquet
+cargo bench --features encodings --bench encoding_ratio -- postings collection.tsv Apache.log ...  # also 3-/4-gram indexes
+cargo bench --features encodings --bench encoding_ratio -- postings --paragraphs dickens webster
+cargo bench --features encodings --bench encoding_ratio -- timeseries nab/*.csv
 ```
 
 On October 24, 2026 (ratios on any machine; speeds single-threaded on an AWS
@@ -311,15 +311,15 @@ RLE-hybrid catches short runs of the common value. Columns whose runs are
 shorter than 8 come in over it (`ClientIP`: 7.0 bits, rule 4.3), because
 Parquet only run-length encodes runs of 8 or more.
 
-The Floats / Integers / Strings rows come from `src/bin/column_codecs.rs`
+The Floats / Integers / Strings rows come from `benches/column_codecs.rs`
 (same feature), which runs the crates Vortex builds on: spiraldb's `alp`,
 `fastlanes` and `fsst-rs`. Every column is round-tripped and compared bit for
 bit, and decode is timed single-threaded, best of 5, against the decoded size:
 
 ```bash
-cargo run --release --features encodings --bin column_codecs -- floats taxi.parquet gov10.bin ...
-cargo run --release --features encodings --bin column_codecs -- ints taxi.parquet hits_0.parquet
-cargo run --release --features encodings --bin column_codecs -- strings hits_0.parquet passages.txt ...
+cargo bench --features encodings --bench column_codecs -- floats taxi.parquet gov10.bin ...
+cargo bench --features encodings --bench column_codecs -- ints taxi.parquet hits_0.parquet
+cargo bench --features encodings --bench column_codecs -- strings hits_0.parquet passages.txt ...
 ```
 
 On October 25, 2026 (ratios on any machine; speeds on an AWS m8id.12xlarge,

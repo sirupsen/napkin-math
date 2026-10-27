@@ -3,11 +3,11 @@
 // (Arrow buffers, 4 bytes per doc ID, 16 bytes per point), except whole
 // inverted and n-gram indexes, which are against their source text.
 //
-//   cargo run --release --features encodings --bin encoding_ratio -- parquet hits_0.parquet
-//   cargo run --release --features encodings --bin encoding_ratio -- cardinality hits_0.parquet
-//   cargo run --release --features encodings --bin encoding_ratio -- postings collection.tsv
-//   cargo run --release --features encodings --bin encoding_ratio -- postings --paragraphs dickens
-//   cargo run --release --features encodings --bin encoding_ratio -- timeseries nab/*.csv
+//   cargo bench --features encodings --bench encoding_ratio -- parquet hits_0.parquet
+//   cargo bench --features encodings --bench encoding_ratio -- cardinality hits_0.parquet
+//   cargo bench --features encodings --bench encoding_ratio -- postings collection.tsv
+//   cargo bench --features encodings --bench encoding_ratio -- postings --paragraphs dickens
+//   cargo bench --features encodings --bench encoding_ratio -- timeseries nab/*.csv
 use std::collections::HashMap;
 use std::fs::File;
 use std::time::Instant;
@@ -544,8 +544,14 @@ fn timeseries(paths: &[String]) {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let args: Vec<String> = std::env::args().skip(1).filter(|a| a != "--bench").collect();
     let usage = "usage: encoding_ratio parquet|cardinality|postings|timeseries <files...>";
+    // `cargo bench --bench <name>` adds --bench to the arguments; without any
+    // other arguments there is nothing to measure, so skip quietly.
+    if args.is_empty() {
+        eprintln!("{usage} (no arguments, skipping)");
+        return;
+    }
     let (mode, files) = args.split_first().expect(usage);
     match mode.as_str() {
         "parquet" => files.iter().for_each(|f| parquet(f)),

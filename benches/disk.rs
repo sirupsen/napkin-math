@@ -3,9 +3,9 @@
 // Queue depth comes from threads: N threads each doing one blocking pread or
 // pwrite at a time keep N requests in flight, a queue depth of N.
 //
-//   cargo run --release --bin disk -- /mnt/disk/disk.dat                 # a file on a mounted file system
-//   cargo run --release --bin disk -- /dev/nvme1n1 --destroy /dev/nvme1n1   # an unused raw device
-//   cargo run --release --bin disk -- /dev/nvme1n1 --destroy /dev/nvme1n1 --size 1800g --no-precondition   # HDD
+//   cargo bench --bench disk -- /mnt/disk/disk.dat                 # a file on a mounted file system
+//   cargo bench --bench disk -- /dev/nvme1n1 --destroy /dev/nvme1n1   # an unused raw device
+//   cargo bench --bench disk -- /dev/nvme1n1 --destroy /dev/nvme1n1 --size 1800g --no-precondition   # HDD
 //
 // The whole range is written first, because reads of never-written blocks can
 // skip the flash; --no-precondition skips that for raw devices (an HDD has no
@@ -171,8 +171,14 @@ fn run(path: &str, size: u64, t: &Test, secs: u64, once: bool) {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    let args: Vec<String> = std::env::args().filter(|a| a != "--bench").collect();
     let usage = "usage: disk <file | /dev/device --destroy /dev/device> [--size 32g] [--secs 15] [--no-precondition]";
+    // `cargo bench --bench <name>` adds --bench to the arguments; without any
+    // other arguments there is nothing to measure, so skip quietly.
+    if args.len() < 2 {
+        eprintln!("{} (no arguments, skipping)", usage);
+        return;
+    }
     let path = args.get(1).expect(usage).clone();
     let flag = |name: &str| args.iter().position(|a| a == name).map(|i| args[i + 1].clone());
     let secs: u64 = flag("--secs").map(|s| s.parse().unwrap()).unwrap_or(15);

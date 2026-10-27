@@ -12,12 +12,13 @@ IPs, bucket names or credentials.
 ## Layout
 
 - `benches/napkin_math.rs` registers the Criterion groups in `benches/benchmarks/`.
-- `src/bin/compression_corpus.rs` measures compression ratio and speed on real files.
-- `src/bin/encoding_ratio.rs` (`--features encodings`) measures Parquet, posting-list and Gorilla ratios.
-- `src/bin/column_codecs.rs` (`--features encodings`) measures ALP, FastLanes FOR/delta and FSST per column, with round-trip checks and decode speed.
-- `src/bin/durable_write.rs` (no dependencies) measures pwrite + fdatasync commits, with flush counts from `/proc/diskstats`.
+- Every other `benches/*.rs` is a standalone tool with `bench = false`: plain `cargo bench` skips it, `cargo bench --bench disk -- <args>` runs it, and without arguments it prints its usage and exits.
+- `benches/compression_corpus.rs` measures compression ratio and speed on real files.
+- `benches/encoding_ratio.rs` (`--features encodings`) measures Parquet, posting-list and Gorilla ratios.
+- `benches/column_codecs.rs` (`--features encodings`) measures ALP, FastLanes FOR/delta and FSST per column, with round-trip checks and decode speed.
+- `benches/durable_write.rs` (no dependencies) measures pwrite + fdatasync commits, with flush counts from `/proc/diskstats`.
 - `run` builds, then runs `cargo bench`; with `NAPKIN_TUNE=1` it calls `sudo` itself, so don't wrap it in `sudo`.
-- `src/bin/disk.rs` (disk rows) and `src/bin/net.rs` (network rows, `--server` on one host) have no dependencies.
+- `benches/disk.rs` (disk rows) and `benches/net.rs` (network rows, `--server` on one host) have no dependencies.
 - `newsletter/` is unrelated to the README benchmarks.
 
 ## Running

@@ -1,9 +1,9 @@
 // Network rows between two hosts: TCP round trips and bulk streams. No
 // dependencies.
 //
-//   cargo run --release --bin net -- --server              # on host A, listens on TCP 5900
-//   cargo run --release --bin net -- 10.0.0.12             # on host B, with A's private IP
-//   cargo run --release --bin net -- 10.0.0.12 --secs 15 --flows 1,8,32
+//   cargo bench --bench net -- --server              # on host A, listens on TCP 5900
+//   cargo bench --bench net -- 10.0.0.12             # on host B, with A's private IP
+//   cargo bench --bench net -- 10.0.0.12 --secs 15 --flows 1,8,32
 //
 // Round trips: one connection with TCP_NODELAY sends a message and waits for
 // the same number of bytes back, for 1 B and 32 KiB messages. Streams: N
@@ -117,8 +117,14 @@ fn streams(host: &str, flows: usize, secs: u64) {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    let args: Vec<String> = std::env::args().filter(|a| a != "--bench").collect();
     let usage = "usage: net --server | net <server-ip> [--secs 15] [--flows 1,8,32]";
+    // `cargo bench --bench <name>` adds --bench to the arguments; without any
+    // other arguments there is nothing to measure, so skip quietly.
+    if args.len() < 2 {
+        eprintln!("{} (no arguments, skipping)", usage);
+        return;
+    }
     let target = args.get(1).expect(usage).clone();
     if target == "--server" {
         let listener = TcpListener::bind(("0.0.0.0", PORT)).unwrap();

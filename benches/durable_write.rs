@@ -2,8 +2,8 @@
 // pair, the way a database commits to its log. No dependencies, so it
 // is easy to read exactly what is measured.
 //
-//   cargo run --release --bin durable_write -- /mnt/disk/commit.dat
-//   cargo run --release --bin durable_write -- /mnt/disk/commit.dat --sizes 8k,64k,1m --writers 1,32 --secs 15
+//   cargo bench --bench durable_write -- /mnt/disk/commit.dat
+//   cargo bench --bench durable_write -- /mnt/disk/commit.dat --sizes 8k,64k,1m --writers 1,32 --secs 15
 //
 // Every writer overwrites its own 64 MiB slice of a file that is fully written
 // and synced first, sequentially and wrapping around, with O_DIRECT on Linux.
@@ -184,8 +184,15 @@ fn run(path: &str, size: usize, writers: usize, secs: u64, append: bool) {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let path = args.get(1).expect("usage: durable_write <file> [--sizes 8k,64k,1m] [--writers 1,32] [--secs 15]").clone();
+    let args: Vec<String> = std::env::args().filter(|a| a != "--bench").collect();
+    let usage = "usage: durable_write <file> [--sizes 8k,64k,1m] [--writers 1,32] [--secs 15]";
+    // `cargo bench --bench <name>` adds --bench to the arguments; without any
+    // other arguments there is nothing to measure, so skip quietly.
+    if args.len() < 2 {
+        eprintln!("{} (no arguments, skipping)", usage);
+        return;
+    }
+    let path = args[1].clone();
     let flag = |name: &str, default: &str| -> String {
         args.iter().position(|a| a == name).map(|i| args[i + 1].clone()).unwrap_or(default.to_string())
     };
