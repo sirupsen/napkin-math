@@ -86,26 +86,15 @@ yourself.
 | Blob Storage Conditional Write (128 KiB)        | 100 ms     |            |        |
 | Blob Storage List (1000 keys)                   | 150 ms     |            |        |
 
-† Durable means pwrite + fdatasync into a preallocated file. Cloud SSDs and
-network disks have no volatile write cache, so fdatasync sends nothing to the
-disk: a durable write costs a write, and its throughput takes 4-32 writers in
-flight. Appending adds a journal commit to every
-fdatasync: +100 μs on SSD, +1-2 ms on network disks. Local SSD loses its data
-with the host. HDDs flush their cache on every fdatasync; 1 MiB per fdatasync
-gets ~70 MiB/s at ~15 ms.
+† pwrite + fdatasync into a preallocated file. Cloud SSDs and network disks
+have no write cache to flush, so a durable write costs a write.
 
 \* One TCP connection moves ~2 MiB per round trip, so 2 MiB / RTT: 20 MiB/s
 at 100 ms. Add connections to go faster.
 
-Throughput is the most you can get, e.g. many requests in flight for random
-reads. Network Disk is EBS gp3 / GCP Hyperdisk Balanced provisioned to the max.
-Network Bandwidth is a 48 vCPU VM (AWS m8, GCP C4, Azure Dv5/Dv6:
-22-32 Gbit/s); NW Limit rows max out at it, with enough connections. Blob
-Storage is S3, GCS and Azure Blob from a VM in the same region; access pattern
-doesn't matter. Its latency is p99; Read and Write are at the largest request
-that costs no more than 8 KiB. One connection gets ~100 MiB/s, so filling the
-network takes 32+ connections. A PUT is durable when it returns, like write +
-fsync. GCS Rapid reads in ~10 ms. Region-to-region latencies:
+Throughput is with enough requests in flight to max out a 48 vCPU VM (AWS m8,
+GCP C4) and its disks (EBS gp3, Hyperdisk Balanced at max provisioning). Blob
+Storage latency is p99 from the same region. Region-to-region latencies:
 [cloudping](https://www.cloudping.co/).
 
 ## Cost Numbers
