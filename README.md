@@ -53,11 +53,12 @@ yourself.
 | CPU Decode Parquet (dictionary + zstd)          |            | 2 GiB/s    | 500 ms |
 | SSD Random Write (8 KiB)                        | 30 μs      | 2 GiB/s    | 500 ms |
 | SSD Random Read (8 KiB)                         | 100 μs     | 2 GiB/s    | 500 ms |
-| SSD Sequential Write + fsync (8 KiB)†           | 30 μs      | 2 GiB/s    | 500 ms |
+| SSD Sequential Durable Write (64 KiB)†          | 50 μs      | 2 GiB/s    | 500 ms |
 | CPU Serialize (JSON, Protobuf)                  |            | 1 GiB/s    | 1 s    |
 | CPU Decompress (lz4, zstd -1)                   |            | 1 GiB/s    | 1 s    |
 | Network Disk Sequential Read                    |            | 1 GiB/s    | 1 s    |
 | Network Disk Sequential Write                   |            | 1 GiB/s    | 1 s    |
+| Network Disk Sequential Durable Write (64 KiB)† | 1 ms       | 1 GiB/s    | 1 s    |
 | CPU Hash, crypto-safe (64 bytes)                | 100 ns     | 1 GiB/s    | 1 s    |
 | CPU Compress (lz4, zstd -1)                     |            | 500 MiB/s  | 2 s    |
 | CPU Sort (64-bit integers)                      |            | 500 MiB/s  | 3 s    |
@@ -65,10 +66,9 @@ yourself.
 | CPU Encode Parquet (dictionary + zstd)          |            | 300 MiB/s  | 3 s    |
 | Network Disk Random Read (8 KiB)                | 500 μs     | 250 MiB/s  | 4 s    |
 | Network Disk Random Write (8 KiB)               | 500 μs     | 250 MiB/s  | 4 s    |
-| Network Disk Sequential Write + fsync (8 KiB)†  | 1 ms       | 250 MiB/s  | 4 s    |
 | HDD Sequential Read                             |            | 200 MiB/s  | 5 s    |
 | HDD Sequential Write                            |            | 200 MiB/s  | 5 s    |
-| HDD Sequential Write + fsync (8 KiB)†           | 1 ms       | 8 MiB/s    | 2 min  |
+| HDD Sequential Durable Write (8 KiB)†           | 1 ms       | 8 MiB/s    | 2 min  |
 | HDD Random Write (8 KiB)                        | 5 ms       | 2 MiB/s    | 10 min |
 | HDD Random Read (8 KiB)                         | 10 ms      | 2 MiB/s    | 10 min |
 | CPU Atomic Increment                            | 5 ns       |            |        |
@@ -86,11 +86,13 @@ yourself.
 | Blob Storage Conditional Write (128 KiB)        | 100 ms     |            |        |
 | Blob Storage List (1000 keys)                   | 150 ms     |            |        |
 
-† Cloud SSDs and network disks have no volatile write cache, so fsync is free:
-a commit costs one write, and parallel committers reach random-write throughput.
-Overwrite a preallocated file; appending makes ext4 commit its journal on every
-fsync (~250 μs). HDDs flush their cache on every fsync, and parallel
-committers make it slower: batch writes per fsync instead.
+† Durable means pwrite + fdatasync into a preallocated file. Cloud SSDs and
+network disks have no volatile write cache, so fdatasync sends nothing to the
+disk: a durable write costs a write, and its throughput takes 4-32 writers in
+flight. Appending adds a journal commit to every
+fdatasync: +100 μs on SSD, +1-2 ms on network disks. Local SSD loses its data
+with the host. HDDs flush their cache on every fdatasync; 1 MiB per fdatasync
+gets ~70 MiB/s at ~15 ms.
 
 \* One TCP connection moves ~2 MiB per round trip, so 2 MiB / RTT: 20 MiB/s
 at 100 ms. Add connections to go faster.

@@ -91,36 +91,53 @@ Balanced at 80k IOPS / 1600 MiB/s on a c4-standard-16, and the instance-store
 HDDs of an AWS d3.xlarge.
 
 `script/ssd-fio` runs `fio` for sequential 1 MiB and buffered 8 KiB reads,
-random 8 KiB reads at QD1 and QD32, sequential writes, buffered 8 KiB writes and
-8 KiB commits: `O_DIRECT` overwrites of a written 1 GiB region, each followed by
-`fdatasync`, from 1 and from 32 writers. It preconditions the range first (reads of
-never-written blocks can skip the flash), checks that the file system the file
-actually lands on has 2x the test size free, and refuses to write to a mounted
-or formatted device. A file target includes the file system's fsync cost
-(the README fsync rows are ext4); a raw device does not.
-
-On October 26, 2026, the commit jobs on ext4 gave (1 writer / 32 writers):
-
-| Disk | Latency | 32 writers |
-| --- | --- | --- |
-| m8id.12xlarge instance store | 31 us | 2.7 GiB/s (355k commits/s) |
-| m8gd.12xlarge instance store | 17 us | 0.9 GiB/s |
-| GCP C4 local SSD (one disk) | 32 us | 318 MiB/s (per-disk write cap) |
-| EBS gp3, 16k IOPS / 1000 MiB/s | 1.0 ms | 133 MiB/s (IOPS cap) |
-| Hyperdisk Balanced, 80k IOPS / 1600 MiB/s | 470 us | 364 MiB/s |
-| d3.xlarge HDD | 1.2 ms | 2 MiB/s |
-
-`fdatasync` took ~0.5 us on every SSD and network disk: they all report
-`write through` in `/sys/block/*/queue/write_cache`, so the kernel sends no
-flush and a commit costs one write. The d3 HDDs report `write back`; their
-`fdatasync` is a ~0.7 ms cache flush, and 32 writers drop them from ~850 to
-~280 commits/s. The old fsync rows (300 us, 30 MiB/s) were buffered appends from
-one writer, where ext4 commits its journal on every `fdatasync` (~250 us on
-m8id, 88 us on m8gd).
+random 8 KiB reads at QD1 and QD32, sequential writes and buffered 8 KiB writes.
+It preconditions the range first (reads of never-written blocks can skip the
+flash), checks that the file system the file actually lands on has 2x the test
+size free, and refuses to write to a mounted or formatted device. A file target
+includes the file system's cost; a raw device does not.
 
 These rows used to come from a Rust harness in `src/main.rs`, whose sequential
 read benchmark reread the same 1 GiB file from page cache after the first pass.
 That is where the README's old `8 GiB/s` sequential SSD read came from.
+
+## Durable write rows
+
+```bash
+cargo run --release --bin durable_write -- /mnt/disk/dw.dat --sizes 8k,64k,1m --writers 1,4,32
+```
+
+`src/bin/durable_write.rs` has no dependencies. Each writer loops `pwrite` +
+`fdatasync` over its own 64 MiB slice of a file that was fully written and
+synced first, with `O_DIRECT`, and times the pair. It then does the same while
+appending to a new file. Before and after each run it reads the disk's flush
+and write counters from `/proc/diskstats`, so it shows whether `fdatasync`
+reached the device at all. fio with the same sizes and writer counts agrees
+within ~5% wherever it overwrites written blocks.
+
+On October 27, 2026, on ext4, median of three 20-second runs:
+
+| Disk | 8 KiB, 1 writer | 64 KiB, 1 writer | Most throughput | Appending, 8 KiB |
+| --- | --- | --- | --- | --- |
+| m8id.12xlarge instance store | 34 us | 39 us | 2.7 GiB/s (8 KiB x32) | 140 us |
+| GCP C4 local SSD (one disk) | 31 us | 50 us | 333 MiB/s (per-disk cap) | 138 us |
+| EBS gp3, 16k IOPS / 1000 MiB/s | 1.0 ms | 1.6 ms | 1 GiB/s (64 KiB x32) | 3.4 ms |
+| Hyperdisk Balanced, 80k IOPS / 1600 MiB/s | 374 us | 515 us | 1.6 GiB/s (64 KiB x32) | 1.3 ms |
+| d3.xlarge HDD | 1.0 ms | 6.2 ms | 101 MiB/s (1 MiB x32) | 1.9 ms |
+
+Every SSD and network disk reports `write through` in
+`/sys/block/*/queue/write_cache`, and saw 0.00 flushes per commit: `fdatasync`
+took ~1 us because there was nothing to send. The HDDs report `write back` and
+saw exactly one flush per commit from one writer. Parallel writers share
+flushes there but still get slower at 8 KiB (826 to 274 commits/s). A 1 MiB
+commit to the HDD takes 14 ms at 69 MiB/s. Appending costs 3 device writes per
+commit instead of 1 (data plus ext4's journal), which is the extra
+`fdatasync` time in the last column. On a MacBook's SSD, which does flush,
+`fdatasync` takes ~3.6 ms.
+
+The README rows use 64 KiB for SSD and network disks, the largest write that
+costs about the same as 8 KiB, and 8 KiB for HDD. Until October 26, 2026, these
+rows were buffered 8 KiB appends from one writer (300 us, 30 MiB/s on SSD).
 
 ## Network rows
 
