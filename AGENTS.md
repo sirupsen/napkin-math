@@ -16,14 +16,14 @@ IPs, bucket names or credentials.
 - `src/bin/encoding_ratio.rs` (`--features encodings`) measures Parquet, posting-list and Gorilla ratios.
 - `src/bin/column_codecs.rs` (`--features encodings`) measures ALP, FastLanes FOR/delta and FSST per column, with round-trip checks and decode speed.
 - `src/bin/durable_write.rs` (no dependencies) measures pwrite + fdatasync commits, with flush counts from `/proc/diskstats`.
-- `run` applies Linux host tuning, then runs `cargo bench`. It calls `sudo` itself; don't wrap it in `sudo`.
+- `run` builds, then runs `cargo bench`; with `NAPKIN_TUNE=1` it calls `sudo` itself, so don't wrap it in `sudo`.
 - `src/bin/disk.rs` (disk rows) and `src/bin/net.rs` (network rows, `--server` on one host) have no dependencies.
 - `newsletter/` is unrelated to the README benchmarks.
 
 ## Running
 
 ```bash
-./run --bench napkin_math                        # everything, tuned (Linux)
+./run --bench napkin_math                        # everything
 ./run --bench napkin_math -- 'syscall|hash'      # a subset (regex)
 make test                                        # each benchmark once, smoke test
 ```
@@ -32,8 +32,8 @@ make test                                        # each benchmark once, smoke te
   VM needs `build-essential pkg-config` and rustup.
 - Criterion filters are substrings/regexes: `memory_read` also matches
   `compressed_memory_read`.
-- Without host tuning (EC2, ARM, most VMs lack some knobs), pass
-  `RUSTFLAGS='-C target-cpu=native'` to `cargo bench` yourself.
+- `./run` adds `-C target-cpu=native` to `RUSTFLAGS`. `NAPKIN_TUNE=1` (turbo off,
+  `performance` governor, ASLR off) is for A/B runs on one host, not README numbers.
 - Check `df -h` before disk benchmarks; `disk` needs 2x the test size.
 
 ## Gotchas found the hard way

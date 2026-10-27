@@ -1,27 +1,59 @@
 #!/usr/bin/env bash
-# Run the Criterion suite on a quieted Linux host:
+# Run the Criterion suite:
 #
 #   ./run                         # same as ./run --bench napkin_math
 #   ./run --bench napkin_math -- 'memory_latency|syscall'
+#   NAPKIN_TUNE=1 ./run           # quieter Linux host, for comparing two runs
 #
-# Uses sudo for the tuning steps; run it as your normal user so cargo is on PATH. Each step is
-# skipped when the host doesn't expose it (EC2, ARM, VMs without cpufreq), and everything it
-# changes is put back on exit. NAPKIN_PERF=1 wraps cargo in `perf stat`.
+# Builds first, then runs `cargo bench` with -C target-cpu=native added to RUSTFLAGS. That is how
+# the README numbers were measured: on stock cloud VMs, untuned.
 #
-# Tuning, from https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux:
-# turbo off, `performance` governor, page cache dropped, ASLR off, SMT siblings offline, and
-# transparent huge pages set to `always`.
+# NAPKIN_TUNE=1 turns turbo off, sets the `performance` governor and disables ASLR, using sudo, so
+# two runs on the same host vary less. It understates production speed, so don't refresh README
+# numbers with it. Each step is skipped when the host doesn't expose it (most cloud VMs), and
+# everything is put back on exit. Run as your normal user so cargo is on PATH.
+# https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux
+#
+# NAPKIN_PERF=1 wraps the run in `perf stat`.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 if [[ $# -eq 0 ]]; then
   set -- --bench napkin_math
 fi
+export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }-C target-cpu=native"
 
-if [[ "$(uname -s)" != "Linux" ]]; then
-  echo "not Linux: running without host tuning" >&2
-  RUSTFLAGS="-C target-cpu=native" exec cargo bench "$@"
+# Build before touching the host: compiling with turbo off is slow, and a compile error should not
+# wait behind sudo. Arguments after `--` go to the benchmark binary, not to the build.
+build_args=()
+for arg in "$@"; do
+  [[ "${arg}" == "--" ]] && break
+  build_args+=("${arg}")
+done
+cargo bench --no-run ${build_args[@]+"${build_args[@]}"}
+
+bench=(cargo bench "$@")
+if [[ "${NAPKIN_PERF:-0}" == "1" ]]; then
+  if command -v perf >/dev/null; then
+    bench=(perf stat -- "${bench[@]}")
+  else
+    echo "NAPKIN_PERF=1 but perf is not installed; running without it" >&2
+  fi
 fi
+
+if [[ "${NAPKIN_TUNE:-0}" != "1" ]]; then
+  exec "${bench[@]}"
+fi
+if [[ "$(uname -s)" != "Linux" ]]; then
+  echo "NAPKIN_TUNE=1 only works on Linux; running untuned" >&2
+  exec "${bench[@]}"
+fi
+
+# Ask for the password now, and keep sudo's cached login fresh: a full run outlasts its default
+# 15 minutes, and the restore on exit needs sudo too.
+sudo -v
+while sleep 60; do sudo -n true || exit; done &
+keepalive=$!
 
 restore=()
 
@@ -30,38 +62,18 @@ set_value() {
   local file="$1" value="$2" old
   [[ -e "${file}" ]] || return 0
   old="$(cat "${file}")"
-  # THP files print e.g. "always [madvise] never"; keep only the bracketed choice.
-  if [[ "${old}" =~ \[([a-z+]+)\] ]]; then
-    old="${BASH_REMATCH[1]}"
-  fi
   [[ "${old}" == "${value}" ]] && return 0
   echo "${value}" | sudo tee "${file}" >/dev/null
   restore+=("${file}=${old}")
-}
-
-# extra_siblings <cpu-list>: expand a thread_siblings_list like "0,24" or "0-1" and print every CPU
-# but the first.
-extra_siblings() {
-  local cpus=() part cpu
-  IFS=',' read -ra parts <<<"$1"
-  for part in "${parts[@]}"; do
-    if [[ "${part}" == *-* ]]; then
-      for ((cpu = ${part%-*}; cpu <= ${part#*-}; cpu++)); do cpus+=("${cpu}"); done
-    else
-      cpus+=("${part}")
-    fi
-  done
-  if ((${#cpus[@]} > 1)); then
-    printf '%s\n' "${cpus[@]:1}"
-  fi
 }
 
 cleanup() {
   local i entry
   for ((i = ${#restore[@]} - 1; i >= 0; i--)); do
     entry="${restore[i]}"
-    echo "${entry#*=}" | sudo tee "${entry%%=*}" >/dev/null || true
+    echo "${entry#*=}" | sudo tee "${entry%%=*}" >/dev/null || echo "could not restore ${entry}" >&2
   done
+  kill "${keepalive}" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -71,24 +83,6 @@ for governor in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
   set_value "${governor}" performance
 done
 set_value /proc/sys/kernel/randomize_va_space 0
-set_value /sys/kernel/mm/transparent_hugepage/enabled always
-set_value /sys/kernel/mm/transparent_hugepage/defrag always
 
-# Take SMT siblings offline, keeping the first CPU of each core.
-for siblings in /sys/devices/system/cpu/cpu*/topology/thread_siblings_list; do
-  [[ -e "${siblings}" ]] || continue
-  for cpu in $(extra_siblings "$(cat "${siblings}")"); do
-    set_value "/sys/devices/system/cpu/cpu${cpu}/online" 0
-  done
-done
-
-sync
-echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null
-
-echo "online CPUs: $(cat /sys/devices/system/cpu/online)"
-
-if [[ "${NAPKIN_PERF:-0}" == "1" ]] && command -v perf >/dev/null; then
-  RUSTFLAGS="-C target-cpu=native" perf stat -- cargo bench "$@"
-else
-  RUSTFLAGS="-C target-cpu=native" cargo bench "$@"
-fi
+echo "tuned: ${#restore[@]} setting(s) changed, restored on exit" >&2
+"${bench[@]}"

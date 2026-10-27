@@ -7,18 +7,19 @@ them. Everything here runs on Linux; the Criterion suite also builds on macOS
 ## Criterion suite
 
 ```bash
-./run                                         # all groups, with host tuning
+./run                                         # all groups
 ./run --bench napkin_math -- 'memory_latency|syscall'   # a subset (regex)
+NAPKIN_TUNE=1 ./run                           # quieter host, for comparing two runs
 make test                                     # every benchmark once, as a smoke test
 ```
 
-`./run` turns turbo off, sets the `performance` governor, drops the page cache,
-disables ASLR, takes SMT siblings offline and sets transparent huge pages to
-`always`, then runs `cargo bench` with `-C target-cpu=native`. Each step is
-skipped when the host doesn't expose it (EC2, ARM and many VMs lack some of
-them), and everything it changes is restored on exit. Run it as your normal
-user: it calls `sudo` itself. `NAPKIN_PERF=1` wraps the run in `perf stat`; on
-locked-down cloud images that needs `sudo sysctl -w
+`./run` builds first, then runs `cargo bench` with `-C target-cpu=native` added
+to `RUSTFLAGS`. The README numbers come from that on stock cloud VMs, untuned.
+`NAPKIN_TUNE=1` turns turbo off, sets the `performance` governor and disables
+ASLR (with `sudo`, restored on exit), so two runs on one host vary less; it
+understates production speed, so don't refresh README numbers with it. Most
+cloud VMs expose none of these knobs. `NAPKIN_PERF=1` wraps the run in `perf
+stat`; on locked-down cloud images that needs `sudo sysctl -w
 kernel.perf_event_paranoid=-1` first. You won't get the right numbers from a
 debug build.
 
