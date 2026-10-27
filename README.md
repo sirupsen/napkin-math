@@ -134,8 +134,8 @@ Approximate numbers that should be consistent between Cloud providers.
 | ├ Blob Storage, Regional      | 1 GB   | \$0.02     |                |                |
 | ├ Blob Storage, Zonal         | 1 GB   | \$0.1      |                |                |
 | ├ Network Disk, Zonal, HDD    | 1 GB   | \$0.04     |                |                |
-| ├ SSD                         | 1 GB   | \$0.15     | \$0.06         | \$0.00008      |
-| ├ HDD                         | 1 GB   | \$0.01     | \$0.001        | \$0.000002     |
+| ├ SSD                         | 1 GB   | \$0.15     | \$0.04         | \$0.00005      |
+| ├ HDD                         | 1 GB   | \$0.01     | \$0.001        | \$0.000001     |
 | ├ Network Disk, Regional, HDD | 1 GB   | \$0.08     |                |                |
 | ├ Network Disk, Zonal         | 1 GB   | \$0.1      |                |                |
 | ├ Network Disk, Regional      | 1 GB   | \$0.2      |                |                |
