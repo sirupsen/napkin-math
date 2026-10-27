@@ -18,9 +18,7 @@ IPs, bucket names or credentials.
 - `src/bin/durable_write.rs` (no dependencies) measures pwrite + fdatasync commits, with flush counts from `/proc/diskstats`.
 - `run` applies Linux host tuning, then runs `cargo bench`. It calls `sudo` itself; don't wrap it in `sudo`.
 - `src/bin/disk.rs` (disk rows) and `src/bin/net.rs` (network rows, `--server` on one host) have no dependencies.
-- `script/toggle-hyperthreading`.
-- `script/provision.sh` is a full workstation bootstrap, not a minimal bench setup.
-- `go/` and `newsletter/` are unrelated to the README benchmarks.
+- `newsletter/` is unrelated to the README benchmarks.
 
 ## Running
 

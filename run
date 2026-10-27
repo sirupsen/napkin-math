@@ -39,6 +39,23 @@ set_value() {
   restore+=("${file}=${old}")
 }
 
+# extra_siblings <cpu-list>: expand a thread_siblings_list like "0,24" or "0-1" and print every CPU
+# but the first.
+extra_siblings() {
+  local cpus=() part cpu
+  IFS=',' read -ra parts <<<"$1"
+  for part in "${parts[@]}"; do
+    if [[ "${part}" == *-* ]]; then
+      for ((cpu = ${part%-*}; cpu <= ${part#*-}; cpu++)); do cpus+=("${cpu}"); done
+    else
+      cpus+=("${part}")
+    fi
+  done
+  if ((${#cpus[@]} > 1)); then
+    printf '%s\n' "${cpus[@]:1}"
+  fi
+}
+
 cleanup() {
   local i entry
   for ((i = ${#restore[@]} - 1; i >= 0; i--)); do
@@ -60,7 +77,7 @@ set_value /sys/kernel/mm/transparent_hugepage/defrag always
 # Take SMT siblings offline, keeping the first CPU of each core.
 for siblings in /sys/devices/system/cpu/cpu*/topology/thread_siblings_list; do
   [[ -e "${siblings}" ]] || continue
-  for cpu in $(script/toggle-hyperthreading --siblings "$(cat "${siblings}")"); do
+  for cpu in $(extra_siblings "$(cat "${siblings}")"); do
     set_value "/sys/devices/system/cpu/cpu${cpu}/online" 0
   done
 done
