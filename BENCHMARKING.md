@@ -489,6 +489,18 @@ namespace. For aligned range-read latency,
 `./script/blob-random-range-latency-8m-multipart` seeded those objects via
 multipart upload with `8 MiB` parts to measure reads against part boundaries.
 
+## GPU rows
+
+The GPU rows are NVIDIA's B200 (HGX, SXM) specs, not measured here, rounded
+down to what kernels reach in practice:
+
+- GPU Memory Sequential Read: HBM3e at 8 TB/s; copy kernels reach ~90%.
+- GPU NVLink Transfer: NVLink 5 at 1.8 TB/s, 900 GB/s per direction.
+- GPU PCIe Transfer: PCIe 5.0 x16 at 64 GB/s per direction; pinned
+  `cudaMemcpy` reaches ~55 GB/s, and a small copy costs ~10 μs.
+- Network RDMA, GPU: one 400 Gbit/s InfiniBand or RoCE NIC per GPU, ~5 μs
+  round trip.
+
 ## Further reading
 
 * ["How to get consistent results when benchmarking on
