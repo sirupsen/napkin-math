@@ -174,7 +174,7 @@ operation (fewer, large files is cheaper):
 Zonal buckets also charge \$0.003 per GB written and \$0.0006 per GB read.
 
 Reading 1 TiB costs the VM time it takes at the row's throughput (48 vCPU + 192
-GB is \$1,100/month, \$0.0004/s; CPU and 1-thread rows are one vCPU; the GPU
+GB is \$1,100/month, \$0.0004/s; the 1-thread row is one vCPU; the GPU
 row is an H100 at its 3.35 TB/s spec), plus the transfer and request fees above:
 
 | What                                            | \$ / TiB read |
@@ -182,9 +182,6 @@ row is an H100 at its 3.35 TB/s spec), plus the transfer and request fees above:
 | Memory Sequential Read, 1 thread                | \$0.0003      |
 | GPU Memory Sequential Read (H100)               | \$0.0006      |
 | Memory Sequential Read, all cores               | \$0.002       |
-| CPU Decode Parquet (dictionary + zstd)          | \$0.003       |
-| CPU Decompress (lz4, zstd -1)                   | \$0.006       |
-| CPU Deserialize (JSON, Protobuf)                | \$0.02        |
 | SSD Sequential Read                             | \$0.1         |
 | Network Same-Zone                               | \$0.1         |
 | Memory Random Read (64 bytes)                   | \$0.1         |
