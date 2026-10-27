@@ -1,5 +1,5 @@
 // Durable writes: each writer does pwrite + fdatasync in a loop and times the
-// pair, the way a database commits to its log. No fio, no dependencies, so it
+// pair, the way a database commits to its log. No dependencies, so it
 // is easy to read exactly what is measured.
 //
 //   cargo run --release --bin durable_write -- /mnt/disk/commit.dat

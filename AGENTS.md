@@ -17,7 +17,8 @@ IPs, bucket names or credentials.
 - `src/bin/column_codecs.rs` (`--features encodings`) measures ALP, FastLanes FOR/delta and FSST per column, with round-trip checks and decode speed.
 - `src/bin/durable_write.rs` (no dependencies) measures pwrite + fdatasync commits, with flush counts from `/proc/diskstats`.
 - `run` applies Linux host tuning, then runs `cargo bench`. It calls `sudo` itself; don't wrap it in `sudo`.
-- `script/ssd-fio` (disks), `script/net-pair` (network), `script/toggle-hyperthreading`.
+- `src/bin/disk.rs` (disk rows) and `src/bin/net.rs` (network rows, `--server` on one host) have no dependencies.
+- `script/toggle-hyperthreading`.
 - `script/provision.sh` is a full workstation bootstrap, not a minimal bench setup.
 - `go/` and `newsletter/` are unrelated to the README benchmarks.
 
@@ -30,13 +31,12 @@ make test                                        # each benchmark once, smoke te
 ```
 
 - Benchmark on a current-generation cloud VM, not a laptop. A minimal Ubuntu
-  VM needs `build-essential pkg-config` and rustup; `fio`, `netperf` and
-  `iperf3` for the disk and network scripts.
+  VM needs `build-essential pkg-config` and rustup.
 - Criterion filters are substrings/regexes: `memory_read` also matches
   `compressed_memory_read`.
 - Without host tuning (EC2, ARM, most VMs lack some knobs), pass
   `RUSTFLAGS='-C target-cpu=native'` to `cargo bench` yourself.
-- Check `df -h` before disk benchmarks; `script/ssd-fio` needs 2x the test size.
+- Check `df -h` before disk benchmarks; `disk` needs 2x the test size.
 
 ## Gotchas found the hard way
 
@@ -47,10 +47,10 @@ make test                                        # each benchmark once, smoke te
 - `getrusage(RUSAGE_SELF)` gets slower with more threads in the process, so it
   is not a clean syscall number inside Criterion. Use `getppid`.
 - Reads of a file you just wrote come from page cache unless you drop it, and
-  reads of never-written blocks can skip the flash. `script/ssd-fio`
+  reads of never-written blocks can skip the flash. `disk`
   preconditions and drops caches for this reason.
 - AWS caps a single TCP flow at 5 Gbit/s outside a placement group; use 8+
-  flows to see the VM limit. Use netperf TCP_RR, not ping, for RTT.
+  flows to see the VM limit. Use TCP round trips (`net`), not ping, for RTT.
 - Graviton sha256/crc32/blake3 numbers are crate-specific (no ARM crypto
   instructions in this build), not hardware limits.
 - The bench binary uses jemalloc; the random-memory numbers depend on it.

@@ -69,12 +69,22 @@ the latency cell comes from `memory_latency` instead.
 ## SSD, Network Disk and HDD rows
 
 ```bash
-script/ssd-fio /mnt/nvme/fio.dat                                # a file on a mounted file system
-NAPKIN_FIO_DESTROY_DEVICE=/dev/nvme1n1 script/ssd-fio /dev/nvme1n1   # an unused raw device
+cargo run --release --bin disk -- /mnt/nvme/disk.dat                       # a file on a mounted file system
+cargo run --release --bin disk -- /dev/nvme1n1 --destroy /dev/nvme1n1      # an unused raw device
 ```
 
+`src/bin/disk.rs` has no dependencies. It runs sequential 1 MiB reads and
+writes at QD32, random 8 KiB reads and writes at QD1 and QD128, and buffered
+8 KiB sequential reads and writes, all with `O_DIRECT` except the buffered ones.
+Queue depth is N threads, each with one `pread` or `pwrite` in flight. It writes
+the whole range first (reads of never-written blocks can skip the flash), drops
+the page cache before buffered reads, checks that the file system the file
+actually lands on has 2x the test size free, and refuses to write to a mounted
+device or without `--destroy`. A file target includes the file system's cost; a
+raw device does not.
+
 The README uses the max-throughput results (1 MiB QD32 for sequential, 8 KiB
-QD32x4 for random) and QD1 latency for random reads and writes. On October 24,
+QD128 for random) and QD1 latency for random reads and writes. On October 24,
 2026, Hyperdisk Balanced (80k IOPS / 1600 MiB/s) did 8 KiB random writes at
 449 us QD1 and 633 MiB/s max, the same as its reads: network disks cap random
 I/O at the provisioned IOPS either way. One GCP local NVMe disk wrote at 30 us
@@ -83,19 +93,19 @@ QD1, capped at 335 MiB/s per disk. An m8id.12xlarge instance-store disk did
 writes land in the drive's DRAM cache, so they beat reads at QD1. A d3.xlarge
 HDD did 8 KiB random writes at 4.2 ms QD1 and 2 MiB/s max (237 IOPS); the
 drive's write cache reorders them, so they beat random reads (12 ms). For an
-HDD, test the whole
-disk with `NAPKIN_FIO_SIZE=1800G NAPKIN_FIO_PRECONDITION=0` so random reads seek
-across all of it. The October 2026 rows came from local NVMe on GCP C4 and AWS
-m8id/m8gd, EBS gp3 at 16k IOPS / 1000 MiB/s on an m8i.4xlarge, GCP Hyperdisk
-Balanced at 80k IOPS / 1600 MiB/s on a c4-standard-16, and the instance-store
-HDDs of an AWS d3.xlarge.
+HDD, test the whole disk with `--size 1800g --no-precondition` so random reads
+seek across all of it. The October 2026 rows came from local NVMe on GCP C4 and
+AWS m8id/m8gd, EBS gp3 at 16k IOPS / 1000 MiB/s, GCP Hyperdisk Balanced at
+80k IOPS / 1600 MiB/s on a c4-standard-16, and the instance-store HDDs of an AWS
+d3.xlarge.
 
-`script/ssd-fio` runs `fio` for sequential 1 MiB and buffered 8 KiB reads,
-random 8 KiB reads at QD1 and QD32, sequential writes and buffered 8 KiB writes.
-It preconditions the range first (reads of never-written blocks can skip the
-flash), checks that the file system the file actually lands on has 2x the test
-size free, and refuses to write to a mounted or formatted device. A file target
-includes the file system's cost; a raw device does not.
+Those numbers were first measured with `fio`. On October 27, 2026, `disk` and
+`fio` ran side by side on m8id instance store, EBS gp3, C4 local SSD, Hyperdisk
+Balanced and a d3 HDD, raw and on ext4. Every `O_DIRECT` test agreed within
+~5% on throughput and a few us on latency (QD128 on an ext4 file on m8id came
+out ~10% lower). Buffered 8 KiB reads were 15-50% faster under `fio`, which
+hints the kernel to read further ahead on sequential jobs; no README row uses
+them.
 
 These rows used to come from a Rust harness in `src/main.rs`, whose sequential
 read benchmark reread the same 1 GiB file from page cache after the first pass.
@@ -112,8 +122,8 @@ cargo run --release --bin durable_write -- /mnt/disk/dw.dat --sizes 8k,64k,1m --
 synced first, with `O_DIRECT`, and times the pair. It then does the same while
 appending to a new file. Before and after each run it reads the disk's flush
 and write counters from `/proc/diskstats`, so it shows whether `fdatasync`
-reached the device at all. fio with the same sizes and writer counts agrees
-within ~5% wherever it overwrites written blocks.
+reached the device at all. On October 27, 2026, `fio` with the same sizes and
+writer counts agreed within ~5% wherever it overwrote written blocks.
 
 On October 27, 2026, on ext4, median of three 20-second runs:
 
@@ -142,23 +152,44 @@ rows were buffered 8 KiB appends from one writer (300 us, 30 MiB/s on SSD).
 ## Network rows
 
 ```bash
-script/net-pair --server        # on host A
-script/net-pair 10.0.0.12       # on host B, with A's private IP
+cargo run --release --bin net -- --server        # on host A, listens on TCP 5900
+cargo run --release --bin net -- 10.0.0.12       # on host B, with A's private IP
 ```
 
-Runs ICMP ping, `netperf` TCP_RR with 1 B and 32 KiB messages, and `iperf3`
-with 1, 8 and 32 flows. Use TCP_RR, not ping, for round-trip times: ICMP is
-often handled on a slower path on cloud networks. Single-flow results show
-per-flow caps (5 Gbit/s on AWS outside a cluster placement group);
-multi-flow results show the VM's limit.
+`src/bin/net.rs` has no dependencies. It times 1 B and 32 KiB TCP round trips
+on one connection with `TCP_NODELAY`, then streams on 1, 8 and 32 connections,
+counting bytes on the receiving side. Single-flow results show per-flow caps
+(5 Gbit/s on AWS outside a cluster placement group); multi-flow results show
+the VM's limit. ICMP ping is often handled on a slower path on cloud networks,
+so round trips are TCP.
 
-The Network Bandwidth row is not measured; it blends the documented limits of
-current 64-128 vCPU VMs as of October 2026, in Gbit/s: AWS m8i/m8g/m8a 30 (64
-vCPU), 40 (96), 50 (128); GCP default egress c4d-standard-64 and n4-standard-64
-45, c3-standard-88 62, c4-standard-96 and c4d-standard-96 67; Azure D64s_v6 30,
-D96s_v6 41, D128s_v6 54. That averages ~45 Gbit/s, or ~5 GiB/s. Measured
-multi-flow iperf3 hit those limits: 32 Gbit/s on c4-standard-48 (documented
-34), 22 Gbit/s on m8id.12xlarge.
+On October 27, 2026 (p50 round trip, then streams):
+
+| Pair | 1 B round trip | 1 flow | 8+ flows |
+| --- | --- | --- | --- |
+| AWS m8id.12xlarge, same AZ | 140 us | 4.96 Gbit/s | 22.3 Gbit/s |
+| AWS m8id.12xlarge, `usw2-az1` -> `az2` | 578 us | 4.96 Gbit/s | 22.3 Gbit/s |
+| GCP c4-standard-48, same zone | 49 us | 29.8 Gbit/s | 32.5 Gbit/s |
+| GCP c4-standard-48, `us-central1-c` -> `a` | 646 us | 25.5 Gbit/s | 32.5 Gbit/s |
+| GCP `us-central1` -> `us-east4` | 23.7 ms | 145 MiB/s | |
+| GCP `us-central1` -> `us-west1` | 32 ms | 48 MiB/s | |
+| GCP `us-east4` -> `europe-west1` | 95 ms | 32 MiB/s | |
+| GCP `us-central1` -> `europe-west1` | 111 ms | 31 MiB/s | |
+| GCP `us-west1` -> `asia-southeast1` | 202 ms | 12 MiB/s | |
+| GCP `us-central1` -> `asia-southeast1` | 224 ms | 12 MiB/s | |
+
+The Network Bandwidth row (3 GiB/s) is the 8+ flow results on these 48 vCPU
+VMs: 22-32 Gbit/s. One cross-region flow moved 1.5-3.4 MiB per round trip
+(median ~3 MiB) with Ubuntu 24.04's default TCP buffers; the README rounds that
+to 2 MiB with earlier 22.04 runs (1.8-2.6 MiB). More flows add up: 32 flows from
+`us-central1` to `us-east4` reached 10.7 Gbit/s.
+
+`net` was checked against `netperf` TCP_RR and `iperf3` on every pair above.
+Streams matched iperf3 within ~5%, except the GCP cross-zone single flow
+(25.5 vs 19.3 Gbit/s), which moves around from run to run. Round trips matched netperf within ~5% on GCP and the WAN pairs; on AWS
+both were noisy and `net` came out lower (p50 140 vs 242 us same-AZ, 578 vs
+673 us cross-AZ). An October 23 run on m8id measured 81 us same-AZ and 456 us
+cross-AZ, so treat the AWS round trips as 100-500 us.
 
 ## Compression rows
 
