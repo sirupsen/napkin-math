@@ -29,12 +29,12 @@ yourself.
 | Operation                                                      | Latency    | Throughput |
 | -------------------------------------------------------------- | ---------- | ---------- |
 | GPU Memory Sequential Read (B200)                              |            | 7 TiB/s    |
-| GPU NVLink Transfer (B200)                                     |            | 800 GiB/s  |
+| GPU to GPU Transfer, NVLink (B200)                             |            | 800 GiB/s  |
 | Memory Sequential Read, all cores                              |            | 200 GiB/s  |
 | L1 Cache Read                                                  | 1 ns       | 200 GiB/s  |
 | Memory Sequential Write, all cores                             |            | 150 GiB/s  |
 | L2 Cache Read                                                  | 5 ns       | 150 GiB/s  |
-| GPU PCIe Transfer, Host to Device                              | 10 μs      | 50 GiB/s   |
+| GPU to CPU Transfer, PCIe (B200)                               | 10 μs      | 50 GiB/s   |
 | Network RDMA, GPU (400 Gbit/s)                                 | 5 μs       | 40 GiB/s   |
 | L3 Cache Read                                                  | 30 ns      | 30 GiB/s   |
 | Memory Sequential Read, 1 thread                               |            | 20 GiB/s   |
