@@ -174,16 +174,16 @@ operation (fewer, large files is cheaper):
 Zonal buckets also charge \$0.003 per GB written and \$0.0006 per GB read.
 
 Instance shapes are the same few ratios on every cloud, in vCPU : GiB memory :
-GB SSD : Gbit/s network (one B200 per 25 vCPU):
+GB VRAM : GB SSD : Gbit/s network (one B200 per 25 vCPU):
 
-| Shape        | vCPU | Memory | SSD | Network |
-| ------------ | ---- | ------ | --- | ------- |
-| CPU          | 1    | 2      | 0   | 0.5     |
-| General      | 1    | 4      | 0   | 0.5     |
-| General, SSD | 1    | 4      | 60  | 0.5     |
-| Memory       | 1    | 8      | 0   | 0.5     |
-| SSD          | 1    | 8      | 250 | 1       |
-| GPU (B200)   | 1    | 12     | 80  | 16      |
+| Shape        | vCPU | Memory | VRAM | SSD | Network |
+| ------------ | ---- | ------ | ---- | --- | ------- |
+| CPU          | 1    | 2      | 0    | 0   | 0.5     |
+| General      | 1    | 4      | 0    | 0   | 0.5     |
+| General, SSD | 1    | 4      | 0    | 60  | 0.5     |
+| Memory       | 1    | 8      | 0    | 0   | 0.5     |
+| SSD          | 1    | 8      | 0    | 250 | 1       |
+| GPU (B200)   | 1    | 12     | 7    | 80  | 16      |
 
 Reading 1 TiB costs the VM time it takes at the row's throughput (48 vCPU + 192
 GB is \$1,700/month, \$0.0006/s; the 1-thread row is one vCPU; the GPU
