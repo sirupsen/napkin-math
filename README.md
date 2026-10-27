@@ -126,28 +126,28 @@ Approximate numbers that should be consistent between Cloud providers.
 
 | What                          | Amount | \$ / Month | Spot \$ /month | Hourly Spot \$ |
 | ----------------------------- | ------ | ---------- | -------------- | -------------- |
-| CPU                           | 1 vCPU | \$15       | \$7            | \$0.01         |
-| GPU (H100)                    | 1      | \$5000     | \$1500         | \$2            |
-| Memory                        | 1 GB   | \$2        | \$1            | \$0.0015       |
+| CPU                           | 1 vCPU | \$25       | \$10           | \$0.01         |
+| GPU (H100)                    | 1      | \$7000     | \$3000         | \$4            |
+| Memory                        | 1 GB   | \$2.5      | \$1            | \$0.0015       |
 | Storage                       |        |            |                |                |
 | ├ Warehouse Storage           | 1 GB   | \$0.02     |                |                |
 | ├ Blob Storage, Regional      | 1 GB   | \$0.02     |                |                |
 | ├ Blob Storage, Zonal         | 1 GB   | \$0.1      |                |                |
-| ├ Network Disk, Zonal, HDD    | 1 GB   | \$0.05     |                |                |
-| ├ SSD                         | 1 GB   | \$0.08     | \$0.05         | \$0.00007      |
-| ├ HDD                         | 1 GB   | \$0.015    | \$0.004        | \$0.000005     |
-| ├ Network Disk, Regional, HDD | 1 GB   | \$0.1      |                |                |
-| ├ Network Disk, Zonal         | 1 GB   | \$0.2      |                |                |
-| ├ Network Disk, Regional      | 1 GB   | \$0.35     |                |                |
+| ├ Network Disk, Zonal, HDD    | 1 GB   | \$0.04     |                |                |
+| ├ SSD                         | 1 GB   | \$0.15     | \$0.06         | \$0.00008      |
+| ├ HDD                         | 1 GB   | \$0.01     | \$0.001        | \$0.000002     |
+| ├ Network Disk, Regional, HDD | 1 GB   | \$0.08     |                |                |
+| ├ Network Disk, Zonal         | 1 GB   | \$0.1      |                |                |
+| ├ Network Disk, Regional      | 1 GB   | \$0.2      |                |                |
 | Network                       |        |            |                |                |
 | ├ Same-Zone                   | 1 GB   | \$0        |                |                |
 | ├ Blob Storage, Same-Region   | 1 GB   | \$0        |                |                |
 | ├ Ingress                     | 1 GB   | \$0        |                |                |
-| ├ L4 Load Balancer            | 1 GB   | \$0.008    |                |                |
+| ├ L4 Load Balancer            | 1 GB   | \$0.005    |                |                |
 | ├ Cross-Zone                  | 1 GB   | \$0.01     |                |                |
 | ├ Cross-Region                | 1 GB   | \$0.02     |                |                |
 | ├ Internet Egress ††          | 1 GB   | \$0.1      |                |                |
-| CDN Egress                    | 1 GB   | \$0.05     |                |                |
+| CDN Egress                    | 1 GB   | \$0.08     |                |                |
 | CDN Fill ‡                    | 1 GB   | \$0.01     |                |                |
 | Warehouse Query               | 1 GB   | \$0.005    |                |                |
 | Logs/Traces ♣                 | 1 GB   | \$0.5      |                |                |
@@ -167,45 +167,45 @@ operation (fewer, large files is cheaper):
 
  |                | Regional, 1M | Zonal, 1M |
  |----------------|--------------|-----------|
- | Reads          | \$0.4        | \$0.03    |
+ | Reads          | \$0.4        | \$0.1     |
  | Writes, Lists  | \$5          | \$1       |
  | KMS Encryption | \$3          | \$3       |
 
 Zonal buckets also charge \$0.003 per GB written and \$0.0006 per GB read.
 
 Reading 1 TiB costs the VM time it takes at the row's throughput (48 vCPU + 192
-GB is \$1,100/month, \$0.0004/s; the 1-thread row is one vCPU; the GPU
+GB is \$1,700/month, \$0.0006/s; the 1-thread row is one vCPU; the GPU
 row is an H100 at its 3.35 TB/s spec), plus the transfer and request fees above:
 
 | What                                            | \$ / TiB read |
 | ----------------------------------------------- | ------------- |
-| Memory Sequential Read, 1 thread                | \$0.0003      |
-| GPU Memory Sequential Read (H100)               | \$0.0006      |
-| Memory Sequential Read, all cores               | \$0.002       |
-| SSD Sequential Read                             | \$0.1         |
-| Network Same-Zone                               | \$0.1         |
-| Memory Random Read (64 bytes)                   | \$0.1         |
-| Blob Storage, Regional Read (8 MiB)             | \$0.2         |
-| SSD Random Read (8 KiB)                         | \$0.2         |
-| Network Disk, Zonal Sequential Read             | \$0.4         |
-| Network Disk, Regional Sequential Read          | \$0.4         |
+| Memory Sequential Read, 1 thread                | \$0.0005      |
+| GPU Memory Sequential Read (H100)               | \$0.0009      |
+| Memory Sequential Read, all cores               | \$0.003       |
+| SSD Sequential Read                             | \$0.2         |
+| Network Same-Zone                               | \$0.2         |
+| Memory Random Read (64 bytes)                   | \$0.2         |
+| Blob Storage, Regional Read (8 MiB)             | \$0.3         |
+| SSD Random Read (8 KiB)                         | \$0.3         |
+| Network Disk, Zonal Sequential Read             | \$0.7         |
+| Network Disk, Regional Sequential Read          | \$0.7         |
 | Blob Storage, Zonal Read (8 MiB)§               | \$0.8         |
-| Blob Storage, Zonal Read (128 KiB)§             | \$1           |
-| Network Disk, Zonal, HDD Sequential Read        | \$2           |
-| Network Disk, Regional, HDD Sequential Read     | \$2           |
-| Network Disk, Zonal Random Read (8 KiB)         | \$2           |
-| Network Disk, Regional Random Read (8 KiB)      | \$2           |
-| HDD Sequential Read                             | \$2           |
-| Blob Storage, Regional Read (128 KiB)           | \$3           |
+| Blob Storage, Zonal Read (128 KiB)§             | \$2           |
+| Network Disk, Zonal, HDD Sequential Read        | \$3           |
+| Network Disk, Regional, HDD Sequential Read     | \$3           |
+| Network Disk, Zonal Random Read (8 KiB)         | \$3           |
+| Network Disk, Regional Random Read (8 KiB)      | \$3           |
+| HDD Sequential Read                             | \$3           |
+| Blob Storage, Regional Read (128 KiB)           | \$4           |
 | Network Cross-Zone                              | \$10          |
 | Network Cross-Region                            | \$20          |
-| Network Disk, Zonal, HDD Random Read (8 KiB)    | \$40          |
-| Network Disk, Regional, HDD Random Read (8 KiB) | \$40          |
+| Network Disk, Zonal, HDD Random Read (8 KiB)    | \$70          |
+| Network Disk, Regional, HDD Random Read (8 KiB) | \$70          |
 | Network Internet Egress                         | \$100         |
-| HDD Random Read (8 KiB)                         | \$200         |
+| HDD Random Read (8 KiB)                         | \$300         |
 
-§ Zonal GETs cost 13x less, but every byte read costs \$0.6/TiB, so zonal is
-cheaper below ~600 KiB per request and regional above.
+§ Zonal GETs cost 4x less, but every byte read costs \$0.6/TiB, so zonal is
+cheaper below ~500 KiB per request and regional above.
 
 ## Compression Ratios
 
