@@ -30,8 +30,8 @@ yourself.
 | --------------------------------------------------------- | ---------- | ---------- | ------ |
 | Memory Sequential Read, all cores                         |            | 200 GiB/s  | 5 ms   |
 | L1 Cache Read                                             | 1 ns       | 200 GiB/s  | 5 ms   |
-| L2 Cache Read                                             | 5 ns       | 150 GiB/s  | 7 ms   |
 | Memory Sequential Write, all cores                        |            | 150 GiB/s  | 7 ms   |
+| L2 Cache Read                                             | 5 ns       | 150 GiB/s  | 7 ms   |
 | L3 Cache Read                                             | 30 ns      | 30 GiB/s   | 30 ms  |
 | Memory Sequential Read, 1 thread                          |            | 20 GiB/s   | 50 ms  |
 | Memory Sequential Write, 1 thread                         |            | 10 GiB/s   | 100 ms |
@@ -45,23 +45,23 @@ yourself.
 | Network Same-Continent                                    | 25-60 ms   | NW Limit\* |        |
 | Network Cross-Atlantic                                    | 80-100 ms  | NW Limit\* |        |
 | Network Cross-Pacific                                     | 160-180 ms | NW Limit\* |        |
+| Blob Storage, Zonal Read (128 KiB)                        | 50 ms      | NW Limit   |        |
 | Blob Storage, Regional Read (128 KiB)                     | 100 ms     | NW Limit   |        |
 | Blob Storage, Regional Write (128 KiB)                    | 100 ms     | NW Limit   |        |
-| Blob Storage, Zonal Read (128 KiB)                        | 50 ms      | NW Limit   |        |
 | Memory Random Write (64 bytes)                            |            | 3 GiB/s    | 300 ms |
 | Memory Random Read (64 bytes)                             | 100 ns     | 3 GiB/s    | 300 ms |
 | SSD Sequential Write                                      |            | 2 GiB/s    | 500 ms |
 | CPU Decode Parquet (dictionary + zstd)                    |            | 2 GiB/s    | 500 ms |
 | SSD Random Write (8 KiB)                                  | 30 μs      | 2 GiB/s    | 500 ms |
-| SSD Random Read (8 KiB)                                   | 100 μs     | 2 GiB/s    | 500 ms |
 | SSD Sequential Durable Write (64 KiB)†                    | 50 μs      | 2 GiB/s    | 500 ms |
+| SSD Random Read (8 KiB)                                   | 100 μs     | 2 GiB/s    | 500 ms |
 | CPU Serialize (JSON, Protobuf)                            |            | 1 GiB/s    | 1 s    |
 | CPU Decompress (lz4, zstd -1)                             |            | 1 GiB/s    | 1 s    |
 | Network Disk, Zonal Sequential Read                       |            | 1 GiB/s    | 1 s    |
 | Network Disk, Zonal Sequential Write                      |            | 1 GiB/s    | 1 s    |
+| CPU Hash, crypto-safe (64 bytes)                          | 100 ns     | 1 GiB/s    | 1 s    |
 | Network Disk, Zonal Sequential Durable Write (64 KiB)†    | 1 ms       | 1 GiB/s    | 1 s    |
 | Network Disk, Regional Sequential Durable Write (64 KiB)† | 2 ms       | 1 GiB/s    | 1 s    |
-| CPU Hash, crypto-safe (64 bytes)                          | 100 ns     | 1 GiB/s    | 1 s    |
 | CPU Compress (lz4, zstd -1)                               |            | 500 MiB/s  | 2 s    |
 | CPU Sort (64-bit integers)                                |            | 500 MiB/s  | 3 s    |
 | CPU Deserialize (JSON, Protobuf)                          |            | 300 MiB/s  | 3 s    |
