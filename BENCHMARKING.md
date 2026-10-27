@@ -109,6 +109,35 @@ These rows used to come from a Rust harness in `src/main.rs`, whose sequential
 read benchmark reread the same 1 GiB file from page cache after the first pass.
 That is where the README's old `8 GiB/s` sequential SSD read came from.
 
+### Network Disk, Zonal and Regional
+
+On October 27, 2026, `storage` (raw device) and `storage_durable_write` (ext4)
+ran on a zonal and a regional disk with the same provisioning on one VM each:
+Hyperdisk Balanced and Hyperdisk Balanced High Availability (replicas in
+`us-central1-c` and `us-central1-a`, 80k IOPS / 1600 MiB/s) on a
+c4-standard-16, and Azure Premium SSD P30 LRS and ZRS (5000 IOPS / 200 MB/s) on
+a Standard_D16ds_v6 in `eastus2` (p50):
+
+| | Hyperdisk Zonal | Hyperdisk Regional | Azure LRS | Azure ZRS |
+| --- | --- | --- | --- | --- |
+| Random read 8 KiB, QD1 | 499 us | 497 us | 2.99 ms | 2.57 ms |
+| Random write 8 KiB, QD1 | 442 us | 1.33 ms | 1.70 ms | 1.52 ms |
+| Random read / write 8 KiB, QD128 | 630 / 629 MiB/s | 629 / 629 MiB/s | 41 / 41 MiB/s | 41 / 41 MiB/s |
+| Sequential read / write 1 MiB, QD32 | 1.6 / 1.6 GiB/s | 1.6 / 1.6 GiB/s | 195 / 203 MiB/s | 195 / 202 MiB/s |
+| Durable write 64 KiB, 1 writer | 549 us | 1.38 ms | 1.92 ms | 1.81 ms |
+| Durable write 64 KiB, 32 writers | 1.6 GiB/s | 1.3 GiB/s | 195 MiB/s | 193 MiB/s |
+| Appending durable write 8 KiB | 1.34 ms | 3.92 ms | 5.41 ms | 4.68 ms |
+
+The regional Hyperdisk adds ~0.9 ms to every write, the round trip to its
+second zone, and matches the zonal one on reads and throughput. Azure ZRS
+costs nothing over LRS on the same size, but a P30 is slower than either
+Hyperdisk at every queue depth. The README rows use the Hyperdisk Regional
+latencies, rounded: 1 ms for an 8 KiB random write and 2 ms for a 64 KiB durable
+write (1.4-1.8 ms on both clouds). Azure Premium SSD reports `write back` and
+gets one flush per `fdatasync`, ~30 us from one writer and several ms with 32;
+every other cloud disk here is `write through`. AWS has no regional block
+storage: EBS volumes live in one zone.
+
 ## Durable write rows
 
 ```bash
@@ -356,6 +385,23 @@ Xeon 6975P-C, built with `-C target-cpu=native`):
   each whole column gets 3-11x. Decode 2-4 GiB/s.
 
 ## Blob storage rows (March 2026)
+
+On the same setup (128 requests in flight from a VM in the same region), the
+zonal tiers S3 Express One Zone and GCS Rapid (gRPC, reads through a plain and
+an open object handle) gave p99 (p50), median over runs:
+
+| | S3 | GCS gRPC | Azure | S3 Express One Zone | GCS Rapid |
+| --- | --- | --- | --- | --- | --- |
+| Read 128 KiB | 77 (58) ms | 56 (16) | 97 (66) | 60 (50) | 26-27 (12-13) |
+| Write 128 KiB | 154 (64) | 373 (66) | 38 (22) | 104 (51) | 164-333 (80-85) |
+| Conditional write (if-match) 128 KiB | - | 105 (63) | 20 (8) | 33 (6) | 3.9-7.4 s (61-64 ms) |
+| List 1000 keys | 131 (78) | 87 (42) | 174 (88) | 27 (23) | 152-189 (69) |
+
+Zonal buckets only win on reads: the README's Blob Storage, Zonal Read row is
+50 ms. Zonal writes are no faster than regional ones, and S3 Express and GCS
+Rapid disagree by 5x or more on conditional writes and lists, so those rows
+stay regional. Both zonal tiers cost about \$0.11 per GB-month, ~5x regional.
+
 
 The blob storage benchmark code isn't in this repository yet; this describes
 the setup behind the README's blob rows.
