@@ -194,16 +194,43 @@ fn varint(mut v: u32) -> usize {
     n
 }
 
-// Bytes for a stream of small integers in Lucene's layout: 128-value blocks of
-// one bit-width byte plus the packed values, and a delta + varint tail.
-fn bitpacked_size(values: &[u32]) -> usize {
-    let packer = BitPacker4x::new();
+// Posting lists are sized in Tantivy's layout: full 128-value blocks bitpacked
+// with BitPacker4x, the rest of a list as varints. Doc ID gaps are packed
+// minus one (`compress_strictly_sorted`), so runs of consecutive documents
+// cost 0 bits, and term frequencies minus one. Each full doc ID block has a
+// skip entry: the last doc ID and its bit width, plus the frequencies' bit
+// width and block-max score if there are frequencies, plus the block's
+// frequency sum if there are positions.
+const SKIP_DOCS: usize = 4 + 1;
+const SKIP_FREQS: usize = 1 + 2;
+const SKIP_POSITIONS: usize = 4;
+
+fn bits(max: u32) -> u8 {
+    (32 - max.leading_zeros()) as u8
+}
+
+// Packed bytes of `values`, each minus `minus` in full blocks, without the
+// bit widths, and the number of full blocks.
+fn packed_size(values: &[u32], minus: u32) -> (usize, usize) {
     let mut blocks = values.chunks_exact(BitPacker4x::BLOCK_LEN);
     let mut size = 0;
+    let mut n = 0;
     for block in &mut blocks {
-        size += 1 + BitPacker4x::compressed_block_size(packer.num_bits(block));
+        let max = block.iter().map(|&v| v - minus).max().unwrap();
+        size += BitPacker4x::compressed_block_size(bits(max));
+        n += 1;
     }
-    size + blocks.remainder().iter().map(|&v| varint(v)).sum::<usize>()
+    (size + blocks.remainder().iter().map(|&v| varint(v)).sum::<usize>(), n)
+}
+
+// The skip list for a term with `blocks` full doc ID blocks, `entry` bytes
+// each, behind a varint length.
+fn skip_size(blocks: usize, entry: usize) -> usize {
+    if blocks == 0 {
+        0
+    } else {
+        varint((blocks * entry) as u32) + blocks * entry
+    }
 }
 
 fn best_of<F: FnMut()>(runs: usize, mut f: F) -> f64 {
@@ -226,15 +253,18 @@ struct Postings {
 }
 
 // One n-gram's doc ID list, sized as it streams in (the lists for a large
-// corpus don't fit in memory), in the same layout as bitpacked_size.
+// corpus don't fit in memory), in the same layout as packed_size, with no
+// frequencies.
 #[derive(Default)]
 struct GramList {
     // Last doc ID plus one, 0 before the first.
     last: u32,
     block_len: u32,
-    block_bits: u32,
+    // Largest gap minus one in the current block.
+    block_max: u32,
     // Varint bytes of the current block, used if it never fills up.
     block_varint: usize,
+    blocks: usize,
     bytes: usize,
 }
 
@@ -247,11 +277,12 @@ impl GramList {
         let delta = id - self.last;
         self.last = id;
         self.block_len += 1;
-        self.block_bits = self.block_bits.max(32 - delta.leading_zeros());
+        self.block_max = self.block_max.max(delta - 1);
         self.block_varint += varint(delta);
         if self.block_len as usize == BitPacker4x::BLOCK_LEN {
-            self.bytes += 1 + BitPacker4x::compressed_block_size(self.block_bits as u8);
-            (self.block_len, self.block_bits, self.block_varint) = (0, 0, 0);
+            self.bytes += BitPacker4x::compressed_block_size(bits(self.block_max));
+            self.blocks += 1;
+            (self.block_len, self.block_max, self.block_varint) = (0, 0, 0);
         }
         true
     }
@@ -300,7 +331,7 @@ where
     }
     let size = lists
         .values()
-        .map(|l| entry + l.bytes + l.block_varint)
+        .map(|l| entry + l.bytes + l.block_varint + skip_size(l.blocks, SKIP_DOCS))
         .sum();
     (lists.len(), postings, size)
 }
@@ -394,6 +425,7 @@ fn postings(path: &str, split: Split) {
 
     let (mut doc_bitpacked, mut doc_varint, mut doc_roaring) = (0, 0, 0);
     let (mut freq_bitpacked, mut pos_bitpacked) = (0, 0);
+    let (mut skip_docs, mut skip_freqs, mut skip_positions) = (0, 0, 0);
     let mut deltas = Vec::new();
     for p in index.values() {
         deltas.clear();
@@ -403,17 +435,23 @@ fn postings(path: &str, split: Split) {
             prev = id;
         }
         doc_varint += deltas.iter().map(|&d| varint(d)).sum::<usize>();
-        doc_bitpacked += bitpacked_size(&deltas);
+        let (doc_bytes, blocks) = packed_size(&deltas, 1);
+        doc_bitpacked += doc_bytes;
+        skip_docs += skip_size(blocks, SKIP_DOCS);
+        skip_freqs += skip_size(blocks, SKIP_DOCS + SKIP_FREQS);
+        skip_positions += skip_size(blocks, SKIP_DOCS + SKIP_FREQS + SKIP_POSITIONS);
         doc_roaring += roaring::RoaringBitmap::from_sorted_iter(p.docs.iter().copied())
             .unwrap()
             .serialized_size();
-        let freqs: Vec<u32> = p.freqs.iter().map(|f| f - 1).collect();
-        freq_bitpacked += bitpacked_size(&freqs);
-        pos_bitpacked += bitpacked_size(&p.positions);
+        freq_bitpacked += packed_size(&p.freqs, 1).0;
+        // Positions are one stream per term, with a bit width per block.
+        let (pos_bytes, pos_blocks) = packed_size(&p.positions, 0);
+        pos_bitpacked += varint(pos_blocks as u32) + pos_blocks + pos_bytes;
     }
     println!("doc IDs, against 4 B each:");
     report("delta + varint", postings * 4, doc_varint);
     report("delta + bitpacking", postings * 4, doc_bitpacked);
+    report("  + skip entries", postings * 4, doc_bitpacked + skip_docs);
     report("roaring", postings * 4, doc_roaring);
     println!("term frequencies, against 4 B each:");
     report("bitpacking", postings * 4, freq_bitpacked);
@@ -426,11 +464,11 @@ fn postings(path: &str, split: Split) {
         doc_bitpacked + freq_bitpacked + pos_bitpacked,
     );
 
-    // The whole index against the source text. The term dictionary is
-    // uncompressed: each term's bytes, a length byte and a 4-byte offset
-    // into the postings.
+    // The whole index against the source text, skip lists included. The term
+    // dictionary is uncompressed: each term's bytes, a length byte and a
+    // 4-byte offset into the postings.
     let dictionary: usize = index.keys().map(|t| t.len() + 1 + 4).sum();
-    let without_positions = dictionary + doc_bitpacked + freq_bitpacked;
+    let without_positions = dictionary + doc_bitpacked + freq_bitpacked + skip_freqs;
     println!("whole index, against {} bytes of source text:", raw_len);
     report(
         "dictionary + doc IDs + frequencies",
@@ -440,7 +478,7 @@ fn postings(path: &str, split: Split) {
     report(
         "  + positions",
         raw_len,
-        without_positions + pos_bitpacked,
+        without_positions + pos_bitpacked + skip_positions - skip_freqs,
     );
     // Per document, and with documents merged into ~16 KiB chunks, about the
     // size of a source file, which is what code search indexes.
