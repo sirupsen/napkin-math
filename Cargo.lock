@@ -331,6 +331,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
+name = "casefold"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4382156a4e6d5f0c279184bb37207f1259a5061c23084d3aa93eedf2a68c2eed"
+
+[[package]]
 name = "cast"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -971,6 +977,7 @@ dependencies = [
  "blake3",
  "brotli",
  "bytes",
+ "casefold",
  "core_affinity",
  "crc32fast",
  "criterion",
@@ -991,6 +998,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "snap",
+ "sparse-ngrams",
  "tikv-jemallocator",
  "xxhash-rust",
  "zstd",
@@ -1501,6 +1509,15 @@ name = "snap"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "199905e6153d6405f9728fe44daace35f8f837bbf830bb6e85fbd5828709a886"
+
+[[package]]
+name = "sparse-ngrams"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9961cea3849625fdd52ee72ff93e770641b453a6397ba69e1760719e15e2d94"
+dependencies = [
+ "casefold",
+]
 
 [[package]]
 name = "spin"

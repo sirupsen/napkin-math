@@ -237,38 +237,69 @@ struct GramList {
     bytes: usize,
 }
 
+impl GramList {
+    // Adds document `id`; returns whether it is a new posting.
+    fn add(&mut self, id: u32) -> bool {
+        if self.last == id {
+            return false;
+        }
+        let delta = id - self.last;
+        self.last = id;
+        self.block_len += 1;
+        self.block_bits = self.block_bits.max(32 - delta.leading_zeros());
+        self.block_varint += varint(delta);
+        if self.block_len as usize == BitPacker4x::BLOCK_LEN {
+            self.bytes += 1 + BitPacker4x::compressed_block_size(self.block_bits as u8);
+            (self.block_len, self.block_bits, self.block_varint) = (0, 0, 0);
+        }
+        true
+    }
+}
+
 // A regex index in the style of Google Code Search: for every byte n-gram
 // (ASCII-lowercased), the documents that contain it, with no frequencies or
 // positions. Returns distinct n-grams, postings and index bytes, counting
 // n bytes plus a 4-byte offset per n-gram for the dictionary.
 fn ngram_index(documents: &[&str], n: usize) -> (usize, usize, usize) {
-    let mut lists: HashMap<u32, GramList> = HashMap::new();
-    let mut postings = 0;
-    for (doc, body) in documents.iter().enumerate() {
-        let id = doc as u32 + 1;
-        for gram in body.as_bytes().windows(n) {
-            let key = gram
-                .iter()
-                .fold(0u32, |k, b| k << 8 | b.to_ascii_lowercase() as u32);
-            let l = lists.entry(key).or_default();
-            if l.last == id {
-                continue;
-            }
-            let delta = id - l.last;
-            l.last = id;
-            l.block_len += 1;
-            l.block_bits = l.block_bits.max(32 - delta.leading_zeros());
-            l.block_varint += varint(delta);
-            if l.block_len as usize == BitPacker4x::BLOCK_LEN {
-                l.bytes += 1 + BitPacker4x::compressed_block_size(l.block_bits as u8);
-                (l.block_len, l.block_bits, l.block_varint) = (0, 0, 0);
-            }
-            postings += 1;
+    gram_index(documents, n + 4, |text, emit| {
+        let body: Vec<u8> = text.bytes().map(|b| b.to_ascii_lowercase()).collect();
+        for gram in body.windows(n) {
+            emit(gram.iter().fold(0, |k, &b| k << 8 | b as u64));
         }
+    })
+}
+
+// GitHub code search's sparse n-grams, from its `sparse-ngrams` crate: every
+// bigram, plus each 3-8 byte substring whose two end bigrams are rarer (in
+// GitHub's code corpus) than every bigram between them, over text folded to
+// one byte per character with `casefold`. A query looks up only the few
+// grams that cover it, so it reads far fewer and more selective lists than
+// with trigrams. Grams are opaque 32-bit keys, so the dictionary costs 4 bytes
+// plus a 4-byte offset per gram.
+fn sparse_index(documents: &[&str]) -> (usize, usize, usize) {
+    gram_index(documents, 4 + 4, |text, emit| {
+        let body = casefold::index_fold(text.to_string());
+        sparse_ngrams::collect_sparse_grams_scan(&body, |gram, _| emit(gram.as_u32() as u64));
+    })
+}
+
+// Builds a doc ID index over the gram keys `grams` emits for each document,
+// with `entry` dictionary bytes per distinct gram.
+fn gram_index<F>(documents: &[&str], entry: usize, mut grams: F) -> (usize, usize, usize)
+where
+    F: FnMut(&str, &mut dyn FnMut(u64)),
+{
+    let mut lists: HashMap<u64, GramList> = HashMap::new();
+    let mut postings = 0;
+    for (doc, text) in documents.iter().enumerate() {
+        let id = doc as u32 + 1;
+        grams(text, &mut |key| {
+            postings += lists.entry(key).or_default().add(id) as usize;
+        });
     }
     let size = lists
         .values()
-        .map(|l| n + 4 + l.bytes + l.block_varint)
+        .map(|l| entry + l.bytes + l.block_varint)
         .sum();
     (lists.len(), postings, size)
 }
@@ -396,6 +427,12 @@ fn postings(path: &str, paragraphs: bool) {
                 size,
             );
         }
+        let (grams, postings, size) = sparse_index(docs);
+        report(
+            &format!("sparse n-grams per {unit} ({grams} grams, {postings} postings)"),
+            raw.len(),
+            size,
+        );
     }
 
     // Encode and decode speed: every full 128-ID block of every doc ID list,

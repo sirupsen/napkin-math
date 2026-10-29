@@ -25,9 +25,11 @@ fastlanes = { version = "0.6", optional = true }
 fsst-rs = { version = "0.6", optional = true }
 parquet = { version = "60", default-features = false, features = ["arrow", "snap", "zstd"], optional = true }
 roaring = { version = "0.11", optional = true }
+casefold = { version = "0.1", optional = true }
+sparse-ngrams = { version = "0.4", optional = true }
 
 [features]
-encodings = ["dep:alp", "dep:arrow-array", "dep:bitpacking", "dep:bytes", "dep:fastlanes", "dep:fsst-rs", "dep:parquet", "dep:roaring"]
+encodings = ["dep:alp", "dep:arrow-array", "dep:bitpacking", "dep:bytes", "dep:fastlanes", "dep:fsst-rs", "dep:parquet", "dep:roaring", "dep:casefold", "dep:sparse-ngrams"]
 
 [dev-dependencies]
 blake3 = "1"
