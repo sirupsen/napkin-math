@@ -264,9 +264,7 @@ build doesn't pull in Parquet:
 ```bash
 cargo bench --features encodings --bench compression_ratio -- parquet taxi.parquet hits_0.parquet
 cargo bench --features encodings --bench compression_ratio -- cardinality taxi.parquet hits_0.parquet
-cargo bench --features encodings --bench compression_ratio -- postings collection.tsv Apache.log ...  # inverted, 3-/4-gram and sparse n-gram indexes
-cargo bench --features encodings --bench compression_ratio -- postings --paragraphs dickens webster
-cargo bench --features encodings --bench compression_ratio -- postings --files linux/ rust/ ...
+cargo bench --features encodings --bench compression_ratio -- postings --tsv --details collection.tsv
 cargo bench --features encodings --bench compression_ratio -- timeseries nab/*.csv
 ```
 
@@ -279,16 +277,23 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   strings) 2.2x and 10.4x. Plain encoding is 1.0x. Decoding to Arrow: plain
   5.4 / 3.0 GiB/s, dictionary + RLE 4.2 / 2.6 GiB/s, + zstd 2.1 / 1.7 GiB/s
   (taxi / hits).
-- Search indexes over 44 datasets in four kinds, as index size / text size.
-  Prose and logs are one document per line (per paragraph for `dickens` and
-  `webster`), relational columns one per non-empty value, and code one per
-  source file. Code is every text file in a shallow clone at the tag,
-  skipping `.git`, files with a NUL byte and files over 350 KiB, as GitHub
-  code search does:
+- Search indexes over 53 datasets in four kinds, as index size / text size.
+  `benches/index_datasets.sh` downloads and prepares them (~15 GB of
+  downloads, 40 GB on disk, skipping whatever is already there), and
+  `index_sizes` builds every index on every dataset, four datasets at a time
+  with each index on its own thread, and prints the two tables below. On an
+  18-core M-series Mac the whole run takes about 3.5 minutes:
 
   ```bash
-  cargo bench --features encodings --bench compression_ratio -- postings --files linux/ llvm-project/ ...
+  benches/index_datasets.sh ~/index-datasets
+  cargo bench --features encodings --bench compression_ratio -- index_sizes ~/index-datasets/manifest.tsv
   ```
+
+  Prose, logs and relational columns are one document per line (MS MARCO's
+  passage text, a log line, a non-empty value), or per paragraph for books.
+  Code is one document per source file: every text file in a shallow clone
+  at the tag, skipping `.git`, files with a NUL byte and files over 350 KiB,
+  as GitHub code search does.
 
   Posting lists are in Tantivy's layout: full 128-value blocks bitpacked with
   `BitPacker4x`, doc ID gaps minus one (`compress_strictly_sorted`) and
@@ -307,13 +312,25 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   3-8 byte substring whose end bigrams are rarer than every bigram between
   them, as opaque 32-bit keys (4 bytes plus a 4-byte offset each). The
   n-gram indexes are per source file for code and per ~16 KiB chunk of
-  consecutive documents otherwise:
+  consecutive documents otherwise.
+
+  The last three columns are per 1 MiB block of consecutive documents (of
+  files, for code): the block compressed with zstd -3, and bloom filters
+  over its distinct tokens and trigrams at 1% false positives (9.6 bits per
+  key, uncompressed: a filter at its optimal fill is half ones and doesn't
+  compress). A query checks every block's filter and decompresses and scans
+  the blocks that match. At 1 MiB a block repeats most of its tokens and
+  trigrams; at 16 KiB the filters are 3-5x bigger, and trigram filters are
+  bigger than the exact trigram index.
 
   | Dataset | Kind | Docs | Text | Inverted | + positions | 3-grams | 4-grams | Sparse | zstd -3 | Token bloom | Trigram bloom |
   | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
   | MS MARCO passages | Prose | 8.8M | 3.1 GB | 0.19 | 0.35 | 0.08 | 0.23 | 0.41 | 0.321 | 0.018 | 0.018 |
+  | Amazon reviews (Video Games) | Prose | 4.6M | 1.4 GB | 0.19 | 0.42 | 0.07 | 0.21 | 0.40 | 0.361 | 0.012 | 0.015 |
+  | C4 (web pages, one shard) | Prose | 356k | 774 MB | 0.15 | 0.39 | 0.07 | 0.23 | 0.46 | 0.380 | 0.021 | 0.019 |
   | enwik8 (Wikipedia XML) | Prose | 1.1M | 100 MB | 0.29 | 0.44 | 0.14 | 0.38 | 0.74 | 0.360 | 0.023 | 0.031 |
   | Silesia `webster` | Prose | 218k | 41 MB | 0.24 | 0.42 | 0.09 | 0.27 | 0.57 | 0.294 | 0.019 | 0.015 |
+  | PG-19 books (test split) | Prose | 139k | 40 MB | 0.24 | 0.44 | 0.09 | 0.31 | 0.66 | 0.368 | 0.015 | 0.013 |
   | Silesia `dickens` | Prose | 33k | 10 MB | 0.25 | 0.44 | 0.09 | 0.32 | 0.74 | 0.362 | 0.013 | 0.010 |
   | LLVM 19.1.0 (C++) | Code | 144k | 1.2 GB | 0.04 | 0.23 | 0.08 | 0.15 | 0.28 | 0.121 | 0.004 | 0.012 |
   | Linux v6.12 (C) | Code | 86k | 988 MB | 0.05 | 0.28 | 0.11 | 0.24 | 0.44 | 0.204 | 0.006 | 0.020 |
@@ -335,11 +352,13 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   | Rails 8.0.0 (Ruby) | Code | 5k | 21 MB | 0.08 | 0.26 | 0.19 | 0.42 | 0.70 | 0.209 | 0.006 | 0.025 |
   | loghub `Spark` | Logs | 33.2M | 2.9 GB | 0.12 | 0.22 | 0.02 | 0.05 | 0.07 | 0.065 | 0.005 | 0.003 |
   | loghub `HDFS` | Logs | 11.2M | 1.6 GB | 0.12 | 0.20 | 0.03 | 0.09 | 0.12 | 0.099 | 0.005 | 0.002 |
+  | loghub `Thunderbird` (first GiB) | Logs | 6.0M | 1.1 GB | 0.14 | 0.26 | 0.03 | 0.05 | 0.09 | 0.051 | 0.003 | 0.005 |
   | loghub `BGL` | Logs | 4.7M | 743 MB | 0.14 | 0.28 | 0.03 | 0.06 | 0.11 | 0.092 | 0.012 | 0.003 |
-  | loghub `Android` | Logs | 1.6M | 192 MB | 0.19 | 0.29 | 0.10 | 0.18 | 0.30 | 0.092 | 0.006 | 0.015 |
+  | NASA HTTP access, Jul-Aug 1995 | Logs | 3.5M | 373 MB | 0.15 | 0.27 | 0.05 | 0.09 | 0.14 | 0.105 | 0.003 | 0.008 |
+  | loghub `Android` | Logs | 1.6M | 192 MB | 0.19 | 0.29 | 0.10 | 0.19 | 0.30 | 0.093 | 0.006 | 0.015 |
   | loghub `SSH` | Logs | 655k | 73 MB | 0.13 | 0.23 | 0.02 | 0.04 | 0.07 | 0.067 | 0.005 | 0.003 |
   | loghub `OpenStack` | Logs | 208k | 61 MB | 0.19 | 0.31 | 0.06 | 0.13 | 0.28 | 0.081 | 0.012 | 0.008 |
-  | loghub `Hadoop` | Logs | 394k | 49 MB | 0.13 | 0.22 | 0.05 | 0.08 | 0.13 | 0.041 | 0.003 | 0.005 |
+  | loghub `Hadoop` | Logs | 394k | 49 MB | 0.13 | 0.22 | 0.05 | 0.08 | 0.13 | 0.042 | 0.003 | 0.005 |
   | loghub `HPC` | Logs | 433k | 34 MB | 0.37 | 0.47 | 0.02 | 0.08 | 0.15 | 0.099 | 0.025 | 0.002 |
   | loghub `HealthApp` | Logs | 253k | 24 MB | 0.22 | 0.29 | 0.04 | 0.09 | 0.23 | 0.098 | 0.010 | 0.004 |
   | loghub `Mac` | Logs | 117k | 17 MB | 0.20 | 0.30 | 0.11 | 0.19 | 0.32 | 0.067 | 0.005 | 0.012 |
@@ -347,43 +366,38 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   | loghub `Apache` | Logs | 56k | 5 MB | 0.19 | 0.30 | 0.04 | 0.07 | 0.11 | 0.053 | 0.002 | 0.003 |
   | loghub `Proxifier` | Logs | 21k | 3 MB | 0.17 | 0.30 | 0.06 | 0.12 | 0.18 | 0.073 | 0.005 | 0.005 |
   | loghub `Linux` | Logs | 26k | 2 MB | 0.27 | 0.40 | 0.10 | 0.21 | 0.36 | 0.084 | 0.011 | 0.010 |
+  | IMDB `title.akas` titles | Relational Columns | 60.0M | 1.3 GB | 0.27 | 0.33 | 0.08 | 0.18 | 0.31 | 0.171 | 0.015 | 0.017 |
+  | DBLP paper titles | Relational Columns | 13.1M | 764 MB | 0.21 | 0.30 | 0.07 | 0.22 | 0.38 | 0.301 | 0.014 | 0.013 |
+  | DBLP authors | Relational Columns | 34.9M | 546 MB | 0.38 | 0.45 | 0.11 | 0.39 | 0.64 | 0.400 | 0.043 | 0.012 |
   | IMDB `primaryTitle` | Relational Columns | 12.9M | 273 MB | 0.38 | 0.47 | 0.12 | 0.38 | 0.71 | 0.385 | 0.036 | 0.021 |
   | IMDB `primaryName` | Relational Columns | 15.8M | 230 MB | 0.50 | 0.58 | 0.10 | 0.41 | 0.83 | 0.479 | 0.061 | 0.015 |
   | ClickBench `Title` | Relational Columns | 936k | 139 MB | 0.13 | 0.19 | 0.04 | 0.07 | 0.11 | 0.077 | 0.007 | 0.008 |
-  | ClickBench `URL` | Relational Columns | 1.0M | 90 MB | 0.25 | 0.36 | 0.11 | 0.23 | 0.37 | 0.146 | 0.013 | 0.024 |
+  | Amazon review titles (Video Games) | Relational Columns | 4.6M | 111 MB | 0.27 | 0.38 | 0.08 | 0.25 | 0.47 | 0.364 | 0.011 | 0.013 |
+  | Open Food Facts `product_name` | Relational Columns | 4.5M | 105 MB | 0.37 | 0.45 | 0.14 | 0.43 | 0.77 | 0.403 | 0.028 | 0.023 |
+  | ClickBench `URL` | Relational Columns | 1000k | 90 MB | 0.25 | 0.36 | 0.11 | 0.23 | 0.37 | 0.146 | 0.013 | 0.024 |
   | ClickBench `Referer` | Relational Columns | 921k | 81 MB | 0.28 | 0.39 | 0.12 | 0.27 | 0.41 | 0.151 | 0.013 | 0.032 |
+  | Amazon product titles (Video Games) | Relational Columns | 137k | 12 MB | 0.28 | 0.40 | 0.15 | 0.46 | 0.81 | 0.334 | 0.015 | 0.024 |
   | ClickBench `SearchPhrase` | Relational Columns | 69k | 4 MB | 0.31 | 0.37 | 0.06 | 0.15 | 0.24 | 0.136 | 0.013 | 0.007 |
-  | Silesia `samba` (source, per line) | Other | 596k | 22 MB | 0.27 | 0.37 | 0.24 | 0.52 | 0.88 | | | |
-  | Silesia `xml` | Other | 58k | 5 MB | 0.15 | 0.31 | 0.12 | 0.29 | 0.48 | | | |
-
-  The last three columns are per 1 MiB block of consecutive documents (of
-  files, for code): the block compressed with zstd -3, and bloom filters
-  over its distinct tokens and trigrams at 1% false positives (9.6 bits per
-  key, uncompressed: a filter at its optimal fill is half ones and doesn't
-  compress). A query checks every block's filter and decompresses and scans
-  the blocks that match, so a bloom index costs its filter plus the zstd
-  blocks. At 1 MiB a block repeats most of its tokens and trigrams; at 16
-  KiB the filters are 3-5x bigger, and trigram filters are bigger than the
-  exact trigram index.
 
   Medians per kind (the README rounds them):
 
   | Kind | Inverted | + positions | 3-grams | 4-grams | Sparse | zstd -3 | Token bloom | Trigram bloom |
   | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-  | Prose (4) | 0.25 | 0.43 | 0.09 | 0.29 | 0.65 | 0.34 | 0.018 | 0.017 |
-  | Code (18) | 0.08 | 0.24 | 0.12 | 0.27 | 0.46 | 0.18 | 0.006 | 0.020 |
-  | Logs (14) | 0.18 | 0.29 | 0.04 | 0.09 | 0.14 | 0.077 | 0.005 | 0.004 |
-  | Relational Columns (6) | 0.29 | 0.38 | 0.11 | 0.25 | 0.39 | 0.15 | 0.013 | 0.018 |
+  | Prose (7) | 0.24 | 0.42 | 0.09 | 0.27 | 0.57 | 0.361 | 0.018 | 0.015 |
+  | Code (18) | 0.08 | 0.24 | 0.12 | 0.27 | 0.46 | 0.175 | 0.006 | 0.020 |
+  | Logs (16) | 0.16 | 0.28 | 0.04 | 0.09 | 0.14 | 0.077 | 0.005 | 0.005 |
+  | Relational Columns (12) | 0.28 | 0.39 | 0.11 | 0.26 | 0.44 | 0.318 | 0.014 | 0.016 |
 
   Identifiers repeat within and across files, so code's inverted index is a
   third of prose's. Logs repeat line after line, so their n-gram indexes are
-  a third of prose's or smaller. Short, distinct values (IMDB names) are the
-  worst case for relational columns. Sparse n-grams store 2-3x as many
-  postings as trigrams so that a query reads a few selective lists instead
-  of many common ones. Russ Cox reported ~0.2 for Code Search's trigram
-  index.
+  a third of prose's or smaller. Short, distinct values (names, product
+  names) are the worst case for relational columns, and compress worst with
+  zstd too. Sparse n-grams store 2-3x as many postings as trigrams so that a
+  query reads a few selective lists instead of many common ones. Russ Cox
+  reported ~0.2 for Code Search's trigram index.
 
-  On MS MARCO, delta + varint gets 3.0x on doc IDs and roaring 2.1x. Logs
+  With `postings --details`, MS MARCO's doc IDs get 3.0x as delta + varint
+  and 2.1x as roaring bitmaps. Logs
   and ClickBench rows repeat a lot, so their doc IDs cluster and most
   frequencies are 1. Unpacking MS MARCO's full 128-ID blocks with
   `bitpacking`'s `BitPacker4x` ran at 3.1 billion IDs/s, 11.6 GiB/s of u32

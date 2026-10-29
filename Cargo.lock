@@ -993,6 +993,7 @@ dependencies = [
  "rcgen",
  "ring",
  "roaring",
+ "rustc-hash",
  "rustls",
  "serde",
  "serde_json",

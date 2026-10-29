@@ -27,9 +27,10 @@ parquet = { version = "60", default-features = false, features = ["arrow", "snap
 roaring = { version = "0.11", optional = true }
 casefold = { version = "0.1", optional = true }
 sparse-ngrams = { version = "0.4", optional = true }
+rustc-hash = { version = "2", optional = true }
 
 [features]
-encodings = ["dep:alp", "dep:arrow-array", "dep:bitpacking", "dep:bytes", "dep:fastlanes", "dep:fsst-rs", "dep:parquet", "dep:roaring", "dep:casefold", "dep:sparse-ngrams"]
+encodings = ["dep:alp", "dep:arrow-array", "dep:bitpacking", "dep:bytes", "dep:fastlanes", "dep:fsst-rs", "dep:parquet", "dep:roaring", "dep:casefold", "dep:sparse-ngrams", "dep:rustc-hash"]
 
 [dev-dependencies]
 blake3 = "1"

@@ -9,7 +9,9 @@
 //   cargo bench --features encodings --bench compression_ratio -- postings --paragraphs dickens
 //   cargo bench --features encodings --bench compression_ratio -- postings --files linux/
 //   cargo bench --features encodings --bench compression_ratio -- timeseries nab/*.csv
-use std::collections::{HashMap, HashSet};
+//   cargo bench --features encodings --bench compression_ratio -- columns hits_0.parquet out/ Title URL
+//   cargo bench --features encodings --bench compression_ratio -- index_sizes datasets/manifest.tsv
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::fs::File;
 use std::time::Instant;
 
@@ -321,7 +323,7 @@ fn gram_index<F>(documents: &[&str], entry: usize, mut grams: F) -> (usize, usiz
 where
     F: FnMut(&str, &mut dyn FnMut(u64)),
 {
-    let mut lists: HashMap<u64, GramList> = HashMap::new();
+    let mut lists: FxHashMap<u64, GramList> = FxHashMap::default();
     let mut postings = 0;
     for (doc, text) in documents.iter().enumerate() {
         let id = doc as u32 + 1;
@@ -339,6 +341,8 @@ where
 #[derive(Clone, Copy, PartialEq)]
 enum Split {
     Lines,
+    // Lines of "<id>\t<text>", indexing the text.
+    Tsv,
     Paragraphs,
     Files,
 }
@@ -373,10 +377,10 @@ const BLOOM_BITS: f64 = 9.585;
 // same trigrams as ngram_index, and of the blocks themselves compressed with
 // zstd -3, which a query decompresses and scans on every match.
 fn bloom_size(documents: &[&str], block: usize) -> (usize, usize, usize) {
-    let (mut tokens, mut trigrams) = (HashSet::new(), HashSet::new());
+    let (mut tokens, mut trigrams) = (FxHashSet::default(), FxHashSet::default());
     let (mut token_bytes, mut trigram_bytes) = (0.0, 0.0);
     let (mut text, mut zstd_bytes) = (Vec::new(), 0);
-    let mut flush = |tokens: &mut HashSet<u64>, trigrams: &mut HashSet<u32>, text: &mut Vec<u8>| {
+    let mut flush = |tokens: &mut FxHashSet<u64>, trigrams: &mut FxHashSet<u32>, text: &mut Vec<u8>| {
         token_bytes += (tokens.len() as f64 * BLOOM_BITS / 8.0).ceil();
         trigram_bytes += (trigrams.len() as f64 * BLOOM_BITS / 8.0).ceil();
         zstd_bytes += zstd::bulk::compress(text, 3).unwrap().len();
@@ -401,34 +405,25 @@ fn bloom_size(documents: &[&str], block: usize) -> (usize, usize, usize) {
     (token_bytes as usize, trigram_bytes as usize, zstd_bytes)
 }
 
-// One document per line (MS MARCO's "<id>\t<text>", log lines, column values),
-// per blank-line-separated paragraph (prose), or per source file under a
-// directory (code). Doc IDs are document numbers, terms are lowercased
-// alphanumeric runs.
-fn postings(path: &str, split: Split) {
-    let mut files = Vec::new();
-    let (raw_len, text) = if split == Split::Files {
-        source_files(std::path::Path::new(path), &mut files);
-        (files.iter().map(String::len).sum(), String::new())
-    } else {
-        let raw = std::fs::read(path).unwrap();
-        (raw.len(), String::from_utf8_lossy(&raw).replace("\r\n", "\n"))
-    };
-    let mut index: HashMap<String, Postings> = HashMap::new();
+fn line(name: &str, naive: usize, size: usize) -> String {
+    format!(
+        "  {:<34} {:>12} bytes  {:>6.1}x",
+        name,
+        size,
+        naive as f64 / size as f64
+    )
+}
+
+// The inverted index over `documents`: report lines and the whole index
+// without and with positions, skip lists included. The term dictionary is
+// uncompressed: each term's bytes, a length byte and a 4-byte offset into the
+// postings. With `details`, also sizes doc IDs as delta + varint and as
+// roaring bitmaps, and times packing and unpacking them.
+fn inverted(documents: &[&str], raw_len: usize, details: bool) -> (Vec<String>, usize, usize) {
+    let mut index: FxHashMap<String, Postings> = FxHashMap::default();
     let mut word = String::new();
-    let mut docs = 0u32;
-    let documents: Vec<&str> = match split {
-        Split::Paragraphs => text
-            .split("\n\n")
-            .filter(|p| !p.trim().is_empty())
-            .collect(),
-        Split::Lines => text
-            .lines()
-            .map(|d| d.split_once('\t').map_or(d, |(_, b)| b))
-            .collect(),
-        Split::Files => files.iter().map(String::as_str).collect(),
-    };
-    for &body in &documents {
+    for (doc, &body) in documents.iter().enumerate() {
+        let doc = doc as u32;
         for (position, w) in body
             .split(|c: char| !c.is_alphanumeric())
             .filter(|w| !w.is_empty())
@@ -441,27 +436,26 @@ fn postings(path: &str, split: Split) {
                 None => index.entry(word.clone()).or_default(),
             };
             let position = position as u32;
-            if p.docs.last() == Some(&docs) {
+            if p.docs.last() == Some(&doc) {
                 *p.freqs.last_mut().unwrap() += 1;
                 p.positions.push(position - p.last_position);
             } else {
-                p.docs.push(docs);
+                p.docs.push(doc);
                 p.freqs.push(1);
                 p.positions.push(position);
             }
             p.last_position = position;
         }
-        docs += 1;
     }
     let postings: usize = index.values().map(|p| p.docs.len()).sum();
     let positions: usize = index.values().map(|p| p.positions.len()).sum();
-    println!(
-        "{path}: {docs} documents, {} terms, {postings} postings, {positions} positions",
+    let mut out = vec![format!(
+        "{} documents, {} terms, {postings} postings, {positions} positions",
+        documents.len(),
         index.len()
-    );
+    )];
 
-    let (mut doc_bitpacked, mut doc_varint, mut doc_roaring) = (0, 0, 0);
-    let (mut freq_bitpacked, mut pos_bitpacked) = (0, 0);
+    let (mut doc_bitpacked, mut freq_bitpacked, mut pos_bitpacked) = (0, 0, 0);
     let (mut skip_docs, mut skip_freqs, mut skip_positions) = (0, 0, 0);
     let mut deltas = Vec::new();
     for p in index.values() {
@@ -471,94 +465,54 @@ fn postings(path: &str, split: Split) {
             deltas.push(id - prev);
             prev = id;
         }
-        doc_varint += deltas.iter().map(|&d| varint(d)).sum::<usize>();
         let (doc_bytes, blocks) = packed_size(&deltas, 1);
         doc_bitpacked += doc_bytes;
         skip_docs += skip_size(blocks, SKIP_DOCS);
         skip_freqs += skip_size(blocks, SKIP_DOCS + SKIP_FREQS);
         skip_positions += skip_size(blocks, SKIP_DOCS + SKIP_FREQS + SKIP_POSITIONS);
-        doc_roaring += roaring::RoaringBitmap::from_sorted_iter(p.docs.iter().copied())
-            .unwrap()
-            .serialized_size();
         freq_bitpacked += packed_size(&p.freqs, 1).0;
         // Positions are one stream per term, with a bit width per block.
         let (pos_bytes, pos_blocks) = packed_size(&p.positions, 0);
         pos_bitpacked += varint(pos_blocks as u32) + pos_blocks + pos_bytes;
     }
-    println!("doc IDs, against 4 B each:");
-    report("delta + varint", postings * 4, doc_varint);
-    report("delta + bitpacking", postings * 4, doc_bitpacked);
-    report("  + skip entries", postings * 4, doc_bitpacked + skip_docs);
-    report("roaring", postings * 4, doc_roaring);
-    println!("term frequencies, against 4 B each:");
-    report("bitpacking", postings * 4, freq_bitpacked);
-    println!("positions, against 4 B each:");
-    report("delta + bitpacking", positions * 4, pos_bitpacked);
-    println!("doc IDs + frequencies + positions:");
-    report(
-        "bitpacking",
-        (2 * postings + positions) * 4,
-        doc_bitpacked + freq_bitpacked + pos_bitpacked,
-    );
+    out.push("doc IDs, frequencies and positions, against 4 B each:".into());
+    out.push(line("doc IDs", postings * 4, doc_bitpacked));
+    out.push(line("  + skip entries", postings * 4, doc_bitpacked + skip_docs));
+    out.push(line("frequencies", postings * 4, freq_bitpacked));
+    out.push(line("positions", positions * 4, pos_bitpacked));
 
-    // The whole index against the source text, skip lists included. The term
-    // dictionary is uncompressed: each term's bytes, a length byte and a
-    // 4-byte offset into the postings.
     let dictionary: usize = index.keys().map(|t| t.len() + 1 + 4).sum();
     let without_positions = dictionary + doc_bitpacked + freq_bitpacked + skip_freqs;
-    println!("whole index, against {} bytes of source text:", raw_len);
-    report(
-        "dictionary + doc IDs + frequencies",
-        raw_len,
-        without_positions,
-    );
-    report(
-        "  + positions",
-        raw_len,
-        without_positions + pos_bitpacked + skip_positions - skip_freqs,
-    );
-    // Per document, and with documents merged into ~16 KiB chunks, about the
-    // size of a source file, which is what code search indexes.
-    let mut chunks = vec![String::new()];
-    for d in &documents {
-        if chunks.last().unwrap().len() >= 16 << 10 {
-            chunks.push(String::new());
-        }
-        let chunk = chunks.last_mut().unwrap();
-        chunk.push_str(d);
-        chunk.push('\n');
+    let with_positions = dictionary + doc_bitpacked + freq_bitpacked + pos_bitpacked + skip_positions;
+    out.push(format!("whole index, against {raw_len} bytes of source text:"));
+    out.push(line("dictionary + doc IDs + frequencies", raw_len, without_positions));
+    out.push(line("  + positions", raw_len, with_positions));
+    if details {
+        let varints: usize = index
+            .values()
+            .map(|p| {
+                let gaps = p.docs.iter().scan(0, |prev, &id| Some(id - std::mem::replace(prev, id)));
+                gaps.map(varint).sum::<usize>()
+            })
+            .sum();
+        let roaring: usize = index
+            .values()
+            .map(|p| {
+                roaring::RoaringBitmap::from_sorted_iter(p.docs.iter().copied())
+                    .unwrap()
+                    .serialized_size()
+            })
+            .sum();
+        out.push(line("doc IDs as delta + varint", postings * 4, varints));
+        out.push(line("doc IDs as roaring", postings * 4, roaring));
+        out.extend(bitpacking_speed(&index));
     }
-    let chunks: Vec<&str> = chunks.iter().map(String::as_str).collect();
-    for (unit, docs) in [("document", &documents), ("16 KiB chunk", &chunks)] {
-        for n in [3, 4] {
-            let (grams, postings, size) = ngram_index(docs, n);
-            report(
-                &format!("{n}-grams per {unit} ({grams} grams, {postings} postings)"),
-                raw_len,
-                size,
-            );
-        }
-        let (grams, postings, size) = sparse_index(docs);
-        report(
-            &format!("sparse n-grams per {unit} ({grams} grams, {postings} postings)"),
-            raw_len,
-            size,
-        );
-    }
+    (out, without_positions, with_positions)
+}
 
-    // Bloom filters per block, as log stores keep: every distinct token or
-    // trigram of each block of consecutive documents, at 1% false positives,
-    // next to the zstd-compressed blocks they point at.
-    for block in [16 << 10, 1 << 20] {
-        let (tokens, trigrams, blocks) = bloom_size(&documents, block);
-        let unit = if block < 1 << 20 { "16 KiB" } else { "1 MiB" };
-        report(&format!("zstd -3 per {unit}"), raw_len, blocks);
-        report(&format!("token bloom per {unit}, 1% FP"), raw_len, tokens);
-        report(&format!("trigram bloom per {unit}, 1% FP"), raw_len, trigrams);
-    }
-
-    // Encode and decode speed: every full 128-ID block of every doc ID list,
-    // packed contiguously, then unpacked, single-threaded.
+// Encode and decode speed: every full 128-ID block of every doc ID list,
+// packed contiguously, then unpacked, single-threaded.
+fn bitpacking_speed(index: &FxHashMap<String, Postings>) -> Vec<String> {
     let packer = BitPacker4x::new();
     let mut blocks = Vec::new();
     let mut packed_len = 0;
@@ -589,16 +543,253 @@ fn postings(path: &str, split: Split) {
         }
     });
     let ids = blocks.len() * BitPacker4x::BLOCK_LEN;
-    println!(
-        "encode bitpacked doc IDs, 1 thread: {:.0} M IDs/s, {:.1} GiB/s of u32 input",
-        ids as f64 / encode_secs / 1e6,
-        (ids * 4) as f64 / encode_secs / (1 << 30) as f64
-    );
-    println!(
-        "decode bitpacked doc IDs, 1 thread: {:.0} M IDs/s, {:.1} GiB/s of u32 output (checksum {checksum})",
-        ids as f64 / secs / 1e6,
-        (ids * 4) as f64 / secs / (1 << 30) as f64
-    );
+    vec![
+        format!(
+            "encode bitpacked doc IDs, 1 thread: {:.0} M IDs/s, {:.1} GiB/s of u32 input",
+            ids as f64 / encode_secs / 1e6,
+            (ids * 4) as f64 / encode_secs / (1 << 30) as f64
+        ),
+        format!(
+            "decode bitpacked doc IDs, 1 thread: {:.0} M IDs/s, {:.1} GiB/s of u32 output (checksum {checksum})",
+            ids as f64 / secs / 1e6,
+            (ids * 4) as f64 / secs / (1 << 30) as f64
+        ),
+    ]
+}
+
+// One document per line (log lines, column values; with --tsv, the text after
+// the first tab, as in MS MARCO's "<id>\t<text>"),
+// per blank-line-separated paragraph (prose), or per source file under a
+// directory (code). Doc IDs are document numbers, terms are lowercased
+// alphanumeric runs. The n-gram indexes are per source file for code, and per
+// ~16 KiB chunk of consecutive documents otherwise; bloom filters per 1 MiB.
+// The indexes build on separate threads.
+fn postings(path: &str, split: Split, details: bool) {
+    let (lines, _) = index_sizes(path, split, details);
+    lines.iter().for_each(|l| println!("{l}"));
+}
+
+// What index_sizes measures, each index as a fraction of the text.
+struct Sizes {
+    documents: usize,
+    bytes: usize,
+    // Inverted, + positions, 3-grams, 4-grams, sparse n-grams, zstd -3, token
+    // bloom, trigram bloom.
+    fractions: [f64; 8],
+}
+
+fn index_sizes(path: &str, split: Split, details: bool) -> (Vec<String>, Sizes) {
+    let mut files = Vec::new();
+    let (raw_len, text) = if split == Split::Files {
+        source_files(std::path::Path::new(path), &mut files);
+        (files.iter().map(String::len).sum(), String::new())
+    } else {
+        let raw = std::fs::read(path).unwrap();
+        (raw.len(), String::from_utf8_lossy(&raw).replace("\r\n", "\n"))
+    };
+    let documents: Vec<&str> = match split {
+        Split::Paragraphs => text
+            .split("\n\n")
+            .filter(|p| !p.trim().is_empty())
+            .collect(),
+        Split::Lines => text.lines().collect(),
+        Split::Tsv => text
+            .lines()
+            .map(|d| d.split_once('\t').map_or(d, |(_, b)| b))
+            .collect(),
+        Split::Files => files.iter().map(String::as_str).collect(),
+    };
+    let mut chunks = vec![String::new()];
+    if split != Split::Files {
+        for d in &documents {
+            if chunks.last().unwrap().len() >= 16 << 10 {
+                chunks.push(String::new());
+            }
+            let chunk = chunks.last_mut().unwrap();
+            chunk.push_str(d);
+            chunk.push('\n');
+        }
+    }
+    let chunks: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    let (unit, gram_docs) = if split == Split::Files {
+        ("file", &documents)
+    } else {
+        ("16 KiB chunk", &chunks)
+    };
+
+    let ((inv, without_positions, with_positions), tri, four, sparse, bloom) =
+        std::thread::scope(|s| {
+            let inv = s.spawn(|| inverted(&documents, raw_len, details));
+            let tri = s.spawn(|| ngram_index(gram_docs, 3));
+            let four = s.spawn(|| ngram_index(gram_docs, 4));
+            let sparse = s.spawn(|| sparse_index(gram_docs));
+            let bloom = s.spawn(|| bloom_size(&documents, 1 << 20));
+            (
+                inv.join().unwrap(),
+                tri.join().unwrap(),
+                four.join().unwrap(),
+                sparse.join().unwrap(),
+                bloom.join().unwrap(),
+            )
+        });
+    let mut out = vec![format!("{path}: {}", inv[0])];
+    out.extend(inv[1..].iter().cloned());
+    for (name, (grams, postings, size)) in [("3-grams", tri), ("4-grams", four), ("sparse n-grams", sparse)] {
+        let name = format!("{name} per {unit} ({grams} grams, {postings} postings)");
+        out.push(line(&name, raw_len, size));
+    }
+    let (tokens, trigrams, blocks) = bloom;
+    out.push(line("zstd -3 per 1 MiB", raw_len, blocks));
+    out.push(line("token bloom per 1 MiB, 1% FP", raw_len, tokens));
+    out.push(line("trigram bloom per 1 MiB, 1% FP", raw_len, trigrams));
+    let sizes = [without_positions, with_positions, tri.2, four.2, sparse.2, blocks, tokens, trigrams];
+    let fractions = sizes.map(|size| size as f64 / raw_len as f64);
+    (out, Sizes { documents: documents.len(), bytes: raw_len, fractions })
+}
+
+// Every dataset in a manifest written by benches/index_datasets.sh, one per
+// line as "kind<TAB>name<TAB>lines|tsv|paragraphs|files<TAB>path" (relative to the
+// manifest), on `jobs` threads, largest first. Prints the per-dataset table
+// and the median of each kind as Markdown.
+fn index_manifest(manifest: &str, jobs: usize) {
+    let dir = std::path::Path::new(manifest).parent().unwrap();
+    let mut datasets: Vec<(String, String, Split, String)> = std::fs::read_to_string(manifest)
+        .unwrap()
+        .lines()
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|l| {
+            let f: Vec<&str> = l.split('\t').collect();
+            let split = match f[2] {
+                "lines" => Split::Lines,
+                "tsv" => Split::Tsv,
+                "paragraphs" => Split::Paragraphs,
+                "files" => Split::Files,
+                other => panic!("unknown split {other}"),
+            };
+            let path = dir.join(f[3]).to_string_lossy().into_owned();
+            (f[0].to_string(), f[1].to_string(), split, path)
+        })
+        .collect();
+    fn size(path: &std::path::Path) -> u64 {
+        let meta = std::fs::symlink_metadata(path).unwrap();
+        if !meta.is_dir() {
+            return meta.len();
+        }
+        std::fs::read_dir(path).unwrap().map(|e| size(&e.unwrap().path())).sum()
+    }
+    datasets.sort_by_key(|d| std::cmp::Reverse(size(std::path::Path::new(&d.3))));
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let results = std::sync::Mutex::new(Vec::new());
+    std::thread::scope(|s| {
+        for _ in 0..jobs {
+            s.spawn(|| loop {
+                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some((kind, name, split, path)) = datasets.get(i) else { break };
+                let start = Instant::now();
+                let (_, sizes) = index_sizes(path, *split, false);
+                eprintln!("{name}: {:.1} s", start.elapsed().as_secs_f64());
+                results.lock().unwrap().push((kind.clone(), name.clone(), sizes));
+            });
+        }
+    });
+    let mut results = results.into_inner().unwrap();
+    let kinds: Vec<String> = {
+        let mut k: Vec<String> = Vec::new();
+        for (kind, ..) in &datasets {
+            if !k.contains(kind) {
+                k.push(kind.clone());
+            }
+        }
+        k.sort_by_key(|k| ["Prose", "Code", "Logs", "Relational Columns"].iter().position(|x| x == k).unwrap_or(9));
+        k
+    };
+    results.sort_by(|a, b| {
+        let rank = |k: &str| kinds.iter().position(|x| x == k).unwrap();
+        rank(&a.0).cmp(&rank(&b.0)).then(b.2.bytes.cmp(&a.2.bytes))
+    });
+    let header = "Inverted | + positions | 3-grams | 4-grams | Sparse | zstd -3 | Token bloom | Trigram bloom";
+    let count = |n: usize| {
+        if n >= 1_000_000 { format!("{:.1}M", n as f64 / 1e6) } else { format!("{}k", (n as f64 / 1e3).round()) }
+    };
+    let bytes = |n: usize| {
+        if n >= 1_000_000_000 { format!("{:.1} GB", n as f64 / 1e9) } else { format!("{} MB", (n as f64 / 1e6).round()) }
+    };
+    let cells = |f: &[f64; 8]| {
+        f.iter()
+            .enumerate()
+            .map(|(i, v)| if i >= 5 { format!("{v:.3}") } else { format!("{v:.2}") })
+            .collect::<Vec<_>>()
+            .join(" | ")
+    };
+    println!("| Dataset | Kind | Docs | Text | {header} |");
+    println!("|{}", " --- |".repeat(12));
+    for (kind, name, s) in &results {
+        println!("| {name} | {kind} | {} | {} | {} |", count(s.documents), bytes(s.bytes), cells(&s.fractions));
+    }
+    println!();
+    println!("| Kind | {header} |");
+    println!("|{}", " --- |".repeat(9));
+    for kind in &kinds {
+        let rows: Vec<&Sizes> = results.iter().filter(|r| &r.0 == kind).map(|r| &r.2).collect();
+        let median = std::array::from_fn(|i| {
+            let mut v: Vec<f64> = rows.iter().map(|r| r.fractions[i]).collect();
+            v.sort_by(f64::total_cmp);
+            let n = v.len();
+            if n % 2 == 1 { v[n / 2] } else { (v[n / 2 - 1] + v[n / 2]) / 2.0 }
+        });
+        println!("| {kind} ({}) | {} |", rows.len(), cells(&median));
+    }
+}
+
+// Writes the non-empty values of string `columns` in a Parquet file to
+// `<out_dir>/<column>.txt`, one per line with line breaks replaced by spaces,
+// or, with `--books`, separated by blank lines with line breaks kept.
+fn columns(args: &[String]) {
+    let books = args.iter().any(|a| a == "--books");
+    let args: Vec<&String> = args.iter().filter(|a| *a != "--books").collect();
+    let (path, out_dir, names) = (args[0], args[1], &args[2..]);
+    for name in names {
+        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(path).unwrap())
+            .unwrap();
+        let mask = parquet::arrow::ProjectionMask::columns(reader.parquet_schema(), [name.as_str()]);
+        let reader = reader.with_projection(mask).build().unwrap();
+        let mut out = std::io::BufWriter::new(File::create(format!("{out_dir}/{name}.txt")).unwrap());
+        for batch in reader {
+            let batch = batch.unwrap();
+            let column = batch.column(0);
+            let value = |i: usize| -> Vec<u8> {
+                if let Some(c) = column.as_string_opt::<i32>() {
+                    c.value(i).as_bytes().to_vec()
+                } else if let Some(c) = column.as_string_opt::<i64>() {
+                    c.value(i).as_bytes().to_vec()
+                } else if let Some(c) = column.as_binary_opt::<i32>() {
+                    c.value(i).to_vec()
+                } else if let Some(c) = column.as_string_view_opt() {
+                    c.value(i).as_bytes().to_vec()
+                } else if let Some(c) = column.as_binary_view_opt() {
+                    c.value(i).to_vec()
+                } else {
+                    panic!("{name} is {}, not a string column", column.data_type())
+                }
+            };
+            for i in 0..column.len() {
+                if column.is_null(i) {
+                    continue;
+                }
+                let mut v = value(i);
+                if v.is_empty() {
+                    continue;
+                }
+                if books {
+                    v.extend_from_slice(b"\n\n");
+                } else {
+                    v.iter_mut().filter(|b| **b == b'\n' || **b == b'\r').for_each(|b| *b = b' ');
+                    v.push(b'\n');
+                }
+                std::io::Write::write_all(&mut out, &v).unwrap();
+            }
+        }
+    }
 }
 
 // Days since 1970-01-01 (Howard Hinnant's days_from_civil).
@@ -707,7 +898,7 @@ fn main() {
         .skip(1)
         .filter(|a| a != "--bench")
         .collect();
-    let usage = "usage: compression_ratio parquet|cardinality|postings|timeseries <files...>";
+    let usage = "usage: compression_ratio parquet|cardinality|postings|timeseries|columns|index_sizes <files...>";
     // `cargo bench --bench <name>` adds --bench to the arguments; without any
     // other arguments there is nothing to measure, so skip quietly.
     if args.is_empty() {
@@ -719,15 +910,23 @@ fn main() {
         "parquet" => files.iter().for_each(|f| parquet(f)),
         "cardinality" => files.iter().for_each(|f| cardinality(f)),
         "postings" => {
-            let split = match files.first().map(String::as_str) {
+            let details = files.iter().any(|f| f == "--details");
+            let files: Vec<&String> = files.iter().filter(|f| *f != "--details").collect();
+            let split = match files.first().map(|f| f.as_str()) {
                 Some("--paragraphs") => Split::Paragraphs,
                 Some("--files") => Split::Files,
+                Some("--tsv") => Split::Tsv,
                 _ => Split::Lines,
             };
             let files = &files[(split != Split::Lines) as usize..];
-            files.iter().for_each(|f| postings(f, split))
+            files.iter().for_each(|f| postings(f, split, details))
         }
         "timeseries" => timeseries(files),
+        "columns" => columns(files),
+        "index_sizes" => {
+            let jobs = std::thread::available_parallelism().map_or(4, |n| n.get() / 4).max(1);
+            index_manifest(&files[0], jobs)
+        }
         _ => panic!("{usage}"),
     }
 }

@@ -276,13 +276,13 @@ matches:
 
 | What                                    | Prose | Code  | Logs  | Relational Columns |
 | --------------------------------------- | ----- | ----- | ----- | ------------------ |
-| Text, zstd -3 (1 MiB blocks)            | 0.35  | 0.2   | 0.08  | 0.15               |
-| Inverted index                          | 0.25  | 0.1   | 0.2   | 0.3                |
+| Text, zstd -3 (1 MiB blocks)            | 0.35  | 0.2   | 0.08  | 0.3                |
+| Inverted index                          | 0.25  | 0.1   | 0.15  | 0.3                |
 | Inverted index + positions              | 0.4   | 0.25  | 0.3   | 0.4                |
 | Trigram index (regex)                   | 0.1   | 0.1   | 0.05  | 0.1                |
 | Fourgram index (regex)                  | 0.3   | 0.25  | 0.1   | 0.25               |
-| Sparse n-gram index (regex)             | 0.6   | 0.5   | 0.15  | 0.4                |
-| Trigram bloom filter, 1% FP (1 MiB)     | 0.02  | 0.02  | 0.005 | 0.02               |
+| Sparse n-gram index (regex)             | 0.6   | 0.5   | 0.15  | 0.45               |
+| Trigram bloom filter, 1% FP (1 MiB)     | 0.015 | 0.02  | 0.005 | 0.015              |
 
 ## Techniques
 

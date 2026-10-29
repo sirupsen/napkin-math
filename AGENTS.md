@@ -15,6 +15,7 @@ IPs, bucket names or credentials.
 - Every other `benches/*.rs` is a standalone tool with `bench = false`: plain `cargo bench` skips it, `cargo bench --bench storage -- <args>` runs it, and without arguments it prints its usage and exits.
 - `benches/cpu_compress.rs` measures compression ratio and speed on real files.
 - `benches/compression_ratio.rs` (`--features encodings`) measures Parquet, posting-list and Gorilla ratios.
+- `benches/index_datasets.sh <dir>` downloads the 53 search-index datasets and writes `<dir>/manifest.tsv`; `compression_ratio -- index_sizes <dir>/manifest.tsv` rebuilds the BENCHMARKING index tables from it in a few minutes.
 - `benches/compression_ratio_columns.rs` (`--features encodings`) measures ALP, FastLanes FOR/delta and FSST per column, with round-trip checks and decode speed.
 - `benches/storage_durable_write.rs` (no dependencies) measures pwrite + fdatasync commits, with flush counts from `/proc/diskstats`.
 - `run` builds, then runs `cargo bench`; with `NAPKIN_TUNE=1` it calls `sudo` itself, so don't wrap it in `sudo`.
