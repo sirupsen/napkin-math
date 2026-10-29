@@ -270,15 +270,19 @@ dictionary itself (each distinct value once); the smaller of the two rules
 predicts Parquet's dictionary + RLE size of whole tables within 10%.
 
 Search indexes, as a fraction of the text they index, with Tantivy's posting
-lists (n-grams per source file for code, per ~16 KiB otherwise):
+lists (n-grams per source file for code, per ~16 KiB otherwise). Bloom filters
+are per 1 MiB block; a query still decompresses and scans every block that
+matches:
 
-| What                        | Prose | Code | Logs | Relational Columns |
-| --------------------------- | ----- | ---- | ---- | ------------------ |
-| Inverted index              | 0.25  | 0.1  | 0.2  | 0.3                |
-| Inverted index + positions  | 0.4   | 0.25 | 0.3  | 0.4                |
-| Trigram index (regex)       | 0.1   | 0.1  | 0.05 | 0.1                |
-| Fourgram index (regex)      | 0.3   | 0.25 | 0.1  | 0.25               |
-| Sparse n-gram index (regex) | 0.6   | 0.5  | 0.15 | 0.4                |
+| What                                    | Prose | Code  | Logs  | Relational Columns |
+| --------------------------------------- | ----- | ----- | ----- | ------------------ |
+| Text, zstd -3 (1 MiB blocks)            | 0.35  | 0.2   | 0.08  | 0.15               |
+| Inverted index                          | 0.25  | 0.1   | 0.2   | 0.3                |
+| Inverted index + positions              | 0.4   | 0.25  | 0.3   | 0.4                |
+| Trigram index (regex)                   | 0.1   | 0.1   | 0.05  | 0.1                |
+| Fourgram index (regex)                  | 0.3   | 0.25  | 0.1   | 0.25               |
+| Sparse n-gram index (regex)             | 0.6   | 0.5   | 0.15  | 0.4                |
+| Trigram bloom filter, 1% FP (1 MiB)     | 0.02  | 0.02  | 0.005 | 0.02               |
 
 ## Techniques
 

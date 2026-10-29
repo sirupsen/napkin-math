@@ -309,61 +309,71 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   n-gram indexes are per source file for code and per ~16 KiB chunk of
   consecutive documents otherwise:
 
-  | Dataset | Kind | Docs | Text | Inverted | + positions | 3-grams | 4-grams | Sparse |
-  | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-  | MS MARCO passages | Prose | 8.8M | 3.1 GB | 0.19 | 0.35 | 0.08 | 0.23 | 0.41 |
-  | enwik8 (Wikipedia XML) | Prose | 1.1M | 100 MB | 0.29 | 0.44 | 0.14 | 0.38 | 0.74 |
-  | Silesia `webster` | Prose | 218k | 41 MB | 0.24 | 0.42 | 0.09 | 0.27 | 0.57 |
-  | Silesia `dickens` | Prose | 33k | 10 MB | 0.25 | 0.44 | 0.09 | 0.32 | 0.74 |
-  | LLVM 19.1.0 (C++) | Code | 144k | 1.2 GB | 0.04 | 0.23 | 0.08 | 0.15 | 0.28 |
-  | Linux v6.12 (C) | Code | 86k | 988 MB | 0.05 | 0.28 | 0.11 | 0.24 | 0.44 |
-  | .NET runtime 9.0.0 (C#) | Code | 59k | 644 MB | 0.05 | 0.19 | 0.06 | 0.13 | 0.24 |
-  | Node v23.0.0 (C++, JS) | Code | 41k | 338 MB | 0.07 | 0.26 | 0.12 | 0.26 | 0.45 |
-  | TensorFlow 2.18.0 (C++, Python) | Code | 33k | 247 MB | 0.06 | 0.23 | 0.12 | 0.24 | 0.41 |
-  | Elasticsearch 8.16.0 (Java) | Code | 31k | 218 MB | 0.07 | 0.21 | 0.12 | 0.26 | 0.42 |
-  | Kubernetes v1.32.0 (Go) | Code | 26k | 171 MB | 0.08 | 0.24 | 0.12 | 0.26 | 0.46 |
-  | Swift 6.0 (C++, Swift) | Code | 26k | 131 MB | 0.08 | 0.24 | 0.12 | 0.25 | 0.45 |
-  | Rust 1.84.0 (Rust) | Code | 50k | 121 MB | 0.07 | 0.23 | 0.19 | 0.35 | 0.62 |
-  | Postgres 17.0 (C) | Code | 7k | 103 MB | 0.10 | 0.30 | 0.10 | 0.25 | 0.48 |
-  | Symfony v7.2.0 (PHP) | Code | 13k | 80 MB | 0.12 | 0.23 | 0.13 | 0.27 | 0.45 |
-  | CPython v3.13.0 (C, Python) | Code | 5k | 80 MB | 0.09 | 0.28 | 0.11 | 0.29 | 0.52 |
-  | Go 1.23.0 (Go) | Code | 13k | 78 MB | 0.12 | 0.32 | 0.16 | 0.40 | 0.72 |
-  | VS Code 1.96.0 (TypeScript) | Code | 8k | 77 MB | 0.08 | 0.22 | 0.11 | 0.28 | 0.46 |
-  | Spring Framework v6.2.0 (Java) | Code | 11k | 56 MB | 0.09 | 0.23 | 0.15 | 0.29 | 0.50 |
-  | Django 5.1 (Python) | Code | 5k | 34 MB | 0.10 | 0.28 | 0.17 | 0.39 | 0.64 |
-  | React 19.0.0 (JS) | Code | 7k | 30 MB | 0.08 | 0.20 | 0.16 | 0.36 | 0.56 |
-  | Rails 8.0.0 (Ruby) | Code | 5k | 21 MB | 0.08 | 0.26 | 0.19 | 0.42 | 0.70 |
-  | loghub `Spark` | Logs | 33.2M | 2.9 GB | 0.12 | 0.22 | 0.02 | 0.05 | 0.07 |
-  | loghub `HDFS` | Logs | 11.2M | 1.6 GB | 0.12 | 0.20 | 0.03 | 0.09 | 0.12 |
-  | loghub `BGL` | Logs | 4.7M | 743 MB | 0.14 | 0.28 | 0.03 | 0.06 | 0.11 |
-  | loghub `Android` | Logs | 1.6M | 192 MB | 0.19 | 0.29 | 0.10 | 0.18 | 0.30 |
-  | loghub `SSH` | Logs | 655k | 73 MB | 0.13 | 0.23 | 0.02 | 0.04 | 0.07 |
-  | loghub `OpenStack` | Logs | 208k | 61 MB | 0.19 | 0.31 | 0.06 | 0.13 | 0.28 |
-  | loghub `Hadoop` | Logs | 394k | 49 MB | 0.13 | 0.22 | 0.05 | 0.08 | 0.13 |
-  | loghub `HPC` | Logs | 433k | 34 MB | 0.37 | 0.47 | 0.02 | 0.08 | 0.15 |
-  | loghub `HealthApp` | Logs | 253k | 24 MB | 0.22 | 0.29 | 0.04 | 0.09 | 0.23 |
-  | loghub `Mac` | Logs | 117k | 17 MB | 0.20 | 0.30 | 0.11 | 0.19 | 0.32 |
-  | loghub `Zookeeper` | Logs | 74k | 10 MB | 0.11 | 0.20 | 0.03 | 0.06 | 0.11 |
-  | loghub `Apache` | Logs | 56k | 5 MB | 0.19 | 0.30 | 0.04 | 0.07 | 0.11 |
-  | loghub `Proxifier` | Logs | 21k | 3 MB | 0.17 | 0.30 | 0.06 | 0.12 | 0.18 |
-  | loghub `Linux` | Logs | 26k | 2 MB | 0.27 | 0.40 | 0.10 | 0.21 | 0.36 |
-  | IMDB `primaryTitle` | Relational Columns | 12.9M | 273 MB | 0.38 | 0.47 | 0.12 | 0.38 | 0.71 |
-  | IMDB `primaryName` | Relational Columns | 15.8M | 230 MB | 0.50 | 0.58 | 0.10 | 0.41 | 0.83 |
-  | ClickBench `Title` | Relational Columns | 936k | 139 MB | 0.13 | 0.19 | 0.04 | 0.07 | 0.11 |
-  | ClickBench `URL` | Relational Columns | 1.0M | 90 MB | 0.25 | 0.36 | 0.11 | 0.23 | 0.37 |
-  | ClickBench `Referer` | Relational Columns | 921k | 81 MB | 0.28 | 0.39 | 0.12 | 0.27 | 0.41 |
-  | ClickBench `SearchPhrase` | Relational Columns | 69k | 4 MB | 0.31 | 0.37 | 0.06 | 0.15 | 0.24 |
-  | Silesia `samba` (source, per line) | Other | 596k | 22 MB | 0.27 | 0.37 | 0.24 | 0.52 | 0.88 |
-  | Silesia `xml` | Other | 58k | 5 MB | 0.15 | 0.31 | 0.12 | 0.29 | 0.48 |
+  | Dataset | Kind | Docs | Text | Inverted | + positions | 3-grams | 4-grams | Sparse | zstd -3 | Token bloom | Trigram bloom |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | MS MARCO passages | Prose | 8.8M | 3.1 GB | 0.19 | 0.35 | 0.08 | 0.23 | 0.41 | 0.321 | 0.018 | 0.018 |
+  | enwik8 (Wikipedia XML) | Prose | 1.1M | 100 MB | 0.29 | 0.44 | 0.14 | 0.38 | 0.74 | 0.360 | 0.023 | 0.031 |
+  | Silesia `webster` | Prose | 218k | 41 MB | 0.24 | 0.42 | 0.09 | 0.27 | 0.57 | 0.294 | 0.019 | 0.015 |
+  | Silesia `dickens` | Prose | 33k | 10 MB | 0.25 | 0.44 | 0.09 | 0.32 | 0.74 | 0.362 | 0.013 | 0.010 |
+  | LLVM 19.1.0 (C++) | Code | 144k | 1.2 GB | 0.04 | 0.23 | 0.08 | 0.15 | 0.28 | 0.121 | 0.004 | 0.012 |
+  | Linux v6.12 (C) | Code | 86k | 988 MB | 0.05 | 0.28 | 0.11 | 0.24 | 0.44 | 0.204 | 0.006 | 0.020 |
+  | .NET runtime 9.0.0 (C#) | Code | 59k | 644 MB | 0.05 | 0.19 | 0.06 | 0.13 | 0.24 | 0.102 | 0.004 | 0.011 |
+  | Node v23.0.0 (C++, JS) | Code | 41k | 338 MB | 0.07 | 0.26 | 0.12 | 0.26 | 0.45 | 0.178 | 0.007 | 0.022 |
+  | TensorFlow 2.18.0 (C++, Python) | Code | 33k | 247 MB | 0.06 | 0.23 | 0.12 | 0.24 | 0.41 | 0.163 | 0.005 | 0.018 |
+  | Elasticsearch 8.16.0 (Java) | Code | 31k | 218 MB | 0.07 | 0.21 | 0.12 | 0.26 | 0.42 | 0.154 | 0.006 | 0.017 |
+  | Kubernetes v1.32.0 (Go) | Code | 26k | 171 MB | 0.08 | 0.24 | 0.12 | 0.26 | 0.46 | 0.148 | 0.006 | 0.018 |
+  | Swift 6.0 (C++, Swift) | Code | 26k | 131 MB | 0.08 | 0.24 | 0.12 | 0.25 | 0.45 | 0.183 | 0.007 | 0.019 |
+  | Rust 1.84.0 (Rust) | Code | 50k | 121 MB | 0.07 | 0.23 | 0.19 | 0.35 | 0.62 | 0.192 | 0.005 | 0.021 |
+  | Postgres 17.0 (C) | Code | 7k | 103 MB | 0.10 | 0.30 | 0.10 | 0.25 | 0.48 | 0.207 | 0.011 | 0.021 |
+  | Symfony v7.2.0 (PHP) | Code | 13k | 80 MB | 0.12 | 0.23 | 0.13 | 0.27 | 0.45 | 0.148 | 0.009 | 0.018 |
+  | CPython v3.13.0 (C, Python) | Code | 5k | 80 MB | 0.09 | 0.28 | 0.11 | 0.29 | 0.52 | 0.218 | 0.010 | 0.024 |
+  | Go 1.23.0 (Go) | Code | 13k | 78 MB | 0.12 | 0.32 | 0.16 | 0.40 | 0.72 | 0.204 | 0.010 | 0.026 |
+  | VS Code 1.96.0 (TypeScript) | Code | 8k | 77 MB | 0.08 | 0.22 | 0.11 | 0.28 | 0.46 | 0.172 | 0.007 | 0.020 |
+  | Spring Framework v6.2.0 (Java) | Code | 11k | 56 MB | 0.09 | 0.23 | 0.15 | 0.29 | 0.50 | 0.159 | 0.006 | 0.015 |
+  | Django 5.1 (Python) | Code | 5k | 34 MB | 0.10 | 0.28 | 0.17 | 0.39 | 0.64 | 0.201 | 0.009 | 0.024 |
+  | React 19.0.0 (JS) | Code | 7k | 30 MB | 0.08 | 0.20 | 0.16 | 0.36 | 0.56 | 0.155 | 0.005 | 0.023 |
+  | Rails 8.0.0 (Ruby) | Code | 5k | 21 MB | 0.08 | 0.26 | 0.19 | 0.42 | 0.70 | 0.209 | 0.006 | 0.025 |
+  | loghub `Spark` | Logs | 33.2M | 2.9 GB | 0.12 | 0.22 | 0.02 | 0.05 | 0.07 | 0.065 | 0.005 | 0.003 |
+  | loghub `HDFS` | Logs | 11.2M | 1.6 GB | 0.12 | 0.20 | 0.03 | 0.09 | 0.12 | 0.099 | 0.005 | 0.002 |
+  | loghub `BGL` | Logs | 4.7M | 743 MB | 0.14 | 0.28 | 0.03 | 0.06 | 0.11 | 0.092 | 0.012 | 0.003 |
+  | loghub `Android` | Logs | 1.6M | 192 MB | 0.19 | 0.29 | 0.10 | 0.18 | 0.30 | 0.092 | 0.006 | 0.015 |
+  | loghub `SSH` | Logs | 655k | 73 MB | 0.13 | 0.23 | 0.02 | 0.04 | 0.07 | 0.067 | 0.005 | 0.003 |
+  | loghub `OpenStack` | Logs | 208k | 61 MB | 0.19 | 0.31 | 0.06 | 0.13 | 0.28 | 0.081 | 0.012 | 0.008 |
+  | loghub `Hadoop` | Logs | 394k | 49 MB | 0.13 | 0.22 | 0.05 | 0.08 | 0.13 | 0.041 | 0.003 | 0.005 |
+  | loghub `HPC` | Logs | 433k | 34 MB | 0.37 | 0.47 | 0.02 | 0.08 | 0.15 | 0.099 | 0.025 | 0.002 |
+  | loghub `HealthApp` | Logs | 253k | 24 MB | 0.22 | 0.29 | 0.04 | 0.09 | 0.23 | 0.098 | 0.010 | 0.004 |
+  | loghub `Mac` | Logs | 117k | 17 MB | 0.20 | 0.30 | 0.11 | 0.19 | 0.32 | 0.067 | 0.005 | 0.012 |
+  | loghub `Zookeeper` | Logs | 74k | 10 MB | 0.11 | 0.20 | 0.03 | 0.06 | 0.11 | 0.043 | 0.003 | 0.003 |
+  | loghub `Apache` | Logs | 56k | 5 MB | 0.19 | 0.30 | 0.04 | 0.07 | 0.11 | 0.053 | 0.002 | 0.003 |
+  | loghub `Proxifier` | Logs | 21k | 3 MB | 0.17 | 0.30 | 0.06 | 0.12 | 0.18 | 0.073 | 0.005 | 0.005 |
+  | loghub `Linux` | Logs | 26k | 2 MB | 0.27 | 0.40 | 0.10 | 0.21 | 0.36 | 0.084 | 0.011 | 0.010 |
+  | IMDB `primaryTitle` | Relational Columns | 12.9M | 273 MB | 0.38 | 0.47 | 0.12 | 0.38 | 0.71 | 0.385 | 0.036 | 0.021 |
+  | IMDB `primaryName` | Relational Columns | 15.8M | 230 MB | 0.50 | 0.58 | 0.10 | 0.41 | 0.83 | 0.479 | 0.061 | 0.015 |
+  | ClickBench `Title` | Relational Columns | 936k | 139 MB | 0.13 | 0.19 | 0.04 | 0.07 | 0.11 | 0.077 | 0.007 | 0.008 |
+  | ClickBench `URL` | Relational Columns | 1.0M | 90 MB | 0.25 | 0.36 | 0.11 | 0.23 | 0.37 | 0.146 | 0.013 | 0.024 |
+  | ClickBench `Referer` | Relational Columns | 921k | 81 MB | 0.28 | 0.39 | 0.12 | 0.27 | 0.41 | 0.151 | 0.013 | 0.032 |
+  | ClickBench `SearchPhrase` | Relational Columns | 69k | 4 MB | 0.31 | 0.37 | 0.06 | 0.15 | 0.24 | 0.136 | 0.013 | 0.007 |
+  | Silesia `samba` (source, per line) | Other | 596k | 22 MB | 0.27 | 0.37 | 0.24 | 0.52 | 0.88 | | | |
+  | Silesia `xml` | Other | 58k | 5 MB | 0.15 | 0.31 | 0.12 | 0.29 | 0.48 | | | |
+
+  The last three columns are per 1 MiB block of consecutive documents (of
+  files, for code): the block compressed with zstd -3, and bloom filters
+  over its distinct tokens and trigrams at 1% false positives (9.6 bits per
+  key, uncompressed: a filter at its optimal fill is half ones and doesn't
+  compress). A query checks every block's filter and decompresses and scans
+  the blocks that match, so a bloom index costs its filter plus the zstd
+  blocks. At 1 MiB a block repeats most of its tokens and trigrams; at 16
+  KiB the filters are 3-5x bigger, and trigram filters are bigger than the
+  exact trigram index.
 
   Medians per kind (the README rounds them):
 
-  | Kind | Inverted | + positions | 3-grams | 4-grams | Sparse |
-  | --- | --- | --- | --- | --- | --- |
-  | Prose (4) | 0.25 | 0.43 | 0.09 | 0.29 | 0.65 |
-  | Code (18) | 0.08 | 0.24 | 0.12 | 0.27 | 0.46 |
-  | Logs (14) | 0.18 | 0.29 | 0.04 | 0.09 | 0.14 |
-  | Relational Columns (6) | 0.29 | 0.38 | 0.11 | 0.25 | 0.39 |
+  | Kind | Inverted | + positions | 3-grams | 4-grams | Sparse | zstd -3 | Token bloom | Trigram bloom |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | Prose (4) | 0.25 | 0.43 | 0.09 | 0.29 | 0.65 | 0.34 | 0.018 | 0.017 |
+  | Code (18) | 0.08 | 0.24 | 0.12 | 0.27 | 0.46 | 0.18 | 0.006 | 0.020 |
+  | Logs (14) | 0.18 | 0.29 | 0.04 | 0.09 | 0.14 | 0.077 | 0.005 | 0.004 |
+  | Relational Columns (6) | 0.29 | 0.38 | 0.11 | 0.25 | 0.39 | 0.15 | 0.013 | 0.018 |
 
   Identifiers repeat within and across files, so code's inverted index is a
   third of prose's. Logs repeat line after line, so their n-gram indexes are

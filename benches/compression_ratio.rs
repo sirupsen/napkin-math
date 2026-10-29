@@ -9,7 +9,7 @@
 //   cargo bench --features encodings --bench compression_ratio -- postings --paragraphs dickens
 //   cargo bench --features encodings --bench compression_ratio -- postings --files linux/
 //   cargo bench --features encodings --bench compression_ratio -- timeseries nab/*.csv
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::time::Instant;
 
@@ -364,6 +364,43 @@ fn source_files(dir: &std::path::Path, out: &mut Vec<String>) {
     }
 }
 
+// Bits per key of a bloom filter with the optimal number of hashes at a 1%
+// false-positive rate: -ln(0.01) / ln(2)^2.
+const BLOOM_BITS: f64 = 9.585;
+
+// Bytes of token and trigram bloom filters over blocks of `block` bytes of
+// consecutive documents, with the same tokens as the inverted index and the
+// same trigrams as ngram_index, and of the blocks themselves compressed with
+// zstd -3, which a query decompresses and scans on every match.
+fn bloom_size(documents: &[&str], block: usize) -> (usize, usize, usize) {
+    let (mut tokens, mut trigrams) = (HashSet::new(), HashSet::new());
+    let (mut token_bytes, mut trigram_bytes) = (0.0, 0.0);
+    let (mut text, mut zstd_bytes) = (Vec::new(), 0);
+    let mut flush = |tokens: &mut HashSet<u64>, trigrams: &mut HashSet<u32>, text: &mut Vec<u8>| {
+        token_bytes += (tokens.len() as f64 * BLOOM_BITS / 8.0).ceil();
+        trigram_bytes += (trigrams.len() as f64 * BLOOM_BITS / 8.0).ceil();
+        zstd_bytes += zstd::bulk::compress(text, 3).unwrap().len();
+        tokens.clear();
+        trigrams.clear();
+        text.clear();
+    };
+    for d in documents {
+        for w in d.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()) {
+            tokens.insert(xxhash_rust::xxh3::xxh3_64(w.to_lowercase().as_bytes()));
+        }
+        for g in d.as_bytes().windows(3) {
+            trigrams.insert(g.iter().fold(0, |k, b| k << 8 | b.to_ascii_lowercase() as u32));
+        }
+        text.extend_from_slice(d.as_bytes());
+        text.push(b'\n');
+        if text.len() >= block {
+            flush(&mut tokens, &mut trigrams, &mut text);
+        }
+    }
+    flush(&mut tokens, &mut trigrams, &mut text);
+    (token_bytes as usize, trigram_bytes as usize, zstd_bytes)
+}
+
 // One document per line (MS MARCO's "<id>\t<text>", log lines, column values),
 // per blank-line-separated paragraph (prose), or per source file under a
 // directory (code). Doc IDs are document numbers, terms are lowercased
@@ -507,6 +544,17 @@ fn postings(path: &str, split: Split) {
             raw_len,
             size,
         );
+    }
+
+    // Bloom filters per block, as log stores keep: every distinct token or
+    // trigram of each block of consecutive documents, at 1% false positives,
+    // next to the zstd-compressed blocks they point at.
+    for block in [16 << 10, 1 << 20] {
+        let (tokens, trigrams, blocks) = bloom_size(&documents, block);
+        let unit = if block < 1 << 20 { "16 KiB" } else { "1 MiB" };
+        report(&format!("zstd -3 per {unit}"), raw_len, blocks);
+        report(&format!("token bloom per {unit}, 1% FP"), raw_len, tokens);
+        report(&format!("trigram bloom per {unit}, 1% FP"), raw_len, trigrams);
     }
 
     // Encode and decode speed: every full 128-ID block of every doc ID list,
