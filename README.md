@@ -269,16 +269,17 @@ over a whole column gets 3-10x. Dictionary and RLE columns also pay for the
 dictionary itself (each distinct value once); the smaller of the two rules
 predicts Parquet's dictionary + RLE size of whole tables within 10%.
 
-Search indexes, as a fraction of the text they index (documents of ~16 KiB
-for n-grams; at one line per document they're bigger than the text):
+Search indexes, as a fraction of the text they index (inverted indexes over
+prose, logs and tables; regex indexes over the source files of six large
+repos, one document per file):
 
 | What                        | Stores                                 | Size |
 | --------------------------- | -------------------------------------- | ---- |
 | Trigram index (regex)       | Trigrams, doc IDs                      | 0.1  |
-| Fourgram index (regex)      | Fourgrams, doc IDs                     | 0.25 |
 | Inverted index              | Terms, doc IDs, frequencies            | 0.25 |
+| Fourgram index (regex)      | Fourgrams, doc IDs                     | 0.3  |
 | Inverted index + positions  | Terms, doc IDs, frequencies, positions | 0.35 |
-| Sparse n-gram index (regex) | Sparse n-grams, doc IDs                | 0.4  |
+| Sparse n-gram index (regex) | Sparse n-grams, doc IDs                | 0.5  |
 
 ## Techniques
 

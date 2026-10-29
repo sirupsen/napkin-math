@@ -7,6 +7,7 @@
 //   cargo bench --features encodings --bench compression_ratio -- cardinality hits_0.parquet
 //   cargo bench --features encodings --bench compression_ratio -- postings collection.tsv
 //   cargo bench --features encodings --bench compression_ratio -- postings --paragraphs dickens
+//   cargo bench --features encodings --bench compression_ratio -- postings --files linux/
 //   cargo bench --features encodings --bench compression_ratio -- timeseries nab/*.csv
 use std::collections::HashMap;
 use std::fs::File;
@@ -304,26 +305,61 @@ where
     (lists.len(), postings, size)
 }
 
-// One document per line (MS MARCO's "<id>\t<text>", log lines, column values)
-// or, with `paragraphs`, per blank-line-separated paragraph (prose). Doc IDs
-// are document numbers, terms are lowercased alphanumeric runs.
-fn postings(path: &str, paragraphs: bool) {
-    let raw = std::fs::read(path).unwrap();
-    let text = String::from_utf8_lossy(&raw).replace("\r\n", "\n");
+#[derive(Clone, Copy, PartialEq)]
+enum Split {
+    Lines,
+    Paragraphs,
+    Files,
+}
+
+// GitHub code search skips files over 350 KiB.
+const MAX_FILE: u64 = 350 << 10;
+
+// Every text file under `dir` (no NUL byte, at most MAX_FILE), skipping .git,
+// in sorted order so doc IDs are reproducible.
+fn source_files(dir: &std::path::Path, out: &mut Vec<String>) {
+    let mut entries: Vec<_> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap()).collect();
+    entries.sort_by_key(|e| e.file_name());
+    for e in entries {
+        let kind = e.file_type().unwrap();
+        if kind.is_dir() && e.file_name() != ".git" {
+            source_files(&e.path(), out);
+        } else if kind.is_file() && e.metadata().unwrap().len() <= MAX_FILE {
+            let bytes = std::fs::read(e.path()).unwrap();
+            if !bytes.contains(&0) {
+                out.push(String::from_utf8_lossy(&bytes).into_owned());
+            }
+        }
+    }
+}
+
+// One document per line (MS MARCO's "<id>\t<text>", log lines, column values),
+// per blank-line-separated paragraph (prose), or per source file under a
+// directory (code). Doc IDs are document numbers, terms are lowercased
+// alphanumeric runs.
+fn postings(path: &str, split: Split) {
+    let mut files = Vec::new();
+    let (raw_len, text) = if split == Split::Files {
+        source_files(std::path::Path::new(path), &mut files);
+        (files.iter().map(String::len).sum(), String::new())
+    } else {
+        let raw = std::fs::read(path).unwrap();
+        (raw.len(), String::from_utf8_lossy(&raw).replace("\r\n", "\n"))
+    };
     let mut index: HashMap<String, Postings> = HashMap::new();
     let mut word = String::new();
     let mut docs = 0u32;
-    let documents: Vec<&str> = if paragraphs {
-        text.split("\n\n")
+    let documents: Vec<&str> = match split {
+        Split::Paragraphs => text
+            .split("\n\n")
             .filter(|p| !p.trim().is_empty())
-            .collect()
-    } else {
-        text.lines().collect()
+            .collect(),
+        Split::Lines => text
+            .lines()
+            .map(|d| d.split_once('\t').map_or(d, |(_, b)| b))
+            .collect(),
+        Split::Files => files.iter().map(String::as_str).collect(),
     };
-    let documents: Vec<&str> = documents
-        .into_iter()
-        .map(|d| d.split_once('\t').map_or(d, |(_, b)| b))
-        .collect();
     for &body in &documents {
         for (position, w) in body
             .split(|c: char| !c.is_alphanumeric())
@@ -395,15 +431,15 @@ fn postings(path: &str, paragraphs: bool) {
     // into the postings.
     let dictionary: usize = index.keys().map(|t| t.len() + 1 + 4).sum();
     let without_positions = dictionary + doc_bitpacked + freq_bitpacked;
-    println!("whole index, against {} bytes of source text:", raw.len());
+    println!("whole index, against {} bytes of source text:", raw_len);
     report(
         "dictionary + doc IDs + frequencies",
-        raw.len(),
+        raw_len,
         without_positions,
     );
     report(
         "  + positions",
-        raw.len(),
+        raw_len,
         without_positions + pos_bitpacked,
     );
     // Per document, and with documents merged into ~16 KiB chunks, about the
@@ -423,14 +459,14 @@ fn postings(path: &str, paragraphs: bool) {
             let (grams, postings, size) = ngram_index(docs, n);
             report(
                 &format!("{n}-grams per {unit} ({grams} grams, {postings} postings)"),
-                raw.len(),
+                raw_len,
                 size,
             );
         }
         let (grams, postings, size) = sparse_index(docs);
         report(
             &format!("sparse n-grams per {unit} ({grams} grams, {postings} postings)"),
-            raw.len(),
+            raw_len,
             size,
         );
     }
@@ -597,9 +633,13 @@ fn main() {
         "parquet" => files.iter().for_each(|f| parquet(f)),
         "cardinality" => files.iter().for_each(|f| cardinality(f)),
         "postings" => {
-            let paragraphs = files.first().is_some_and(|f| f == "--paragraphs");
-            let files = &files[paragraphs as usize..];
-            files.iter().for_each(|f| postings(f, paragraphs))
+            let split = match files.first().map(String::as_str) {
+                Some("--paragraphs") => Split::Paragraphs,
+                Some("--files") => Split::Files,
+                _ => Split::Lines,
+            };
+            let files = &files[(split != Split::Lines) as usize..];
+            files.iter().for_each(|f| postings(f, split))
         }
         "timeseries" => timeseries(files),
         _ => panic!("{usage}"),

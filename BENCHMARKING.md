@@ -328,12 +328,33 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   | ClickBench `URL` | 0.92 | 1.08 | 2.29 | 0.11 | 0.22 | 0.37 |
   | ClickBench `SearchPhrase` | 0.71 | 0.96 | 1.19 | 0.06 | 0.15 | 0.24 |
 
-  The 16 KiB medians are 0.1 for trigrams, 0.25 for fourgrams and 0.4 for
-  sparse n-grams, which store 2-3x as many postings as trigrams so that a
-  query reads a few selective lists instead of many common ones. Source code
-  is the hardest case (0.24 trigrams on `samba`, close to the ~20% of source
-  Russ Cox reported for Code Search), and repetitive logs and tables the
-  easiest.
+  Sparse n-grams store 2-3x as many postings as trigrams so that a query
+  reads a few selective lists instead of many common ones. Repetitive logs
+  and tables index the smallest.
+
+  These corpora are split into lines or paragraphs, and `samba` is the only
+  code. The README's regex rows instead come from the source trees of six
+  large repos (shallow clones at the tag), one document per file, skipping
+  `.git`, files with a NUL byte and files over 350 KiB, as GitHub code search
+  does:
+
+  ```bash
+  cargo bench --features encodings --bench compression_ratio -- postings --files linux/ rust/ ...
+  ```
+
+  | Repo | Files | Text | Inverted | + positions | 3-grams | 4-grams | Sparse |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | Linux v6.12 (C) | 86k | 988 MB | 0.05 | 0.27 | 0.11 | 0.23 | 0.43 |
+  | Rust 1.84.0 (Rust) | 50k | 121 MB | 0.06 | 0.23 | 0.19 | 0.35 | 0.61 |
+  | CPython v3.13.0 (C, Python) | 5k | 80 MB | 0.09 | 0.28 | 0.11 | 0.28 | 0.52 |
+  | Kubernetes v1.32.0 (Go) | 26k | 171 MB | 0.07 | 0.24 | 0.12 | 0.26 | 0.46 |
+  | VS Code 1.96.0 (TypeScript) | 8k | 77 MB | 0.08 | 0.22 | 0.11 | 0.28 | 0.46 |
+  | Spring Framework v6.2.0 (Java) | 11k | 56 MB | 0.09 | 0.23 | 0.15 | 0.29 | 0.49 |
+
+  Medians: trigrams 0.12, fourgrams 0.28, sparse n-grams 0.48. Russ Cox
+  reported ~0.2 for Code Search's trigram index. Identifiers repeat, so code's
+  inverted index without positions is only ~0.08 of the source, against
+  ~0.25 for prose.
 
   On MS MARCO, delta + varint gets 3.0x on doc IDs and roaring 2.1x. Logs
   and ClickBench rows repeat a lot, so their doc IDs cluster and most
