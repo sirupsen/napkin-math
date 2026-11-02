@@ -572,8 +572,14 @@ an open object handle) gave p99 (p50), median over runs:
 
 Zonal buckets only win on reads (Blob Storage, Zonal Read: 50 ms). Zonal
 writes are no faster than regional ones (100 ms, from S3 Express; GCS Rapid is
-slower). The Zonal Conditional Write row (500 ms) uses if-none-match, where
-both tiers land at 150-500 ms; GCS Rapid's if-match p99 runs to seconds. The
+slower). The Zonal Conditional Write row (100 ms) is if-match, a
+compare-and-swap on one object, one at a time: S3 Express 12-54 ms p99 (6 ms
+p50) and GCS Rapid 93-102 ms (63-67 ms). It used to be 500 ms, from
+if-none-match at 128 creates in flight, where S3 Express is 35 ms p50 but 484
+ms p99 (no retries; every sample took one attempt). GCS Rapid's seconds-long
+if-match p99s (7.6-8.4 s, max 80 s) came from runs that pushed ~430 writes/s
+at one object; one at a time it took 14 writes/s with no errors. One run had
+31% of its writes fail their precondition: several writers on one object. The
 Zonal List row (100 ms) splits S3 Express (27 ms) and GCS Rapid (150-190 ms).
 Both zonal tiers cost about \$0.11 per GB-month, ~5x regional.
 

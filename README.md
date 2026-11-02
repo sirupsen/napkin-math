@@ -107,10 +107,10 @@ yourself.
 | CPU TLS 1.3 Handshake (+1 RTT)                                 | 250 μs     |            |
 | CPU Process Spawn                                              | 300 μs     |            |
 | Database Query (MySQL, Memcached, Redis, ...)                  | 500 μs     |            |
+| Blob Storage, Zonal Conditional Write (128 KiB)                | 100 ms     |            |
 | Blob Storage, Regional Conditional Write (128 KiB)             | 100 ms     |            |
 | Blob Storage, Zonal List (1000 keys)                           | 100 ms     |            |
 | Blob Storage, Regional List (1000 keys)                        | 150 ms     |            |
-| Blob Storage, Zonal Conditional Write (128 KiB)                | 500 ms     |            |
 
 † pwrite + fdatasync into a preallocated file. Cloud SSDs and network disks
 have no write cache to flush (Azure Premium SSD flushes in ~30 μs), so a durable
@@ -137,8 +137,9 @@ VM's bandwidth on GCP but 5 Gbit/s (600 MiB/s) on AWS outside a placement group,
 and 2 MiB / RTT across regions (\*). Regional
 disks copy every write to a second zone, so only their write latency differs. Blob
 Storage latency is p99 from the same region; Zonal is S3 Express One Zone and
-GCS Rapid. Region-to-region latencies:
-[cloudping](https://www.cloudping.co/).
+GCS Rapid. Conditional writes are compare-and-swap on one object, one at a
+time; regional GCS also allows only ~1 write per second to the same object.
+Region-to-region latencies: [cloudping](https://www.cloudping.co/).
 
 ## Cost Numbers
 
