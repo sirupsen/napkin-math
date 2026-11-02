@@ -112,6 +112,13 @@ only got AVX-512 to 19. Prefetching both 1 KiB ahead into L1 and 16 KiB ahead
 into L2 got it to 23 GiB/s on m8i and 18.5 on C4, so buffers over 64 MiB now
 take that path.
 
+That is about the limit for one core. By Little's law, bandwidth is lines in
+flight x 64 B / latency: 23 GiB/s at 136 ns is ~52 lines, about what a
+Granite Rapids L2 tracks. On Graviton4 every loop shape (LLVM's, NEON with 4-16
+accumulators, 64-byte `ld1`, `ldnp`, software prefetch) read 31 GiB/s, and two
+streams 35 (~67 lines at 115 ns). The README's 20 GiB/s rounds the x86 side; an
+Apple M5 Max core reads 85-106 GiB/s at the same ~110 ns, ~190 lines in flight.
+
 On a two-socket m8g.48xlarge (Graviton4, 96 cores per socket), with `numactl`
 pinning threads to node 0 and memory to node 0 or node 1: random read latency
 113 ns local and 258 ns remote (135 / 282 ns with 4 KiB pages); one thread
@@ -119,6 +126,12 @@ reads 31 GiB/s local and 16 remote; 96 threads read 325 GiB/s local and 62
 GiB/s remote, the socket-to-socket link. 192 threads over both sockets read
 210 GiB/s, which says more about 5 MiB per thread being too short than about
 the hardware. The 48 vCPU VMs the README uses have one NUMA node.
+
+An m8i.48xlarge (Xeon 6975P-C, 192 vCPU) is one socket in three NUMA nodes, one
+per compute die (sub-NUMA clustering). From node 0 to node 1's memory: latency
+127 -> 153 ns (174 -> 208 ns with 4 KiB pages), one thread 21 -> 15 GiB/s, and
+node 0's 64 threads 199 -> 173-189 GiB/s. A die boundary costs far less than a
+socket boundary. An x86 two-socket run needs the 384 vCPU shapes.
 
 ## SSD, Network Disk and HDD rows
 

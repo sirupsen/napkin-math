@@ -34,6 +34,7 @@ yourself.
 | L1 Cache Read                                                  | 1 ns       | 200 GiB/s  |
 | Memory Sequential Write, all cores                             |            | 150 GiB/s  |
 | L2 Cache Read                                                  | 5 ns       | 150 GiB/s  |
+| Memory Sequential Read, other socket, all cores‡               |            | 60 GiB/s   |
 | GPU ↔ CPU Transfer, PCIe (B200)                                | 10 μs      | 50 GiB/s   |
 | Network RDMA, GPU (400 Gbit/s)                                 | 5 μs       | 40 GiB/s   |
 | L3 Cache Read                                                  | 30 ns      | 30 GiB/s   |
@@ -96,6 +97,7 @@ yourself.
 | CPU Mutex Lock + Unlock                                        | 10 ns      |            |
 | CPU System Call                                                | 100 ns     |            |
 | CPU Atomic Increment, contended                                | 100 ns     |            |
+| Memory Random Read, other socket‡                              | 250 ns     |            |
 | CPU Mutex Lock + Unlock, contended                             | 500 ns     |            |
 | CPU Context Switch                                             | 1 μs       |            |
 | CPU TCP Connect (+1 RTT)                                       | 10 μs      |            |
@@ -113,12 +115,25 @@ yourself.
 have no write cache to flush (Azure Premium SSD flushes in ~30 μs), so a durable
 write costs a write.
 
+‡ Only the largest shapes span two sockets. Reading the other socket's memory
+costs ~2.5x the latency and half of one thread's bandwidth, and all cores share
+the ~60 GiB/s link (Graviton4). Keep memory on the socket that reads it:
+Linux allocates on the node of the thread that first touches a page. Intel's
+largest VMs also split one socket into a NUMA node per die; another die costs
+1.2x the latency and 0.7x one thread's bandwidth, but all cores lose only ~10%.
+
 \* One TCP connection moves ~2 MiB per round trip, so 2 MiB / RTT: 20 MiB/s
 at 100 ms. Add connections to go faster.
 
 Throughput is with enough requests in flight to max out a 48 vCPU VM (AWS m8,
 GCP C4) and its disks (EBS gp3, Hyperdisk Balanced at max provisioning; HDDs are
-2 TB pd-standard). Regional
+2 TB pd-standard), except CPU rows, which are one thread on one core and scale
+with cores until memory bandwidth runs out (on x86 a vCPU is half a core). One
+thread with one request in flight gets size / latency instead: 8 KiB random SSD
+reads at 100 μs are 80 MiB/s, writes at 30 μs 250 MiB/s. One thread reading a
+file sequentially gets 1-5 GiB/s, from kernel readahead. One TCP flow gets the
+VM's bandwidth on GCP but 5 Gbit/s (600 MiB/s) on AWS outside a placement group,
+and 2 MiB / RTT across regions (\*). Regional
 disks copy every write to a second zone, so only their write latency differs. Blob
 Storage latency is p99 from the same region; Zonal is S3 Express One Zone and
 GCS Rapid. Region-to-region latencies:

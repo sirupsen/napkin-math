@@ -64,7 +64,6 @@ if get "cache/$KEY.tar.zst" /tmp/cache.tar.zst; then
   HIT=1
 fi
 chown -R "$U:$U" "$H"
-echo always > /sys/kernel/mm/transparent_hugepage/enabled
 printf '%s\n' 'source ~/.cargo/env' 'cd ~/repo' "export RUSTFLAGS='-C target-cpu=native'" "$CMD" > /tmp/cmd.sh
 sudo -u "$U" -H bash /tmp/cmd.sh > /tmp/out.log 2>&1
 echo "exit $?" >> /tmp/out.log
