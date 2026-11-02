@@ -46,7 +46,7 @@ debug build.
 | ----- | -------- | ---------- |
 | `memory_sequential_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD | Memory Sequential Read |
 | `memory_sequential_write` | memset and memcpy of 1 GiB on 1 thread, memset of 16 GiB on all cores | Memory Sequential Write |
-| `memory_random` | One pass of independent random 64 B reads/writes over 1 GiB | Memory Random Read/Write, throughput |
+| `memory_random` | One pass of independent random 64 B reads/writes over 1 GiB (1 thread), and random lines of a shared 16 GiB buffer from 1 thread and all cores, with and without huge pages | Memory Random Read/Write, throughput |
 | `memory_random_read_latency` (in `memory_random.rs`) | Dependent pointer chase over 1 GiB, with and without huge pages | Memory Random Read, latency |
 | `cache_read`, `cache_read_latency` | The `memory_sequential_read` SIMD loop, and the pointer chase, over 16 KiB, 256 KiB and 8 MiB | L1/L2/L3 Cache Read |
 | `cpu_encrypt` | ring AES-256-GCM and ChaCha20-Poly1305 seal and open on 16 KiB | CPU Encrypt / Decrypt |
@@ -82,6 +82,28 @@ The README collapses `memory_sequential_read`'s scalar and SIMD variants into on
 single-thread row and one threaded row for memorability. `memory_random` issues
 independent loads, so the CPU overlaps misses; that is throughput, which is why
 the latency cell comes from `memory_random_read_latency` instead.
+
+### Random memory, one thread and all cores
+
+On November 2, 2026, random 64-byte lines of a shared 16 GiB buffer (each
+pinned thread draws its own indices from xorshift), in GiB/s, 4 KiB pages
+(2 MiB huge pages in parentheses):
+
+| | C4, Xeon 8581C | m8i, Xeon 6975P-C | m8g, Graviton4 |
+| --- | --- | --- | --- |
+| Read, 1 thread | 2.9 (3.6) | 2.5 (3.2) | 2.1 (4.6) |
+| Write, 1 thread | 2.0 (2.5) | 3.7 (6.3) | 1.8 (9.9) |
+| Read, 48 threads | 55 (61) | 42 (54) | 146 (189) |
+| Write, 48 threads | 38 (41) | 64 (63) | 144 (333) |
+
+The README rounds the averages: 3 GiB/s on one thread and 100 GiB/s on all
+cores, which hides that x86 is 40-60 and Graviton4 ~150. Graviton4's 333 GiB/s
+for random writes with huge pages matches its sequential reads and is
+unconfirmed. Huge pages help one thread 1.3-2.2x: with 4 KiB pages, 16 GiB is
+4M pages, far more than the TLB holds, so most accesses also walk the page
+table. The 1 GiB pass through a shuffled index array, the older bench, reads
+2.2-2.5 GiB/s; on an Apple M5 Max the xorshift loop was 1.8x faster (7.4 vs 4.1
+GiB/s), on these server cores within 15%.
 
 ### SIMD width, prefetching and NUMA
 
@@ -175,6 +197,22 @@ QD64 x 16 jobs). Each met or beat its published limit:
 | c4-standard-48-lssd, 8 x 375 GiB | 5.2 GiB/s (limit 5,000 MiB/s) | 2.7 GiB/s (2,640) | 1.33M IOPS (1.2M) | 683k (600k) | 5.2 GiB/s / 94 us | 2.7 GiB/s / 39 us |
 | m8id.12xlarge, 1 x 2850 GB | 6.1 GiB/s | 2.7 GiB/s | 858k (805k) | 429k (402k) | 5.9 GiB/s / 94 us | 2.8 GiB/s / 31 us |
 | m8gd.12xlarge, 3 x 950 GB | 6.0 GiB/s | 2.7 GiB/s | 850k (805k) | 423k (402k) | 5.9 GiB/s / 71 us | 2.8 GiB/s / 19 us |
+
+From one thread (`fio --numjobs=1`, io_uring), on the same striped disks:
+
+| One thread | c4-standard-48-lssd | m8id.12xlarge | m8gd.12xlarge |
+| --- | --- | --- | --- |
+| Seq read 1 MiB QD32 | 5.2 GiB/s (15% of a core) | 5.9 | 5.9 |
+| Seq write 1 MiB QD32 | 2.7 GiB/s | 2.7 | 2.7 |
+| 8 KiB rand read QD128 | 486k IOPS (3.8 GiB/s) | 610k (4.8) | 469k (3.7) |
+| 4 KiB rand read QD256, batched | 702k IOPS | 842k | 637k |
+| 4-8 KiB rand write | 631k IOPS | 427k | 425k |
+
+One thread reaches every sequential and random-write limit. Small random reads
+take ~1.2-2 us of CPU each, mostly in the kernel (md RAID adds some), so one
+core stops at 500-850k IOPS: all of m8id's one disk, half of C4's eight.
+Batching submissions (`--iodepth_batch_submit=32`) and registered buffers and
+files were worth 1.3-1.9x.
 
 AWS publishes no throughput limit for instance store. The README's SSD rows used
 to come from one of the C4's 8 disks (650 MiB/s read, 335 write, its per-disk

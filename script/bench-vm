@@ -113,6 +113,11 @@ launch() {
   done
   [ $# -gt 0 ] || die "no command given after --"
   CMD="$*"
+  if [ "$CLOUD" = aws ]; then
+    aws sts get-caller-identity >/dev/null 2>&1 || die "AWS credentials expired: aws sso login --profile ${AWS_PROFILE:-default}"
+  else
+    gcloud auth print-access-token >/dev/null 2>&1 || die "gcloud credentials expired: gcloud auth login"
+  fi
   RUN=$(date -u +%Y%m%d-%H%M%S)-$(echo "$TYPE" | tr . -)
   STORE=$(store)
   EXPIRES=$(( $(now) + TTL * 60 + 600 ))

@@ -29,10 +29,12 @@ fn random_memory_write_setup() -> RandomMemoryTest {
     RandomMemoryTest { vec, order, i: 0 }
 }
 
-fn random_memory_read_setup() -> RandomMemoryTest {
+fn random_memory_read_setup(huge_pages: bool) -> RandomMemoryTest {
     let size_in_elements = (GIB as u64 / 64) as usize;
 
-    let mut vec = Vec::new();
+    // Advise before the first touch, or the pages are already 4 KiB.
+    let mut vec: Vec<CacheLine> = Vec::with_capacity(size_in_elements);
+    unsafe { advise_huge_pages(vec.as_mut_ptr().cast(), size_in_elements * 64, huge_pages) };
     vec.resize(size_in_elements, [1, 2, 3, 4, 5, 6, 7, 8]);
     unsafe {
         let data = vec.as_mut_ptr() as *mut libc::c_void;
@@ -173,17 +175,110 @@ fn memory_random_read_latency_benchmark(c: &mut Criterion) {
     );
 }
 
+// All cores reading or writing random 64-byte lines of one shared 16 GiB buffer, far larger
+// than any L3. Each pinned thread draws its own indices from a xorshift generator: an index
+// array for 16 GiB would be 2 GiB of extra traffic, and the generator doesn't depend on the
+// loaded data, so the misses still overlap.
+struct SharedLines {
+    ptr: *mut CacheLine,
+    len: usize,
+}
+
+unsafe impl Sync for SharedLines {}
+unsafe impl Send for SharedLines {}
+
+const SHARED_BYTES: usize = 16 * GIB;
+const ACCESSES_PER_THREAD: usize = 1 << 22;
+
+impl SharedLines {
+    fn new(huge_pages: bool, cores: &[core_affinity::CoreId]) -> Self {
+        let layout = std::alloc::Layout::from_size_align(SHARED_BYTES, 2 << 20).unwrap();
+        let ptr = unsafe { std::alloc::alloc(layout) as *mut CacheLine };
+        unsafe { advise_huge_pages(ptr.cast(), SHARED_BYTES, huge_pages) };
+        let lines = SharedLines { ptr, len: SHARED_BYTES / 64 };
+        assert!(lines.len.is_power_of_two());
+        // Fill in parallel, so first touch spreads the pages like a real workload would.
+        let per = lines.len / cores.len();
+        std::thread::scope(|s| {
+            for (t, core) in cores.iter().enumerate() {
+                let lines = &lines;
+                s.spawn(move || {
+                    core_affinity::set_for_current(*core);
+                    for i in t * per..(t + 1) * per {
+                        unsafe { lines.ptr.add(i).write([i as u64; 8]) };
+                    }
+                });
+            }
+        });
+        lines
+    }
+
+    fn run(&self, cores: &[core_affinity::CoreId], write: bool) -> std::time::Duration {
+        let start = Instant::now();
+        std::thread::scope(|s| {
+            for (t, core) in cores.iter().enumerate() {
+                s.spawn(move || {
+                    core_affinity::set_for_current(*core);
+                    let mut x = 0x9E3779B97F4A7C15u64 ^ (t as u64).wrapping_mul(0xD1B54A32D192ED03);
+                    let mut sum = 0u64;
+                    for _ in 0..ACCESSES_PER_THREAD {
+                        x ^= x << 13;
+                        x ^= x >> 7;
+                        x ^= x << 17;
+                        let line = unsafe { self.ptr.add(x as usize & (self.len - 1)) };
+                        if write {
+                            unsafe { ptr::write_volatile(line, [x; 8]) };
+                        } else {
+                            sum = sum.wrapping_add(unsafe { ptr::read_volatile(line) }[0]);
+                        }
+                    }
+                    black_box(sum);
+                });
+            }
+        });
+        start.elapsed()
+    }
+}
+
+impl Drop for SharedLines {
+    fn drop(&mut self) {
+        let layout = std::alloc::Layout::from_size_align(SHARED_BYTES, 2 << 20).unwrap();
+        unsafe { std::alloc::dealloc(self.ptr.cast(), layout) };
+    }
+}
+
+fn memory_random_threads_benchmark(c: &mut Criterion) {
+    let cores = core_affinity::get_core_ids().unwrap();
+    let mut group = c.benchmark_group("memory_random");
+    group.sample_size(10);
+    for huge_pages in [false, true] {
+        let lines = SharedLines::new(huge_pages, &cores);
+        let pages = if huge_pages { ", huge pages" } else { "" };
+        for threads in [&cores[..1], &cores[..]] {
+            group.throughput(Throughput::Bytes((threads.len() * ACCESSES_PER_THREAD * 64) as u64));
+            for (op, write) in [("read", false), ("write", true)] {
+                let n = threads.len();
+                let name = format!("{op}, 16 GiB, {n} thread{}{pages}", if n == 1 { "" } else { "s" });
+                group.bench_function(name, |b| {
+                    b.iter_custom(|iters| (0..iters).map(|_| lines.run(threads, write)).sum())
+                });
+            }
+        }
+    }
+    group.finish();
+}
+
 fn memory_random_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_random");
     group.sample_size(10);
     group.throughput(Throughput::Bytes(GIB as u64));
 
-    {
-        group.bench_function("read", |b| {
+    for (name, huge_pages) in [("read", false), ("read, huge pages", true)] {
+        group.bench_function(name, |b| {
             b.iter_custom(|iters| {
                 let mut total = std::time::Duration::ZERO;
                 for _ in 0..iters {
-                    let mut test = random_memory_read_setup();
+                    let mut test = random_memory_read_setup(huge_pages);
                     let start = Instant::now();
                     loop {
                         legacy_black_box(test.vec[test.order[test.i]]);
@@ -227,5 +322,6 @@ fn memory_random_benchmark(c: &mut Criterion) {
 criterion_group!(
     benches,
     memory_random_benchmark,
+    memory_random_threads_benchmark,
     memory_random_read_latency_benchmark
 );
