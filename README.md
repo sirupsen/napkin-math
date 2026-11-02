@@ -41,8 +41,9 @@ yourself.
 | Memory Sequential Write, 1 thread                              |            | 10 GiB/s   |
 | CPU Encrypt / Decrypt (AES-256-GCM)                            |            | 10 GiB/s   |
 | CPU Encode / Decode Bitpacked Integers                         |            | 10 GiB/s   |
+| SSD Sequential Read                                            |            | 5 GiB/s    |
 | CPU Hash, not crypto-safe (64 bytes)                           | 10 ns      | 5 GiB/s    |
-| SSD Sequential Read                                            |            | 4 GiB/s    |
+| SSD Random Read (8 KiB)                                        | 100 μs     | 5 GiB/s    |
 | Network Bandwidth                                              |            | 3 GiB/s    |
 | Network Same-Zone                                              | 100 μs     | NW Limit   |
 | Network Cross-Zone                                             | 500 μs     | NW Limit   |
@@ -54,12 +55,11 @@ yourself.
 | Blob Storage, Regional Write (128 KiB)                         | 100 ms     | NW Limit   |
 | Blob Storage, Zonal Write (128 KiB)                            | 100 ms     | NW Limit   |
 | Memory Random Write (64 bytes)                                 |            | 3 GiB/s    |
+| SSD Sequential Write                                           |            | 3 GiB/s    |
 | Memory Random Read (64 bytes)                                  | 100 ns     | 3 GiB/s    |
-| SSD Sequential Write                                           |            | 2 GiB/s    |
+| SSD Random Write (8 KiB)                                       | 30 μs      | 3 GiB/s    |
 | CPU Decode Parquet (dictionary + zstd)                         |            | 2 GiB/s    |
-| SSD Random Write (8 KiB)                                       | 30 μs      | 2 GiB/s    |
 | SSD Sequential Durable Write (64 KiB)†                         | 50 μs      | 2 GiB/s    |
-| SSD Random Read (8 KiB)                                        | 100 μs     | 2 GiB/s    |
 | CPU Serialize (JSON, Protobuf)                                 |            | 1 GiB/s    |
 | CPU Decompress (lz4, zstd -1)                                  |            | 1 GiB/s    |
 | Network Disk, Zonal Sequential Read                            |            | 1 GiB/s    |
@@ -201,11 +201,11 @@ row is a B200 at its 8 TB/s spec), plus the transfer and request fees above:
 | GPU Memory Sequential Read (B200)               | \$0.0005      |
 | Memory Sequential Read, 1 thread                | \$0.0005      |
 | Memory Sequential Read, all cores               | \$0.003       |
-| SSD Sequential Read                             | \$0.2         |
+| SSD Sequential Read                             | \$0.1         |
+| SSD Random Read (8 KiB)                         | \$0.1         |
 | Network Same-Zone                               | \$0.2         |
 | Memory Random Read (64 bytes)                   | \$0.2         |
 | Blob Storage, Regional Read (8 MiB)             | \$0.3         |
-| SSD Random Read (8 KiB)                         | \$0.3         |
 | Network Disk, Zonal Sequential Read             | \$0.7         |
 | Network Disk, Regional Sequential Read          | \$0.7         |
 | Blob Storage, Zonal Read (8 MiB)§               | \$0.8         |

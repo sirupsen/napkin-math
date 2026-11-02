@@ -2,6 +2,8 @@ use criterion::*;
 use std::hint::black_box;
 
 use super::memory_random::chase_group;
+#[cfg(target_arch = "x86_64")]
+use super::memory_sequential_read::memory_read_sequential_single_thread_avx2;
 use super::memory_sequential_read::{memory_read_sequential_single_thread_vectorized, Int};
 use super::{KIB, MIB};
 
@@ -23,6 +25,12 @@ fn cache_read_benchmark(c: &mut Criterion) {
                 )))
             })
         });
+        #[cfg(target_arch = "x86_64")]
+        if is_x86_feature_detected!("avx512f") {
+            group.bench_function(format!("{name}, AVX2"), |b| {
+                b.iter(|| black_box(memory_read_sequential_single_thread_avx2(black_box(&vec))))
+            });
+        }
     }
     group.finish()
 }

@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+# Run a command from this checkout on a fresh cloud VM that deletes itself.
+#
+#   script/bench-vm aws m8g.48xlarge [--region us-east-2] [--ttl 60] [--detach] -- cargo bench ...
+#   script/bench-vm gcp c4-standard-48 [--zone us-central1-c] [--ttl 60] [--detach] -- cargo bench ...
+#   script/bench-vm result <aws|gcp> <run-id>  # print the output of a --detach run
+#   script/bench-vm list                # bench VMs still alive
+#   script/bench-vm sweep               # delete bench VMs past their deadline, and stopped GCP ones
+#
+# The working tree (tracked and untracked, minus ignored files) is uploaded to a bucket. The VM
+# installs Rust, restores a cached target/ for its CPU and Cargo.lock, runs the command in the
+# repo with RUSTFLAGS='-C target-cpu=native', uploads the output and deletes itself. It also
+# deletes itself --ttl minutes after boot whatever happens: on AWS via a shutdown timer and
+# terminate-on-shutdown, on GCP via --max-run-duration with DELETE plus the same timer.
+#
+# Account settings live in the gitignored .bench-vm.env at the repo root:
+#   AWS_PROFILE=...  AWS_BUCKET=...  AWS_BUCKET_REGION=...  AWS_INSTANCE_PROFILE=...  AWS_REGIONS="us-west-2 us-east-2"
+#   GCP_PROJECT=...         GCP_BUCKET=...      GCP_ZONE=us-central1-c
+#   AWS_SUBNET_<region>=subnet-...   (optional; otherwise the region's default VPC)
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
+if [ -f "$ROOT/.bench-vm.env" ]; then set -a; . "$ROOT/.bench-vm.env"; set +a; fi
+TAG=napkin-bench-vm
+PREFIX=napkin-bench-vm
+
+die() { echo "bench-vm: $*" >&2; exit 1; }
+now() { date -u +%s; }
+
+# The script every VM runs at boot. __VARS__ is replaced with the run's settings.
+boot_script() {
+  cat <<'EOF'
+#!/bin/bash
+__VARS__
+shutdown -h +"$TTL"
+exec > /var/log/bench-vm.log 2>&1
+set -x
+put() {
+  if [ "$CLOUD" = aws ]; then aws s3 cp --quiet "$1" "$STORE/$2"; else gcloud storage cp -q "$1" "$STORE/$2"; fi
+}
+get() {
+  if [ "$CLOUD" = aws ]; then aws s3 cp --quiet "$STORE/$1" "$2"; else gcloud storage cp -q "$STORE/$1" "$2"; fi
+}
+finish() {
+  put /var/log/bench-vm.log "runs/$RUN/boot.log" || true
+  # AWS terminates on shutdown. GCP only stops (the default service account can't delete VMs),
+  # so the launcher or `sweep` deletes it, and --max-run-duration catches the rest.
+  shutdown -h now
+}
+trap finish EXIT
+U=$(getent passwd 1000 | cut -d: -f1)
+[ -n "$U" ] || { useradd -m -s /bin/bash bench; U=bench; }
+H=/home/$U
+export AWS_DEFAULT_REGION=$BUCKET_REGION
+apt-get update -q
+apt-get install -y -q build-essential pkg-config libssl-dev numactl fio zstd
+[ "$CLOUD" = aws ] && { command -v aws || snap install aws-cli --classic; }
+sudo -u "$U" -H bash -c 'curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal'
+mkdir -p "$H/repo" && get "runs/$RUN/src.tgz" /tmp/src.tgz && tar xzf /tmp/src.tgz -C "$H/repo"
+# target/ built with target-cpu=native is only valid for this CPU model and these dependencies.
+KEY=$( (uname -m; grep -m1 -E 'model name|CPU part' /proc/cpuinfo; lscpu | grep -i 'model name'; cat "$H/repo/Cargo.lock") | sha256sum | cut -c1-16)
+if get "cache/$KEY.tar.zst" /tmp/cache.tar.zst; then
+  tar --zstd -xf /tmp/cache.tar.zst -C "$H"
+  HIT=1
+fi
+chown -R "$U:$U" "$H"
+echo always > /sys/kernel/mm/transparent_hugepage/enabled
+printf '%s\n' 'source ~/.cargo/env' 'cd ~/repo' "export RUSTFLAGS='-C target-cpu=native'" "$CMD" > /tmp/cmd.sh
+sudo -u "$U" -H bash /tmp/cmd.sh > /tmp/out.log 2>&1
+echo "exit $?" >> /tmp/out.log
+put /tmp/out.log "runs/$RUN/out.log"
+if [ -z "${HIT:-}" ]; then
+  tar --zstd -cf /tmp/cache.tar.zst -C "$H" .cargo/registry repo/target && put /tmp/cache.tar.zst "cache/$KEY.tar.zst"
+fi
+EOF
+}
+
+upload_source() { # $1 = destination URL
+  local tgz
+  tgz=$(mktemp -t bench-vm-src).tgz
+  (cd "$ROOT" && git ls-files -co --exclude-standard -z | COPYFILE_DISABLE=1 tar --null -T - -czf "$tgz")
+  if [ "$CLOUD" = aws ]; then aws s3 cp --quiet "$tgz" "$1"; else gcloud storage cp -q "$tgz" "$1"; fi
+  rm -f "$tgz"
+}
+
+store() { # bucket URL for $CLOUD
+  if [ "$CLOUD" = aws ]; then echo "s3://${AWS_BUCKET:?set AWS_BUCKET in .bench-vm.env}/$PREFIX"
+  else echo "gs://${GCP_BUCKET:?set GCP_BUCKET in .bench-vm.env}/$PREFIX"; fi
+}
+
+wait_result() { # $1 = run id
+  local out="$STORE/runs/$1/out.log" i
+  echo "bench-vm: waiting for $out" >&2
+  for i in $(seq 1 $((TTL * 3 + 30))); do
+    if [ "$CLOUD" = aws ]; then aws s3 cp --quiet "$out" - 2>/dev/null && return 0
+    else gcloud storage cat "$out" 2>/dev/null && return 0; fi
+    sleep 20
+  done
+  die "no output after ${TTL}m; the VM's own log is at $STORE/runs/$1/boot.log"
+}
+
+launch() {
+  CLOUD=$1 TYPE=$2; shift 2
+  TTL=60 DETACH= REGION= ZONE=
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --ttl) TTL=$2; shift 2 ;;
+      --region) REGION=$2; shift 2 ;;
+      --zone) ZONE=$2; shift 2 ;;
+      --detach) DETACH=1; shift ;;
+      --) shift; break ;;
+      *) die "unknown option $1" ;;
+    esac
+  done
+  [ $# -gt 0 ] || die "no command given after --"
+  CMD="$*"
+  RUN=$(date -u +%Y%m%d-%H%M%S)-$(echo "$TYPE" | tr . -)
+  STORE=$(store)
+  EXPIRES=$(( $(now) + TTL * 60 + 600 ))
+  upload_source "$STORE/runs/$RUN/src.tgz"
+  local vars boot
+  vars=$(printf 'CLOUD=%q\nRUN=%q\nSTORE=%q\nTTL=%q\nZONE=%q\nBUCKET_REGION=%q\nCMD=%q\n' \
+    "$CLOUD" "$RUN" "$STORE" "$TTL" "${ZONE:-${GCP_ZONE:-}}" "${AWS_BUCKET_REGION:-us-west-2}" "$CMD")
+  boot=$(mktemp -t bench-vm-boot)
+  { echo '#!/bin/bash'; echo "$vars"; boot_script | tail -n +3; } > "$boot"
+
+  if [ "$CLOUD" = aws ]; then
+    REGION=${REGION:-${AWS_REGIONS%% *}}
+    local arch subnet net id
+    arch=$(aws ec2 describe-instance-types --region "$REGION" --instance-types "$TYPE" \
+      --query 'InstanceTypes[0].ProcessorInfo.SupportedArchitectures[0]' --output text)
+    [ "$arch" = x86_64 ] && arch=amd64
+    subnet_var="AWS_SUBNET_${REGION//-/_}"
+    subnet=${!subnet_var:-}
+    if [ -n "$subnet" ]; then net=(--subnet-id "$subnet")
+    else net=(--associate-public-ip-address); fi
+    id=$(aws ec2 run-instances --region "$REGION" --instance-type "$TYPE" "${net[@]}" \
+      --image-id "resolve:ssm:/aws/service/canonical/ubuntu/server/24.04/stable/current/$arch/hvm/ebs-gp3/ami-id" \
+      --iam-instance-profile "Name=${AWS_INSTANCE_PROFILE:?set AWS_INSTANCE_PROFILE}" \
+      --user-data "file://$boot" --instance-initiated-shutdown-behavior terminate \
+      --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=100,VolumeType=gp3,DeleteOnTermination=true}' \
+      --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$TAG-$RUN},{Key=$TAG,Value=1},{Key=expires-at,Value=$EXPIRES}]" \
+      --query 'Instances[0].InstanceId' --output text)
+    echo "bench-vm: $id ($TYPE, $REGION), run $RUN, deletes itself within ${TTL}m" >&2
+  else
+    ZONE=${ZONE:-${GCP_ZONE:?set GCP_ZONE}}
+    local image=ubuntu-2404-lts-amd64 disk=pd-balanced
+    case $TYPE in c4a-*|t2a-*|n4a-*) image=ubuntu-2404-lts-arm64 ;; esac
+    case $TYPE in c4*|c3*|n4*|m4*|z3*) disk=hyperdisk-balanced ;; esac
+    gcloud compute instances create "$TAG-$RUN" --project "${GCP_PROJECT:?set GCP_PROJECT}" --zone "$ZONE" \
+      --machine-type "$TYPE" --image-family "$image" --image-project ubuntu-os-cloud \
+      --boot-disk-size 100GB --boot-disk-type "$disk" --scopes cloud-platform \
+      --max-run-duration "${TTL}m" --instance-termination-action DELETE \
+      --labels "$TAG=1,expires-at=$EXPIRES" --metadata-from-file "startup-script=$boot" \
+      --tags allow-ssh --quiet >&2
+    echo "bench-vm: $TAG-$RUN ($TYPE, $ZONE), deletes itself within ${TTL}m" >&2
+  fi
+  rm -f "$boot"
+  if [ -n "$DETACH" ]; then echo "$CLOUD $RUN"; return; fi
+  wait_result "$RUN"
+  if [ "$CLOUD" = gcp ]; then
+    gcloud compute instances delete "$TAG-$RUN" --project "$GCP_PROJECT" --zone "$ZONE" --quiet >&2
+  fi
+}
+
+list() { # $1 = only expired (1) or all
+  local t
+  t=$(now)
+  for r in ${AWS_REGIONS:-}; do
+    aws ec2 describe-instances --region "$r" \
+      --filters "Name=tag:$TAG,Values=1" Name=instance-state-name,Values=pending,running,stopping,stopped \
+      --query 'Reservations[].Instances[].[InstanceId,InstanceType,Tags[?Key==`expires-at`]|[0].Value]' \
+      --output text | while read -r id type exp; do
+        [ -z "$id" ] && continue
+        [ "${1:-}" = 1 ] && [ "${exp:-0}" -gt "$t" ] && continue
+        echo "aws $r $id $type expires=$(( (${exp:-0} - t) / 60 ))m"
+      done
+  done
+  if [ -n "${GCP_PROJECT:-}" ]; then
+    gcloud compute instances list --project "$GCP_PROJECT" --filter "labels.$TAG=1" \
+      --format 'value(name,zone.basename(),machineType.basename(),labels.expires-at,status)' | while read -r n z type exp st; do
+        [ "${1:-}" = 1 ] && [ "$st" != TERMINATED ] && [ "$st" != STOPPING ] && [ "${exp:-0}" -gt "$t" ] && continue
+        echo "gcp $z $n $type expires=$(( (${exp:-0} - t) / 60 ))m $st"
+      done
+  fi
+}
+
+sweep() {
+  list 1 | while read -r cloud where id _; do
+    echo "bench-vm: deleting $cloud $where $id" >&2
+    if [ "$cloud" = aws ]; then aws ec2 terminate-instances --region "$where" --instance-ids "$id" >/dev/null
+    else gcloud compute instances delete "$id" --project "$GCP_PROJECT" --zone "$where" --quiet; fi
+  done
+}
+
+case ${1:-} in
+  aws|gcp) launch "$@" ;;
+  result) CLOUD=${2:?aws or gcp}; STORE=$(store); TTL=60; wait_result "${3:?run id}" ;;
+  list) list ;;
+  sweep) sweep ;;
+  *) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac

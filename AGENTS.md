@@ -37,6 +37,9 @@ make test                                        # each benchmark once, smoke te
 - `./run` adds `-C target-cpu=native` to `RUSTFLAGS`. `NAPKIN_TUNE=1` (turbo off,
   `performance` governor, ASLR off) is for A/B runs on one host, not README numbers.
 - Check `df -h` before disk benchmarks; `storage` needs 2x the test size.
+- For a fresh VM, use `script/bench-vm` (see BENCHMARKING.md): it deletes the VM
+  when done and by a hard deadline. Run `script/bench-vm sweep` at the end of a
+  session. Its account settings live in the gitignored `.bench-vm.env`.
 
 ## Gotchas found the hard way
 
@@ -54,6 +57,15 @@ make test                                        # each benchmark once, smoke te
 - Graviton sha256/crc32/blake3 numbers are crate-specific (no ARM crypto
   instructions in this build), not hardware limits.
 - The bench binary uses jemalloc; the random-memory numbers depend on it.
+- One 64-byte AVX-512 load per cache line never triggers Intel's L1 streaming
+  prefetcher, so DRAM-sized AVX-512 reads need software prefetch (1 KiB ahead
+  to L1 and 16 KiB to L2) to match AVX2.
+- Measure SSDs across all of a VM's local disks (RAID0), not one: GCP caps each
+  375 GiB disk at 625 / 330 MiB/s, so one disk understates the VM ~8x. Compare
+  against the provider's published limits.
+- Match local disks by model (`nvme_card[0-9]` on GCP, "Instance Storage" on
+  AWS); GCP's boot disk is `nvme_card-pd`. If `/dev/md0` doesn't exist, `fio`
+  happily creates a file there in RAM and reports ~60 GiB/s.
 
 ## README policy
 

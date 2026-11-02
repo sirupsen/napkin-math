@@ -10,3 +10,4 @@ newsletter/**/*.index
 newsletter/**/embeddings.json
 AGENTS.local.md
 .review/
+.bench-vm.env

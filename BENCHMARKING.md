@@ -4,6 +4,25 @@ How the numbers in the [README](README.md) are measured, and how to refresh
 them. Everything here runs on Linux; the Criterion suite also builds on macOS
 (without the Linux-only groups and host tuning).
 
+## Running on a fresh VM
+
+```bash
+script/bench-vm aws m8g.48xlarge --ttl 60 -- 'cargo bench --bench napkin_math -- memory_'
+script/bench-vm gcp c4-standard-48-lssd --ttl 45 --detach -- 'cargo bench --bench storage -- ...'
+script/bench-vm list      # bench VMs still alive
+script/bench-vm sweep     # delete any past their deadline
+```
+
+`script/bench-vm` uploads the working tree to a bucket and boots an Ubuntu 24.04
+VM that installs Rust, restores a `target/` cached for its CPU model and
+`Cargo.lock`, runs the command in the repo with `-C target-cpu=native`, uploads
+the output, and deletes itself (GCP VMs only stop, so the launcher deletes them
+once the output is in). Every VM also has a hard deadline: a shutdown timer
+plus terminate-on-shutdown on AWS, `--max-run-duration` with `DELETE` on GCP.
+A cold run takes 2-4 minutes from launch to output. Bucket, project and
+instance profile go in a gitignored `.bench-vm.env`; the script's header lists
+the keys.
+
 ## Criterion suite
 
 ```bash
@@ -64,6 +83,43 @@ single-thread row and one threaded row for memorability. `memory_random` issues
 independent loads, so the CPU overlaps misses; that is throughput, which is why
 the latency cell comes from `memory_random_read_latency` instead.
 
+### SIMD width, prefetching and NUMA
+
+"SIMD" is the widest the CPU has: AVX-512, else AVX2, else the NEON that LLVM
+emits on ARM. On AVX-512 hosts the groups add an `AVX2` row for comparison. On
+November 1, 2026, single thread, in GiB/s, on a c4-standard-48 (Xeon 8581C), an
+m8i.12xlarge (Xeon 6975P-C) and an m8g.48xlarge (Graviton4):
+
+| Read | C4 AVX-512 | C4 AVX2 | m8i AVX-512 | m8i AVX2 | Graviton4 NEON |
+| --- | --- | --- | --- | --- | --- |
+| 16 KiB (L1) | 327 | 213 | 302 | 223 | 80 |
+| 256 KiB (L2) | 168 | 151 | 175 | 147 | 75 |
+| 8 MiB (L3) | 35 | 36 | 28 | 28 | 53 |
+| 1 GiB (DRAM) | 18.7 | 15.6 | 21.4 | 20.7 | 31 |
+
+Wider vectors pay off in L1 and L2, not from DRAM, where the core's limit on
+outstanding misses sets the speed. The Graviton4 cache numbers look limited by
+the compiled loop (one 16-byte load per add), not the hardware, which is why the
+README's L1 row stays at 200 GiB/s for now.
+
+AVX-512 from DRAM first ran at 17 GiB/s on m8i, below AVX2 (22) and scalar
+(20). It wasn't the clock: 256- and 512-bit adds both ran at 3.86 GHz. Intel's
+L1 streaming prefetcher only starts on a second ascending load to a line that
+was just loaded; AVX2 makes two loads per 64-byte line and AVX-512 one. An AVX2
+loop that reads only half of each line drops to the same 18.5 GiB/s. More
+accumulators, more streams, and one software prefetch per line at 0.5-8 KiB
+only got AVX-512 to 19. Prefetching both 1 KiB ahead into L1 and 16 KiB ahead
+into L2 got it to 23 GiB/s on m8i and 18.5 on C4, so buffers over 64 MiB now
+take that path.
+
+On a two-socket m8g.48xlarge (Graviton4, 96 cores per socket), with `numactl`
+pinning threads to node 0 and memory to node 0 or node 1: random read latency
+113 ns local and 258 ns remote (135 / 282 ns with 4 KiB pages); one thread
+reads 31 GiB/s local and 16 remote; 96 threads read 325 GiB/s local and 62
+GiB/s remote, the socket-to-socket link. 192 threads over both sockets read
+210 GiB/s, which says more about 5 MiB per thread being too short than about
+the hardware. The 48 vCPU VMs the README uses have one NUMA node.
+
 ## SSD, Network Disk and HDD rows
 
 ```bash
@@ -96,6 +152,20 @@ seek across all of it. The October 2026 rows came from local NVMe on GCP C4 and
 AWS m8id/m8gd, EBS gp3 at 16k IOPS / 1000 MiB/s, GCP Hyperdisk Balanced at
 80k IOPS / 1600 MiB/s on a c4-standard-16, and the instance-store HDDs of an AWS
 d3.xlarge.
+
+On November 1, 2026, all local disks of a VM were striped (`mdadm` RAID0, 256
+KiB chunks) and measured with `storage` and `fio` (io_uring, 4 KiB random at
+QD64 x 16 jobs). Each met or beat its published limit:
+
+| Whole VM | Seq read 1 MiB | Seq write 1 MiB | 4 KiB rand read | 4 KiB rand write | 8 KiB rand read QD128 / QD1 | 8 KiB rand write QD128 / QD1 |
+| --- | --- | --- | --- | --- | --- | --- |
+| c4-standard-48-lssd, 8 x 375 GiB | 5.2 GiB/s (limit 5,000 MiB/s) | 2.7 GiB/s (2,640) | 1.33M IOPS (1.2M) | 683k (600k) | 5.2 GiB/s / 94 us | 2.7 GiB/s / 39 us |
+| m8id.12xlarge, 1 x 2850 GB | 6.1 GiB/s | 2.7 GiB/s | 858k (805k) | 429k (402k) | 5.9 GiB/s / 94 us | 2.8 GiB/s / 31 us |
+| m8gd.12xlarge, 3 x 950 GB | 6.0 GiB/s | 2.7 GiB/s | 850k (805k) | 423k (402k) | 5.9 GiB/s / 71 us | 2.8 GiB/s / 19 us |
+
+AWS publishes no throughput limit for instance store. The README's SSD rows used
+to come from one of the C4's 8 disks (650 MiB/s read, 335 write, its per-disk
+caps), which is why they were 2-4 GiB/s.
 
 Those numbers were first measured with `fio`. On October 27, 2026, `storage` and
 `fio` ran side by side on m8id instance store, EBS gp3, C4 local SSD, Hyperdisk

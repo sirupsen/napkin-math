@@ -109,6 +109,11 @@ impl Drop for ThreadedMemoryReadBenchmark {
 pub(super) fn memory_read_sequential_single_thread_vectorized(vec: &[Int]) -> u64 {
     #[cfg(target_arch = "x86_64")]
     {
+        if is_x86_feature_detected!("avx512f") {
+            unsafe {
+                return memory_read_sequential_single_thread_avx512(vec);
+            }
+        }
         if is_x86_feature_detected!("avx2") {
             unsafe {
                 return memory_read_sequential_single_thread_vectorized_avx2(vec);
@@ -154,6 +159,71 @@ unsafe fn memory_read_sequential_single_thread_vectorized_avx2(vec: &[Int]) -> u
     let mut sum = lanes.iter().copied().sum::<u64>();
     while i < vec.len() {
         sum = sum.wrapping_add(unsafe { *ptr.add(i) });
+        i += 1;
+    }
+
+    sum
+}
+
+// Forces the AVX2 path, to compare against AVX-512 on the same CPU.
+#[inline(never)]
+#[no_mangle]
+pub(super) fn memory_read_sequential_single_thread_avx2(vec: &[Int]) -> u64 {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe {
+                return memory_read_sequential_single_thread_vectorized_avx2(vec);
+            }
+        }
+    }
+    memory_read_sequential_single_thread_vectorized(vec)
+}
+
+// 64-byte loads, a full cache line each, into eight independent accumulators.
+//
+// Intel's L1 streaming prefetcher only kicks in on a second load to a line that was just loaded,
+// which AVX2's two 32-byte loads per line give it and one 64-byte load doesn't. Without it, a
+// DRAM-sized read on Granite Rapids ran at 17 GiB/s against 22 GiB/s for AVX2. Prefetching 1 KiB
+// ahead into L1 and 16 KiB ahead into L2 brings it to 23 GiB/s. Buffers that fit in cache skip
+// the prefetches, which would only take load slots there.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f")]
+unsafe fn memory_read_sequential_single_thread_avx512(vec: &[Int]) -> u64 {
+    if vec.len() * std::mem::size_of::<Int>() > 64 << 20 {
+        memory_read_avx512::<true>(vec)
+    } else {
+        memory_read_avx512::<false>(vec)
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f")]
+unsafe fn memory_read_avx512<const PREFETCH: bool>(vec: &[Int]) -> u64 {
+    let mut acc = [_mm512_setzero_si512(); 8];
+    let mut i = 0usize;
+    let ptr = vec.as_ptr();
+
+    while i + 64 <= vec.len() {
+        for (j, a) in acc.iter_mut().enumerate() {
+            let line = ptr.add(i + j * 8);
+            if PREFETCH {
+                // Prefetches never fault, so running past the end is fine.
+                _mm_prefetch::<_MM_HINT_T0>(line.cast::<i8>().wrapping_add(1 << 10));
+                _mm_prefetch::<_MM_HINT_T1>(line.cast::<i8>().wrapping_add(16 << 10));
+            }
+            *a = _mm512_add_epi64(*a, _mm512_loadu_si512(line as *const _));
+        }
+        i += 64;
+    }
+
+    let mut total = acc[0];
+    for a in &acc[1..] {
+        total = _mm512_add_epi64(total, *a);
+    }
+    let mut sum = _mm512_reduce_add_epi64(total) as u64;
+    while i < vec.len() {
+        sum = sum.wrapping_add(*ptr.add(i));
         i += 1;
     }
 
@@ -239,9 +309,16 @@ fn memory_sequential_read_benchmark(c: &mut Criterion) {
     group.bench_function("1 thread, No SIMD", |b| {
         b.iter(|| black_box(memory_read_sequential_single_thread_non_vectorized(&vec)))
     });
+    // "SIMD" is the widest the CPU has: AVX-512, else AVX2, else what LLVM emits (NEON on ARM).
     group.bench_function("1 thread, SIMD", |b| {
         b.iter(|| black_box(memory_read_sequential_single_thread_vectorized(&vec)))
     });
+    #[cfg(target_arch = "x86_64")]
+    if is_x86_feature_detected!("avx512f") {
+        group.bench_function("1 thread, AVX2", |b| {
+            b.iter(|| black_box(memory_read_sequential_single_thread_avx2(&vec)))
+        });
+    }
     group.bench_function(format!("{} threads, No SIMD", core_ids.len()), |b| {
         b.iter(|| {
             black_box(threaded_non_vectorized.run());
