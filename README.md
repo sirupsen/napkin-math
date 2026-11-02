@@ -31,23 +31,23 @@ yourself.
 | GPU Memory Sequential Read (B200)                              |            | 7 TiB/s    |
 | GPU ↔ GPU Transfer, NVLink (B200)                              |            | 800 GiB/s  |
 | Memory Sequential Read, all cores                              |            | 200 GiB/s  |
-| L1 Cache Read                                                  | 1 ns       | 200 GiB/s  |
+| L1 Cache Read, 1 thread                                        | 1 ns       | 200 GiB/s  |
 | Memory Sequential Write, all cores                             |            | 150 GiB/s  |
-| L2 Cache Read                                                  | 5 ns       | 150 GiB/s  |
+| L2 Cache Read, 1 thread                                        | 5 ns       | 150 GiB/s  |
 | Memory Random Read (64 bytes), all cores                       |            | 100 GiB/s  |
 | Memory Random Write (64 bytes), all cores                      |            | 100 GiB/s  |
 | Memory Sequential Read, other socket, all cores‡               |            | 60 GiB/s   |
 | GPU ↔ CPU Transfer, PCIe (B200)                                | 10 μs      | 50 GiB/s   |
 | Network RDMA, GPU (400 Gbit/s)                                 | 5 μs       | 40 GiB/s   |
-| L3 Cache Read                                                  | 30 ns      | 30 GiB/s   |
+| L3 Cache Read, 1 thread                                        | 30 ns      | 30 GiB/s   |
 | Memory Sequential Read, 1 thread                               |            | 20 GiB/s   |
 | Memory Sequential Read, other socket, 1 thread‡                |            | 15 GiB/s   |
 | Memory Sequential Write, 1 thread                              |            | 10 GiB/s   |
-| CPU Encrypt / Decrypt (AES-256-GCM)                            |            | 10 GiB/s   |
-| CPU Encode / Decode Bitpacked Integers                         |            | 10 GiB/s   |
-| SSD Sequential Read                                            |            | 5 GiB/s    |
-| CPU Hash, not crypto-safe (64 bytes)                           | 10 ns      | 5 GiB/s    |
-| SSD Random Read (8 KiB)                                        | 100 μs     | 5 GiB/s    |
+| CPU Encrypt / Decrypt (AES-256-GCM), 1 thread                  |            | 10 GiB/s   |
+| CPU Encode / Decode Bitpacked Integers, 1 thread               |            | 10 GiB/s   |
+| SSD Sequential Read, 1 thread                                  |            | 5 GiB/s    |
+| CPU Hash, not crypto-safe (64 bytes), 1 thread                 | 10 ns      | 5 GiB/s    |
+| SSD Random Read (8 KiB), 2 threads                             | 100 μs     | 5 GiB/s    |
 | Network Bandwidth                                              |            | 3 GiB/s    |
 | Network Same-Zone                                              | 100 μs     | NW Limit   |
 | Network Cross-Zone                                             | 500 μs     | NW Limit   |
@@ -59,24 +59,24 @@ yourself.
 | Blob Storage, Regional Write (128 KiB)                         | 100 ms     | NW Limit   |
 | Blob Storage, Zonal Write (128 KiB)                            | 100 ms     | NW Limit   |
 | Memory Random Write (64 bytes), 1 thread                       |            | 3 GiB/s    |
-| SSD Sequential Write                                           |            | 3 GiB/s    |
+| SSD Sequential Write, 1 thread                                 |            | 3 GiB/s    |
 | Memory Random Read (64 bytes), 1 thread                        | 100 ns     | 3 GiB/s    |
-| SSD Random Write (8 KiB)                                       | 30 μs      | 3 GiB/s    |
-| CPU Decode Parquet (dictionary + zstd)                         |            | 2 GiB/s    |
+| SSD Random Write (8 KiB), 1 thread                             | 30 μs      | 3 GiB/s    |
+| CPU Decode Parquet (dictionary + zstd), 1 thread               |            | 2 GiB/s    |
 | SSD Sequential Durable Write (64 KiB)†                         | 50 μs      | 2 GiB/s    |
-| CPU Serialize (JSON, Protobuf)                                 |            | 1 GiB/s    |
-| CPU Decompress (lz4, zstd -1)                                  |            | 1 GiB/s    |
+| CPU Serialize (JSON, Protobuf), 1 thread                       |            | 1 GiB/s    |
+| CPU Decompress (lz4, zstd -1), 1 thread                        |            | 1 GiB/s    |
 | Network Disk, Zonal Sequential Read                            |            | 1 GiB/s    |
 | Network Disk, Regional Sequential Read                         |            | 1 GiB/s    |
 | Network Disk, Zonal Sequential Write                           |            | 1 GiB/s    |
 | Network Disk, Regional Sequential Write                        |            | 1 GiB/s    |
-| CPU Hash, crypto-safe (64 bytes)                               | 100 ns     | 1 GiB/s    |
+| CPU Hash, crypto-safe (64 bytes), 1 thread                     | 100 ns     | 1 GiB/s    |
 | Network Disk, Zonal Sequential Durable Write (64 KiB)†         | 1 ms       | 1 GiB/s    |
 | Network Disk, Regional Sequential Durable Write (64 KiB)†      | 2 ms       | 1 GiB/s    |
-| CPU Compress (lz4, zstd -1)                                    |            | 500 MiB/s  |
-| CPU Sort (64-bit integers)                                     |            | 500 MiB/s  |
-| CPU Deserialize (JSON, Protobuf)                               |            | 300 MiB/s  |
-| CPU Encode Parquet (dictionary + zstd)                         |            | 300 MiB/s  |
+| CPU Compress (lz4, zstd -1), 1 thread                          |            | 500 MiB/s  |
+| CPU Sort (64-bit integers), 1 thread                           |            | 500 MiB/s  |
+| CPU Deserialize (JSON, Protobuf), 1 thread                     |            | 300 MiB/s  |
+| CPU Encode Parquet (dictionary + zstd), 1 thread               |            | 300 MiB/s  |
 | Network Disk, Zonal, HDD Sequential Read                       |            | 250 MiB/s  |
 | Network Disk, Zonal, HDD Sequential Write                      |            | 250 MiB/s  |
 | Network Disk, Regional, HDD Sequential Read                    |            | 250 MiB/s  |
@@ -130,19 +130,19 @@ at 100 ms. Add connections to go faster.
 
 Throughput is with enough requests in flight to max out a 48 vCPU VM (AWS m8,
 GCP C4) and its disks (EBS gp3, Hyperdisk Balanced at max provisioning; HDDs are
-2 TB pd-standard), except CPU rows, which are one thread on one core and scale
-with cores until memory bandwidth runs out (on x86 a vCPU is half a core). One
-thread with one request in flight gets size / latency instead: 8 KiB random SSD
-reads at 100 μs are 80 MiB/s, writes at 30 μs 250 MiB/s. One thread with
-io_uring and 32-256 requests in flight gets all of a VM's SSD bandwidth except
-small random reads, where one core tops out at 500-850k IOPS. One thread reading
-a file sequentially gets 1-5 GiB/s, from kernel readahead. One TCP flow gets the
-VM's bandwidth on GCP but 5 Gbit/s (600 MiB/s) on AWS outside a placement group,
-and 2 MiB / RTT across regions (\*). Regional disks copy every write to a second
-zone, so only their write latency differs. Blob Storage latency is p99 from the
-same region; Zonal is S3 Express One Zone and GCS Rapid. Conditional writes are
-compare-and-swap on one object, one at a time; regional GCS also allows only ~1
-write per second to the same object. Region-to-region latencies:
+2 TB pd-standard). CPU and memory rows marked 1 thread scale with cores until
+memory bandwidth runs out (on x86 a vCPU is half a core). One thread with one
+request in flight gets size / latency instead: 8 KiB random SSD reads at 100 μs
+are 80 MiB/s, writes at 30 μs 250 MiB/s. SSD rows use io_uring with 32-128
+requests in flight per thread; one core tops out at 500-850k small random reads
+per second, hence two threads. One thread reading a file sequentially gets 1-5
+GiB/s, from kernel readahead. One TCP flow gets the VM's bandwidth on GCP but 5
+Gbit/s (600 MiB/s) on AWS outside a placement group, and 2 MiB / RTT across
+regions (\*). Regional disks copy every write to a second zone, so only their
+write latency differs. Blob Storage latency is p99 from the same region; Zonal
+is S3 Express One Zone and GCS Rapid. Conditional writes are compare-and-swap on
+one object, one at a time; regional GCS also allows only ~1 write per second to
+the same object. Region-to-region latencies:
 [cloudping](https://www.cloudping.co/).
 
 ## Cost Numbers

@@ -1,7 +1,12 @@
 // SSD, Network Disk and HDD rows: sequential and random reads and writes with
-// O_DIRECT, and buffered 8 KiB sequential reads and writes. No dependencies.
-// Queue depth comes from threads: N threads each doing one blocking pread or
-// pwrite at a time keep N requests in flight, a queue depth of N.
+// O_DIRECT, and buffered 8 KiB sequential reads and writes.
+//
+// On Linux the O_DIRECT tests use io_uring: each thread keeps `depth` requests
+// in flight on its own ring, with the file and buffers registered and
+// completions reaped a quarter of the queue at a time. One thread is enough
+// for everything but small random reads, which cost a core ~1.5 us each; those
+// get two. Elsewhere, and for buffered I/O, each thread does one blocking pread
+// or pwrite at a time, so `threads x depth` threads keep that many in flight.
 //
 //   cargo bench --bench storage -- /mnt/disk/disk.dat                 # a file on a mounted file system
 //   cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1   # an unused raw device
@@ -71,6 +76,7 @@ struct Test {
     pattern: Pattern,
     block: u64,
     threads: usize,
+    depth: usize,
     direct: bool,
 }
 
@@ -102,41 +108,131 @@ fn drop_page_cache() {
     }
 }
 
-/// One test: `threads` workers, each with one request in flight, for `secs`
-/// (or, with `once`, until the range has been covered a single time).
+/// Picks the next block: all threads share one cursor for sequential I/O, so
+/// together they cover the range front to back; random I/O draws from a
+/// per-thread xorshift. None when a `once` pass has covered the range.
+struct Cursor {
+    next: Arc<AtomicU64>,
+    rng: u64,
+    pattern: Pattern,
+    blocks: u64,
+    once: bool,
+}
+
+impl Cursor {
+    fn next(&mut self) -> Option<u64> {
+        match self.pattern {
+            Pattern::Sequential => {
+                let n = self.next.fetch_add(1, Ordering::Relaxed);
+                if n >= self.blocks && self.once {
+                    return None;
+                }
+                Some(n % self.blocks)
+            }
+            Pattern::Random => {
+                self.rng ^= self.rng << 13;
+                self.rng ^= self.rng >> 7;
+                self.rng ^= self.rng << 17;
+                Some(self.rng % self.blocks)
+            }
+        }
+    }
+}
+
+/// `depth` requests in flight on one io_uring until `stop` (or the end of a
+/// `once` pass); returns each request's latency in ns.
+#[cfg(target_os = "linux")]
+fn uring_worker(file: &File, op: Op, block: u64, depth: usize, cur: &mut Cursor, stop: &AtomicBool) -> Vec<u32> {
+    use io_uring::{opcode, types, IoUring};
+    use std::os::unix::io::AsRawFd;
+
+    let mut ring = IoUring::new(depth.next_power_of_two() as u32).expect("io_uring");
+    let mut bufs: Vec<Buf> = (0..depth).map(|_| Buf::new(block as usize)).collect();
+    let iovecs: Vec<libc::iovec> = bufs
+        .iter_mut()
+        .map(|b| libc::iovec { iov_base: b.0.cast(), iov_len: b.1 })
+        .collect();
+    // Registered buffers need RLIMIT_MEMLOCK headroom (root has it); without
+    // them, fall back to plain reads and writes.
+    let fixed = unsafe { ring.submitter().register_buffers(&iovecs) }.is_ok();
+    ring.submitter().register_files(&[file.as_raw_fd()]).expect("register file");
+    let fd = types::Fixed(0);
+    let mut started = vec![Instant::now(); depth];
+    let mut lat: Vec<u32> = Vec::with_capacity(1 << 20);
+    let mut in_flight = 0usize;
+    let mut done = false;
+
+    let entry = |slot: usize, index: u64| {
+        let (ptr, len, off) = (bufs[slot].0, block as u32, index * block);
+        let e = match (op, fixed) {
+            (Op::Read, true) => opcode::ReadFixed::new(fd, ptr, len, slot as u16).offset(off).build(),
+            (Op::Read, false) => opcode::Read::new(fd, ptr, len).offset(off).build(),
+            (Op::Write, true) => opcode::WriteFixed::new(fd, ptr, len, slot as u16).offset(off).build(),
+            (Op::Write, false) => opcode::Write::new(fd, ptr, len).offset(off).build(),
+        };
+        e.user_data(slot as u64)
+    };
+    for slot in 0..depth {
+        let Some(index) = cur.next() else { done = true; break };
+        started[slot] = Instant::now();
+        unsafe { ring.submission().push(&entry(slot, index)).unwrap() };
+        in_flight += 1;
+    }
+    let mut free = Vec::with_capacity(depth);
+    while in_flight > 0 {
+        let want = (depth / 4).max(1).min(in_flight);
+        ring.submit_and_wait(want).expect("io_uring submit");
+        let now = Instant::now();
+        for cqe in ring.completion() {
+            let slot = cqe.user_data() as usize;
+            assert_eq!(cqe.result(), block as i32, "short or failed I/O");
+            lat.push(now.duration_since(started[slot]).as_nanos().min(u32::MAX as u128) as u32);
+            free.push(slot);
+        }
+        in_flight -= free.len();
+        if stop.load(Ordering::Relaxed) {
+            done = true;
+        }
+        for slot in free.drain(..) {
+            if done {
+                continue;
+            }
+            let Some(index) = cur.next() else { done = true; continue };
+            started[slot] = Instant::now();
+            unsafe { ring.submission().push(&entry(slot, index)).unwrap() };
+            in_flight += 1;
+        }
+    }
+    lat
+}
+
+/// One test: `threads` workers keeping `depth` requests in flight each, for
+/// `secs` (or, with `once`, until the range has been covered a single time).
 fn run(path: &str, size: u64, t: &Test, secs: u64, once: bool) {
     let file = Arc::new(open(path, t.direct));
     let next = Arc::new(AtomicU64::new(0));
     let stop = Arc::new(AtomicBool::new(false));
     let blocks = size / t.block;
+    let uring = cfg!(target_os = "linux") && t.direct;
+    // Without io_uring, depth comes from more blocking threads.
+    let (threads, depth) = if uring { (t.threads, t.depth) } else { (t.threads * t.depth, 1) };
     let start = Instant::now();
-    let workers: Vec<_> = (0..t.threads)
+    let workers: Vec<_> = (0..threads)
         .map(|i| {
             let (file, next, stop) = (file.clone(), next.clone(), stop.clone());
             let (op, pattern, block) = (t.op, t.pattern, t.block);
             std::thread::spawn(move || {
+                let rng = 0x9e3779b97f4a7c15u64 ^ (i as u64 + 1).wrapping_mul(0xbf58476d1ce4e5b9);
+                let mut cur = Cursor { next, rng, pattern, blocks, once };
+                #[cfg(target_os = "linux")]
+                if uring {
+                    return uring_worker(&file, op, block, depth, &mut cur, &stop);
+                }
+                let _ = depth;
                 let mut buf = Buf::new(block as usize);
-                let mut rng =
-                    0x9e3779b97f4a7c15u64 ^ (i as u64 + 1).wrapping_mul(0xbf58476d1ce4e5b9);
                 let mut lat: Vec<u32> = Vec::with_capacity(1 << 16);
                 while !stop.load(Ordering::Relaxed) {
-                    let index = match pattern {
-                        // All threads share one cursor, so together they read
-                        // or write the range front to back.
-                        Pattern::Sequential => {
-                            let n = next.fetch_add(1, Ordering::Relaxed);
-                            if n >= blocks && once {
-                                break;
-                            }
-                            n % blocks
-                        }
-                        Pattern::Random => {
-                            rng ^= rng << 13;
-                            rng ^= rng >> 7;
-                            rng ^= rng << 17;
-                            rng % blocks
-                        }
-                    };
+                    let Some(index) = cur.next() else { break };
                     let begin = Instant::now();
                     match op {
                         Op::Read => file.read_exact_at(buf.get_mut(), index * block).unwrap(),
@@ -171,7 +267,7 @@ fn run(path: &str, size: u64, t: &Test, secs: u64, once: bool) {
         } else {
             format!("{}K", t.block / KIB)
         },
-        format!("x{}", t.threads),
+        format!("{}x{}", t.threads, t.depth),
         ops,
         ops * t.block as f64 / MIB as f64,
         pct(0.5),
@@ -248,20 +344,22 @@ fn main() {
     }
     println!("{}: {} GiB, {} s per test", path, size >> 30, secs);
 
-    let seq = |name, op, block, threads, direct| Test {
+    let seq = |name, op, block, depth, direct| Test {
         name,
         op,
         pattern: Pattern::Sequential,
         block,
-        threads,
+        threads: 1,
+        depth,
         direct,
     };
-    let rand = |name, op, threads| Test {
+    let rand = |name, op, threads, depth| Test {
         name,
         op,
         pattern: Pattern::Random,
         block: 8 * KIB,
         threads,
+        depth,
         direct: true,
     };
     // A file always gets written first: reading a hole never touches the disk.
@@ -292,28 +390,28 @@ fn main() {
     run(
         &path,
         size,
-        &rand("rand_read_8k_qd1", Op::Read, 1),
+        &rand("rand_read_8k_qd1", Op::Read, 1, 1),
         secs,
         false,
     );
     run(
         &path,
         size,
-        &rand("rand_read_8k_qd128", Op::Read, 128),
+        &rand("rand_read_8k_qd128", Op::Read, 2, 64),
         secs,
         false,
     );
     run(
         &path,
         size,
-        &rand("rand_write_8k_qd1", Op::Write, 1),
+        &rand("rand_write_8k_qd1", Op::Write, 1, 1),
         secs,
         false,
     );
     run(
         &path,
         size,
-        &rand("rand_write_8k_qd128", Op::Write, 128),
+        &rand("rand_write_8k_qd128", Op::Write, 1, 128),
         secs,
         false,
     );

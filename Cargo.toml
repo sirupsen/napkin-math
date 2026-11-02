@@ -50,6 +50,9 @@ sha2 = "0.11"
 tikv-jemallocator = "0.7"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+io-uring = "0.7"
+
 [[bench]]
 name = "napkin_math"
 harness = false

@@ -162,10 +162,16 @@ cargo bench --bench storage -- /mnt/nvme/disk.dat                       # a file
 cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1      # an unused raw device
 ```
 
-`benches/storage.rs` has no dependencies. It runs sequential 1 MiB reads and
-writes at QD32, random 8 KiB reads and writes at QD1 and QD128, and buffered
-8 KiB sequential reads and writes, all with `O_DIRECT` except the buffered ones.
-Queue depth is N threads, each with one `pread` or `pwrite` in flight. It writes
+`benches/storage.rs` runs sequential 1 MiB reads and writes at QD32, random
+8 KiB reads and writes at QD1 and QD128, and buffered 8 KiB sequential reads
+and writes, all with `O_DIRECT` except the buffered ones. On Linux the
+`O_DIRECT` tests use io_uring (the only dependency): one thread with its own
+ring, the file and buffers registered, reaping completions a quarter of the
+queue at a time. Random reads at QD128 use two threads of 64, because one core
+does only 500-850k small reads per second. Elsewhere, and for buffered I/O,
+queue depth comes from that many threads each doing one blocking `pread` or
+`pwrite`. On November 2, 2026, one thread (two for random reads) matched the
+earlier 32-128-thread runs on all three NVMe VMs, within 14%. It writes
 the whole range first (reads of never-written blocks can skip the flash), drops
 the page cache before buffered reads, checks that the file system the file
 actually lands on has 2x the test size free, and refuses to write to a mounted
