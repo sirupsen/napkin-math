@@ -22,7 +22,7 @@ newsletter.
 ## Numbers
 
 Below are numbers rounded for memorization, not faux precision. Last measured
-in October 2026 on GCP `c4-standard-48-lssd` and AWS `m8id.12xlarge` /
+in October-November 2026 on GCP `c4-standard-48-lssd` and AWS `m8id.12xlarge` /
 `m8gd.12xlarge` (Graviton4). See [BENCHMARKING.md](BENCHMARKING.md) to run them
 yourself.
 
@@ -31,18 +31,18 @@ yourself.
 | GPU Memory Sequential Read (B200)                              |            | 7 TiB/s    |
 | GPU ↔ GPU Transfer, NVLink (B200)                              |            | 800 GiB/s  |
 | Memory Sequential Read, all cores                              |            | 200 GiB/s  |
+| Memory Sequential Write, all cores                             |            | 200 GiB/s  |
 | L1 Cache Read, 1 thread                                        | 1 ns       | 200 GiB/s  |
-| Memory Sequential Write, all cores                             |            | 150 GiB/s  |
 | L2 Cache Read, 1 thread                                        | 5 ns       | 150 GiB/s  |
 | Memory Random Read (64 bytes), all cores                       |            | 100 GiB/s  |
 | Memory Random Write (64 bytes), all cores                      |            | 100 GiB/s  |
 | Memory Sequential Read, other socket, all cores‡               |            | 60 GiB/s   |
 | GPU ↔ CPU Transfer, PCIe (B200)                                | 10 μs      | 50 GiB/s   |
-| Network RDMA, GPU (400 Gbit/s)                                 | 5 μs       | 40 GiB/s   |
+| GPU ↔ GPU Network, RDMA (400 Gbit/s)                           | 5 μs       | 40 GiB/s   |
+| Memory Sequential Write, 1 thread                              |            | 30 GiB/s   |
 | L3 Cache Read, 1 thread                                        | 30 ns      | 30 GiB/s   |
 | Memory Sequential Read, 1 thread                               |            | 20 GiB/s   |
 | Memory Sequential Read, other socket, 1 thread‡                |            | 15 GiB/s   |
-| Memory Sequential Write, 1 thread                              |            | 10 GiB/s   |
 | CPU Encrypt / Decrypt (AES-256-GCM), 1 thread                  |            | 10 GiB/s   |
 | CPU Encode / Decode Bitpacked Integers, 1 thread               |            | 10 GiB/s   |
 | SSD Sequential Read, 1 thread                                  |            | 5 GiB/s    |
@@ -63,7 +63,7 @@ yourself.
 | Memory Random Read (64 bytes), 1 thread                        | 100 ns     | 3 GiB/s    |
 | SSD Random Write (8 KiB), 1 thread                             | 30 μs      | 3 GiB/s    |
 | CPU Decode Parquet (dictionary + zstd), 1 thread               |            | 2 GiB/s    |
-| SSD Sequential Durable Write (64 KiB)†                         | 50 μs      | 2 GiB/s    |
+| SSD Sequential Durable Write (64 KiB), 1 thread†               | 50 μs      | 2 GiB/s    |
 | CPU Serialize (JSON, Protobuf), 1 thread                       |            | 1 GiB/s    |
 | CPU Decompress (lz4, zstd -1), 1 thread                        |            | 1 GiB/s    |
 | Network Disk, Zonal Sequential Read                            |            | 1 GiB/s    |
@@ -131,19 +131,20 @@ at 100 ms. Add connections to go faster.
 Throughput is with enough requests in flight to max out a 48 vCPU VM (AWS m8,
 GCP C4) and its disks (EBS gp3, Hyperdisk Balanced at max provisioning; HDDs are
 2 TB pd-standard). CPU and memory rows marked 1 thread scale with cores until
-memory bandwidth runs out (on x86 a vCPU is half a core). One thread with one
-request in flight gets size / latency instead: 8 KiB random SSD reads at 100 μs
-are 80 MiB/s, writes at 30 μs 250 MiB/s. SSD rows use io_uring with 32-128
-requests in flight per thread; one core tops out at 500-850k small random reads
-per second, hence two threads. One thread reading a file sequentially gets 1-5
-GiB/s, from kernel readahead. One TCP flow gets the VM's bandwidth on GCP but 5
-Gbit/s (600 MiB/s) on AWS outside a placement group, and 2 MiB / RTT across
-regions (\*). Regional disks copy every write to a second zone, so only their
-write latency differs. Blob Storage latency is p99 from the same region; Zonal
-is S3 Express One Zone and GCS Rapid. Conditional writes are compare-and-swap on
-one object, one at a time; regional GCS also allows only ~1 write per second to
-the same object. Region-to-region latencies:
-[cloudping](https://www.cloudping.co/).
+memory bandwidth runs out (on x86 a vCPU is half a core). x86 memory writes need
+non-temporal stores to get there; a plain memset first reads every line it
+overwrites and gets half. One thread with one request in flight gets size /
+latency instead: 8 KiB random SSD reads at 100 μs are 80 MiB/s, writes at 30 μs
+250 MiB/s. SSD rows use io_uring with 32-128 requests in flight per thread; one
+core tops out at 500-850k small random reads per second, hence two threads. One
+thread reading a file sequentially gets 1-5 GiB/s, from kernel readahead. One
+TCP flow gets the VM's bandwidth on GCP but 5 Gbit/s (600 MiB/s) on AWS outside
+a placement group, and 2 MiB / RTT across regions (\*). Regional disks copy
+every write to a second zone, so only their write latency differs. Blob Storage
+latency is p99 from the same region; Zonal is S3 Express One Zone and GCS Rapid.
+Conditional writes are compare-and-swap on one object, one at a time; regional
+GCS also allows only ~1 write per second to the same object. Region-to-region
+latencies: [cloudping](https://www.cloudping.co/).
 
 ## Cost Numbers
 

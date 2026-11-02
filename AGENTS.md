@@ -64,8 +64,13 @@ make test                                        # each benchmark once, smoke te
   375 GiB disk at 625 / 330 MiB/s, so one disk understates the VM ~8x. Compare
   against the provider's published limits.
 - Match local disks by model (`nvme_card[0-9]` on GCP, "Instance Storage" on
-  AWS); GCP's boot disk is `nvme_card-pd`. If `/dev/md0` doesn't exist, `fio`
-  happily creates a file there in RAM and reports ~60 GiB/s.
+  AWS); GCP's boot disk is `nvme_card-pd`. If `/dev/md0` doesn't exist, a
+  benchmark that opens it creates a file there in RAM and reports ~60 GiB/s.
+- `storage` and `storage_durable_write` reach the published SSD limits from one
+  thread (two for small random reads) via io_uring. `fio` is only a cross-check
+  for a new kind of disk; nothing depends on it.
+- x86 memory writes need non-temporal stores to reach speed of light; a plain
+  memset reads every line first and gets half.
 
 ## README policy
 

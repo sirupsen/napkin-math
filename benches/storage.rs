@@ -353,11 +353,11 @@ fn main() {
         depth,
         direct,
     };
-    let rand = |name, op, threads, depth| Test {
+    let rand = |name, op, block, threads, depth| Test {
         name,
         op,
         pattern: Pattern::Random,
-        block: 8 * KIB,
+        block,
         threads,
         depth,
         direct: true,
@@ -390,28 +390,43 @@ fn main() {
     run(
         &path,
         size,
-        &rand("rand_read_8k_qd1", Op::Read, 1, 1),
+        &rand("rand_read_8k_qd1", Op::Read, 8 * KIB, 1, 1),
         secs,
         false,
     );
     run(
         &path,
         size,
-        &rand("rand_read_8k_qd128", Op::Read, 2, 64),
+        &rand("rand_read_8k_qd128", Op::Read, 8 * KIB, 2, 64),
         secs,
         false,
     );
     run(
         &path,
         size,
-        &rand("rand_write_8k_qd1", Op::Write, 1, 1),
+        &rand("rand_write_8k_qd1", Op::Write, 8 * KIB, 1, 1),
         secs,
         false,
     );
     run(
         &path,
         size,
-        &rand("rand_write_8k_qd128", Op::Write, 1, 128),
+        &rand("rand_write_8k_qd128", Op::Write, 8 * KIB, 1, 128),
+        secs,
+        false,
+    );
+    // Providers publish IOPS limits at 4 KiB.
+    run(
+        &path,
+        size,
+        &rand("rand_read_4k_qd256", Op::Read, 4 * KIB, 2, 128),
+        secs,
+        false,
+    );
+    run(
+        &path,
+        size,
+        &rand("rand_write_4k_qd256", Op::Write, 4 * KIB, 1, 256),
         secs,
         false,
     );

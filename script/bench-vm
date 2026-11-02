@@ -53,7 +53,7 @@ U=$(getent passwd 1000 | cut -d: -f1)
 H=/home/$U
 export AWS_DEFAULT_REGION=$BUCKET_REGION
 apt-get update -q
-apt-get install -y -q build-essential pkg-config libssl-dev numactl fio zstd
+apt-get install -y -q build-essential pkg-config libssl-dev numactl zstd
 [ "$CLOUD" = aws ] && { command -v aws || snap install aws-cli --classic; }
 sudo -u "$U" -H bash -c 'curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal'
 mkdir -p "$H/repo" && get "runs/$RUN/src.tgz" /tmp/src.tgz && tar xzf /tmp/src.tgz -C "$H/repo"

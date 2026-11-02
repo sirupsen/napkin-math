@@ -45,7 +45,7 @@ debug build.
 | Group (file in `benches/benchmarks/`) | Measures | README row |
 | ----- | -------- | ---------- |
 | `memory_sequential_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD | Memory Sequential Read |
-| `memory_sequential_write` | memset and memcpy of 1 GiB on 1 thread, memset of 16 GiB on all cores | Memory Sequential Write |
+| `memory_sequential_write` | memset and memcpy of 1 GiB on 1 thread, memset of 16 GiB on all cores, and on x86 the same memsets with non-temporal stores | Memory Sequential Write |
 | `memory_random` | One pass of independent random 64 B reads/writes over 1 GiB (1 thread), and random lines of a shared 16 GiB buffer from 1 thread and all cores, with and without huge pages | Memory Random Read/Write, throughput |
 | `memory_random_read_latency` (in `memory_random.rs`) | Dependent pointer chase over 1 GiB, with and without huge pages | Memory Random Read, latency |
 | `cache_read`, `cache_read_latency` | The `memory_sequential_read` SIMD loop, and the pointer chase, over 16 KiB, 256 KiB and 8 MiB | L1/L2/L3 Cache Read |
@@ -83,6 +83,26 @@ single-thread row and one threaded row for memorability. `memory_random` issues
 independent loads, so the CPU overlaps misses; that is throughput, which is why
 the latency cell comes from `memory_random_read_latency` instead.
 
+### Memory writes
+
+On November 2, 2026, writing 1 GiB from one thread and 16 GiB from 48, in GiB/s:
+
+| | C4, Xeon 6985P-C | m8id, Xeon 6975P-C | m8gd, Graviton4 |
+| --- | --- | --- | --- |
+| 1 thread, memset / plain stores | 10.4 | 11.6 | 61 |
+| 1 thread, non-temporal stores | 24.9 | 23.0 | 61 |
+| 48 threads, memset | 107 | 142 | 293 |
+| 48 threads, non-temporal stores | 136 | 149 | 289 |
+
+An x86 store to a line that isn't cached reads the line first (read for
+ownership), so a memset moves every byte across the memory bus twice;
+non-temporal stores (`vmovntdq`, AVX2 or AVX-512 alike) write whole lines
+without reading them. glibc's memset of 1 GiB is `rep stosb` here and doesn't
+use them. Graviton4 notices full-line writes and skips the read on its own:
+`stp`, `st1`, `stnp`, `DC ZVA` and memset all wrote 61 GiB/s, twice its read
+speed. The README rows (30 and 200 GiB/s) are the non-temporal x86 numbers
+averaged with Graviton4's.
+
 ### Random memory, one thread and all cores
 
 On November 2, 2026, random 64-byte lines of a shared 16 GiB buffer (each
@@ -97,9 +117,10 @@ pinned thread draws its own indices from xorshift), in GiB/s, 4 KiB pages
 | Write, 48 threads | 38 (41) | 64 (63) | 144 (333) |
 
 The README rounds the averages: 3 GiB/s on one thread and 100 GiB/s on all
-cores, which hides that x86 is 40-60 and Graviton4 ~150. Graviton4's 333 GiB/s
-for random writes with huge pages matches its sequential reads and is
-unconfirmed. Huge pages help one thread 1.3-2.2x: with 4 KiB pages, 16 GiB is
+cores, which hides that x86 is 40-60 and Graviton4 ~150. Graviton4's random
+writes with huge pages (333 GiB/s, then 282 in two later runs) run at its
+sequential write speed: it skips reading lines it writes whole, so random
+writes cost what sequential ones do once the TLB stops missing. Huge pages help one thread 1.3-2.2x: with 4 KiB pages, 16 GiB is
 4M pages, far more than the TLB holds, so most accesses also walk the page
 table. The 1 GiB pass through a shuffled index array, the older bench, reads
 2.2-2.5 GiB/s; on an Apple M5 Max the xorshift loop was 1.8x faster (7.4 vs 4.1
@@ -114,15 +135,16 @@ m8i.12xlarge (Xeon 6975P-C) and an m8g.48xlarge (Graviton4):
 
 | Read | C4 AVX-512 | C4 AVX2 | m8i AVX-512 | m8i AVX2 | Graviton4 NEON |
 | --- | --- | --- | --- | --- | --- |
-| 16 KiB (L1) | 327 | 213 | 302 | 223 | 80 |
-| 256 KiB (L2) | 168 | 151 | 175 | 147 | 75 |
-| 8 MiB (L3) | 35 | 36 | 28 | 28 | 53 |
+| 16 KiB (L1) | 327 | 213 | 302 | 223 | 102 |
+| 256 KiB (L2) | 168 | 151 | 175 | 147 | 77 |
+| 8 MiB (L3) | 35 | 36 | 28 | 28 | 54 |
 | 1 GiB (DRAM) | 18.7 | 15.6 | 21.4 | 20.7 | 31 |
 
 Wider vectors pay off in L1 and L2, not from DRAM, where the core's limit on
-outstanding misses sets the speed. The Graviton4 cache numbers look limited by
-the compiled loop (one 16-byte load per add), not the hardware, which is why the
-README's L1 row stays at 200 GiB/s for now.
+outstanding misses sets the speed. Graviton4's NEON is an explicit loop with
+eight 16-byte accumulators: LLVM's own loop read L1 at 83 GiB/s, eight
+accumulators or 64-byte `ld1` loads at 99-102, and nothing else moved L2, L3
+or DRAM. The README's L1 row averages to 244 GiB/s and rounds to 200.
 
 AVX-512 from DRAM first ran at 17 GiB/s on m8i, below AVX2 (22) and scalar
 (20). It wasn't the clock: 256- and 512-bit adds both ran at 3.86 GHz. Intel's
@@ -219,6 +241,12 @@ take ~1.2-2 us of CPU each, mostly in the kernel (md RAID adds some), so one
 core stops at 500-850k IOPS: all of m8id's one disk, half of C4's eight.
 Batching submissions (`--iodepth_batch_submit=32`) and registered buffers and
 files were worth 1.3-1.9x.
+
+The storage bench's own 4 KiB random tests (2 threads x 128 for reads, 1 x 256
+for writes) matched `fio`: 1.32M / 678k IOPS on C4, 757k / 436k on m8id (88% of
+`fio`'s reads, 94% of the published limit), 867k / 435k on m8gd. So the bench,
+not `fio`, is the tool; run `fio` once on a new kind of disk to check the bench
+still reaches its limits there.
 
 AWS publishes no throughput limit for instance store. The README's SSD rows used
 to come from one of the C4's 8 disks (650 MiB/s read, 335 write, its per-disk
@@ -318,6 +346,12 @@ commit to the HDD takes 14 ms at 69 MiB/s. Appending costs 3 device writes per
 commit instead of 1 (data plus ext4's journal), which is the extra
 `fdatasync` time in the last column. On a MacBook's SSD, which does flush,
 `fdatasync` takes ~3.6 ms.
+
+On November 2, 2026, on ext4 over all of a VM's local disks, one thread with
+32 write + `fdatasync` pairs in flight on io_uring (`--depths 32`) committed
+64 KiB at 2.3 GiB/s on c4-standard-48-lssd, 2.6 on m8id and 2.6 on m8gd, as
+much as 32 writer threads (2.3-2.4). One writer alone took 36-54 us per commit
+(1.1-1.6 GiB/s). The README row is that one thread.
 
 The README rows use 64 KiB for SSD and network disks, the largest write that
 costs about the same as 8 KiB, and 8 KiB for HDD. Until October 26, 2026, these
@@ -700,8 +734,8 @@ down to what kernels reach in practice:
 - GPU ↔ GPU Transfer, NVLink: NVLink 5 at 1.8 TB/s, 900 GB/s per direction.
 - GPU ↔ CPU Transfer, PCIe: PCIe 5.0 x16 at 64 GB/s per direction; pinned
   `cudaMemcpy` reaches ~55 GB/s, and a small copy costs ~10 μs.
-- Network RDMA, GPU: one 400 Gbit/s InfiniBand or RoCE NIC per GPU, ~5 μs
-  round trip.
+- GPU ↔ GPU Network, RDMA: one 400 Gbit/s InfiniBand or RoCE NIC per GPU, to
+  a GPU in another machine, ~5 μs round trip.
 
 ## Further reading
 

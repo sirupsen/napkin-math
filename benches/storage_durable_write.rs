@@ -1,6 +1,7 @@
 // Durable writes: each writer does pwrite + fdatasync in a loop and times the
-// pair, the way a database commits to its log. No dependencies, so it
-// is easy to read exactly what is measured.
+// pair, the way a database commits to its log. On Linux, --depths also runs one
+// thread with that many write + fdatasync pairs in flight on io_uring, which is
+// group commit from a single thread.
 //
 //   cargo bench --bench storage_durable_write -- /mnt/disk/commit.dat
 //   cargo bench --bench storage_durable_write -- /mnt/disk/commit.dat --sizes 8k,64k,1m --writers 1,32 --secs 15
@@ -138,11 +139,95 @@ fn writer(file: Arc<File>, base: u64, size: usize, append: bool, stop: Arc<Atomi
     r
 }
 
-fn run(path: &str, size: usize, writers: usize, secs: u64, append: bool) {
+/// One thread keeping `depth` commits in flight on io_uring, each a write
+/// linked to an fdatasync, over its own 64 MiB slice: group commit from one
+/// thread, the way a database log can do it.
+#[cfg(target_os = "linux")]
+fn uring_writer(file: &File, size: usize, depth: usize, stop: &AtomicBool) -> Result {
+    use io_uring::{opcode, squeue, types, IoUring};
+    use std::os::unix::io::AsRawFd;
+
+    let mut ring = IoUring::new((2 * depth).next_power_of_two() as u32).expect("io_uring");
+    ring.submitter().register_files(&[file.as_raw_fd()]).expect("register file");
+    let fd = types::Fixed(0);
+    let bufs: Vec<Buf> = (0..depth).map(|_| Buf::new(size)).collect();
+    let mut offsets = vec![0u64; depth];
+    let mut started = vec![Instant::now(); depth];
+    let mut r = Result { commits: 0, latencies: Vec::with_capacity(1 << 20), write_ns: 0, sync_ns: 0 };
+    let mut written = vec![Instant::now(); depth];
+    let submit = |ring: &mut IoUring, slot: usize, offset: u64| {
+        let write = opcode::Write::new(fd, bufs[slot].0, size as u32)
+            .offset(slot as u64 * SLICE + offset)
+            .build()
+            .flags(squeue::Flags::IO_LINK)
+            .user_data((slot * 2) as u64);
+        let sync = opcode::Fsync::new(fd)
+            .flags(types::FsyncFlags::DATASYNC)
+            .build()
+            .user_data((slot * 2 + 1) as u64);
+        unsafe {
+            ring.submission().push(&write).unwrap();
+            ring.submission().push(&sync).unwrap();
+        }
+    };
+    for slot in 0..depth {
+        started[slot] = Instant::now();
+        submit(&mut ring, slot, 0);
+    }
+    let mut in_flight = depth;
+    let mut done = Vec::with_capacity(depth);
+    while in_flight > 0 {
+        ring.submit_and_wait(1).expect("io_uring submit");
+        let now = Instant::now();
+        for cqe in ring.completion() {
+            let slot = cqe.user_data() as usize / 2;
+            if cqe.user_data() % 2 == 0 {
+                assert_eq!(cqe.result(), size as i32, "short or failed write");
+                written[slot] = now;
+                continue;
+            }
+            assert_eq!(cqe.result(), 0, "fdatasync failed");
+            r.commits += 1;
+            r.write_ns += (written[slot] - started[slot]).as_nanos() as u64;
+            r.sync_ns += (now - written[slot]).as_nanos() as u64;
+            r.latencies.push((now - started[slot]).as_nanos().min(u32::MAX as u128) as u32);
+            done.push(slot);
+        }
+        let stopping = stop.load(Ordering::Relaxed);
+        for slot in done.drain(..) {
+            in_flight -= 1;
+            if stopping {
+                continue;
+            }
+            offsets[slot] += size as u64;
+            if offsets[slot] + size as u64 > SLICE {
+                offsets[slot] = 0;
+            }
+            started[slot] = Instant::now();
+            submit(&mut ring, slot, offsets[slot]);
+            in_flight += 1;
+        }
+    }
+    r
+}
+
+/// `writers` threads with one commit in flight each, or with `depth` > 1 (Linux)
+/// one thread with `depth` commits in flight on io_uring.
+fn run(path: &str, size: usize, writers: usize, depth: usize, secs: u64, append: bool) {
     let file = Arc::new(open(path, append));
     let before = device_counters(&file);
     let stop = Arc::new(AtomicBool::new(false));
     let start = Instant::now();
+    #[cfg(target_os = "linux")]
+    let uring = if depth > 1 {
+        let (file, stop) = (file.clone(), stop.clone());
+        Some(std::thread::spawn(move || uring_writer(&file, size, depth, &stop)))
+    } else {
+        None
+    };
+    #[cfg(not(target_os = "linux"))]
+    let uring: Option<std::thread::JoinHandle<Result>> = None;
+    let writers = if uring.is_some() { 0 } else { writers };
     let handles: Vec<_> = (0..writers)
         .map(|i| {
             let (file, stop) = (file.clone(), stop.clone());
@@ -158,7 +243,7 @@ fn run(path: &str, size: usize, writers: usize, secs: u64, append: bool) {
         .collect();
     std::thread::sleep(Duration::from_secs(secs));
     stop.store(true, Ordering::Relaxed);
-    let results: Vec<Result> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+    let results: Vec<Result> = handles.into_iter().chain(uring).map(|h| h.join().unwrap()).collect();
     let elapsed = start.elapsed().as_secs_f64();
     let after = device_counters(&file);
 
@@ -181,10 +266,10 @@ fn run(path: &str, size: usize, writers: usize, secs: u64, append: bool) {
         _ => String::new(),
     };
     println!(
-        "{:<9} {:>7} x{:<3} commits/s={:>8.0}  MiB/s={:>6.0}  p50={:>8.1}us  p99={:>8.1}us  write={:>7.1}us  fdatasync={:>7.1}us{}",
+        "{:<9} {:>7} {:<6} commits/s={:>8.0}  MiB/s={:>6.0}  p50={:>8.1}us  p99={:>8.1}us  write={:>7.1}us  fdatasync={:>7.1}us{}",
         if append { "append" } else { "overwrite" },
         human(size),
-        writers,
+        if writers == 0 { format!("1x{}", depth) } else { format!("x{}", writers) },
         rate,
         rate * size as f64 / (1 << 20) as f64,
         pct(0.5),
@@ -201,7 +286,7 @@ fn run(path: &str, size: usize, writers: usize, secs: u64, append: bool) {
 fn main() {
     let args: Vec<String> = std::env::args().filter(|a| a != "--bench").collect();
     let usage =
-        "usage: storage_durable_write <file> [--sizes 8k,64k,1m] [--writers 1,32] [--secs 15]";
+        "usage: storage_durable_write <file> [--sizes 8k,64k,1m] [--writers 1,32] [--depths 32] [--secs 15]";
     // `cargo bench --bench <name>` adds --bench to the arguments; without any
     // other arguments there is nothing to measure, so skip quietly.
     if args.len() < 2 {
@@ -223,17 +308,27 @@ fn main() {
         .split(',')
         .map(|w| w.parse().unwrap())
         .collect();
+    // One io_uring thread with this many commits in flight (Linux only).
+    let depths: Vec<usize> = if cfg!(target_os = "linux") {
+        flag("--depths", "32").split(',').map(|d| d.parse().unwrap()).collect()
+    } else {
+        vec![]
+    };
     let secs: u64 = flag("--secs", "15").parse().unwrap();
 
-    prepare(&path, SLICE * *writers.iter().max().unwrap() as u64);
+    let slices = writers.iter().chain(&depths).max().copied().unwrap();
+    prepare(&path, SLICE * slices as u64);
     for &size in &sizes {
         for &w in &writers {
-            run(&path, size, w, secs, false);
+            run(&path, size, w, 1, secs, false);
+        }
+        for &d in &depths {
+            run(&path, size, 1, d, secs, false);
         }
     }
     let append_path = format!("{}.append", path);
     for &size in &sizes {
-        run(&append_path, size, 1, secs, true);
+        run(&append_path, size, 1, 1, secs, true);
     }
     std::fs::remove_file(&path).unwrap();
 }
