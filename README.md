@@ -39,6 +39,7 @@ yourself.
 | Network RDMA, GPU (400 Gbit/s)                                 | 5 μs       | 40 GiB/s   |
 | L3 Cache Read                                                  | 30 ns      | 30 GiB/s   |
 | Memory Sequential Read, 1 thread                               |            | 20 GiB/s   |
+| Memory Sequential Read, other socket, 1 thread‡                |            | 15 GiB/s   |
 | Memory Sequential Write, 1 thread                              |            | 10 GiB/s   |
 | CPU Encrypt / Decrypt (AES-256-GCM)                            |            | 10 GiB/s   |
 | CPU Encode / Decode Bitpacked Integers                         |            | 10 GiB/s   |
@@ -116,9 +117,9 @@ have no write cache to flush (Azure Premium SSD flushes in ~30 μs), so a durabl
 write costs a write.
 
 ‡ Only the largest shapes span two sockets. Reading the other socket's memory
-costs ~2.5x the latency and half of one thread's bandwidth, and all cores share
-the ~60 GiB/s link (Graviton4). Keep memory on the socket that reads it:
-Linux allocates on the node of the thread that first touches a page. Intel's
+costs ~2.5x the latency, and all cores share the ~60 GiB/s link (Graviton4).
+Keep memory on the socket that reads it: Linux allocates on the node of the
+thread that first touches a page. Intel's
 largest VMs also split one socket into a NUMA node per die; another die costs
 1.2x the latency and 0.7x one thread's bandwidth, but all cores lose only ~10%.
 
