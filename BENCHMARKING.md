@@ -759,8 +759,10 @@ Savings Plan, no upfront; the newest families have no reserved instances) and
 | General | m8i.12xlarge | \$39 | \$28 | \$14 |
 | General, SSD | m8id.12xlarge | \$48 | \$35 | \$13 |
 | Memory | r8i.12xlarge | \$51 | \$37 | \$15 |
+| Memory, SSD | r8id.12xlarge | \$61 | \$44 | \$21 |
 | Memory, High | x8g.12xlarge | \$71 | \$53 | \$38 |
-| Memory, Ultra | x2iedn.8xlarge | \$152 | \$112 | \$47 |
+| Memory, High, SSD | x2idn.32xlarge | \$76 | \$47 | \$22 |
+| Memory, Ultra, SSD | x2iedn.8xlarge | \$152 | \$112 | \$47 |
 | SSD | i8g.12xlarge | \$63 | \$49 | \$17 |
 | SSD, High | i8ge.12xlarge | \$87 | \$68 | \$28 |
 | GPU (B200) | p6-b200.48xlarge | \$433 | \$341 | ~\$250 |
@@ -768,7 +770,11 @@ Savings Plan, no upfront; the newest families have no reserved instances) and
 B200 spot is from us-west-2 and us-east-2 (\$43-86/h per instance; us-east-1
 had one zone at \$167/h). The unit rows come from the differences: the SSD in
 `m8id` over `m8i` is \$0.15 / \$0.11 per GB, and memory in `r8i` over `m8i` is
-\$3 / \$2 per GiB. Graviton (`c8g`, `m8g`, `r8g`) is ~15% cheaper on-demand.
+\$3 / \$2 per GiB. Graviton (`c8g`, `m8g`, `r8g`) is ~15% cheaper on-demand. GCP's equivalents of
+the SSD shapes are `c4-standard-*-lssd` (General, SSD), `c4-highmem-*-lssd`
+(Memory, SSD: 8 GiB and ~60 GB per vCPU) and Z3 (SSD, High). Above 8 GiB per
+vCPU, local SSD comes only on `x2gd` / `x2idn` / `x2iedn` (AWS, 16-32 GiB,
+30-60 GB SSD per vCPU) and GCP M1 / M3 (15-30 GiB, up to 8 x 375 GB attached).
 
 ## Blob storage rows (March 2026)
 

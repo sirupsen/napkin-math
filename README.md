@@ -224,17 +224,19 @@ upfront (~25% off), and spot (~70% off; ~45% for Memory, High and B200s). Most
 cost a vCPU plus its memory and SSD at the unit prices above; the largest memory
 shapes and B200s cost more:
 
-| Shape         | vCPU | Memory (GiB) | VRAM (GB) | SSD (GB) | Network (GB/s) | \$ / mo / vCPU | 1-year | Spot  | Max (vCPU) |
-| ------------- | ---- | ------------ | --------- | -------- | -------------- | -------------- | ------ | ----- | ---------- |
-| CPU           | 1    | 2            |           |          | 0.07           | \$35           | \$25   | \$10  | 300        |
-| General       | 1    | 4            |           |          | 0.07           | \$40           | \$30   | \$15  | 300        |
-| General, SSD  | 1    | 4            |           | 60       | 0.07           | \$50           | \$35   | \$15  | 300        |
-| Memory        | 1    | 8            |           |          | 0.07           | \$50           | \$35   | \$15  | 300        |
-| Memory, High  | 1    | 16           |           |          | 0.06           | \$70           | \$50   | \$40  | 200        |
-| Memory, Ultra | 1    | 32           |           |          | 0.1            | \$150          | \$110  | \$50  | 128        |
-| SSD           | 1    | 8            |           | 250      | 0.07           | \$65           | \$50   | \$15  | 200        |
-| SSD, High     | 1    | 8            |           | 600      | 0.15           | \$95           | \$70   | \$30  | 200        |
-| GPU (B200)    | 1    | 14           | 7         | 100      | 2              | \$450          | \$350  | \$250 | 200        |
+| Shape              | vCPU | Memory (GiB) | VRAM (GB) | SSD (GB) | Network (GB/s) | \$ / mo / vCPU | 1-year | Spot  | Max (vCPU) |
+| ------------------ | ---- | ------------ | --------- | -------- | -------------- | -------------- | ------ | ----- | ---------- |
+| CPU                | 1    | 2            |           |          | 0.07           | \$35           | \$25   | \$10  | 300        |
+| General            | 1    | 4            |           |          | 0.07           | \$40           | \$30   | \$15  | 300        |
+| General, SSD       | 1    | 4            |           | 60       | 0.07           | \$50           | \$35   | \$15  | 300        |
+| Memory             | 1    | 8            |           |          | 0.07           | \$50           | \$35   | \$15  | 300        |
+| Memory, SSD        | 1    | 8            |           | 60       | 0.07           | \$60           | \$45   | \$20  | 300        |
+| Memory, High       | 1    | 16           |           |          | 0.06           | \$70           | \$50   | \$40  | 200        |
+| Memory, High, SSD  | 1    | 16           |           | 30       | 0.1            | \$75           | \$45   | \$20  | 128        |
+| Memory, Ultra, SSD | 1    | 32           |           | 30       | 0.1            | \$150          | \$110  | \$50  | 128        |
+| SSD                | 1    | 8            |           | 250      | 0.07           | \$65           | \$50   | \$15  | 200        |
+| SSD, High          | 1    | 8            |           | 600      | 0.15           | \$95           | \$70   | \$30  | 200        |
+| GPU (B200)         | 1    | 14           | 7         | 100      | 2              | \$450          | \$350  | \$250 | 200        |
 
 Reading 1 TiB costs the VM time it takes at the row's throughput (48 vCPU + 192
 GB is \$1,900/month, \$0.0007/s; the 1-thread memory row pays for one vCPU; the
