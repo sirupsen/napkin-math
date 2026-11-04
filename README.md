@@ -49,14 +49,14 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | Memory Sequential Read, other socket, 1 thread‡                          |          | 15 GiB/s   |
 | CPU Encrypt / Decrypt (AES-256-GCM), 1 thread                            |          | 10 GiB/s   |
 | CPU Encode Bitpacked Integers, 1 thread                                  |          | 10 GiB/s   |
-| SSD Sequential Read (1 MiB), 1 thread                                    | 300 μs   | 5 GiB/s    |
+| SSD Sequential Read (8 KiB), 1 thread                                    | 50 μs    | 5 GiB/s    |
 | SSD Random Read (8 KiB), 2 threads                                       | 100 μs   | 5 GiB/s    |
 | Network Bandwidth                                                        |          | 3 GiB/s    |
 | Memory Random Write (64 B), 1 thread                                     |          | 3 GiB/s    |
 | Memory Random Read (64 B), 1 thread                                      | 100 ns   | 3 GiB/s    |
 | SSD Random Write (8 KiB), 1 thread                                       | 30 μs    | 3 GiB/s    |
+| SSD Sequential Write (8 KiB), 1 thread                                   | 30 μs    | 3 GiB/s    |
 | SSD Sequential Durable Write (64 KiB), 1 thread†                         | 50 μs    | 3 GiB/s    |
-| SSD Sequential Write (1 MiB), 1 thread                                   | 300 μs   | 3 GiB/s    |
 | Network Same-Zone                                                        | 100 μs   | NW Limit   |
 | Network Cross-Zone                                                       | 500 μs   | NW Limit   |
 | Network Cross-Region, Same-Continent                                     | 25-60 ms | NW Limit\* |
@@ -70,11 +70,11 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | CPU Decode Parquet (dictionary + zstd), 1 thread                         |          | 2 GiB/s    |
 | CPU Serialize (JSON, Protobuf), 1 thread                                 |          | 1 GiB/s    |
 | CPU Decompress (lz4, zstd -1), 1 thread                                  |          | 1 GiB/s    |
-| Network Disk, Zonal Sequential Read (1 MiB), 1 thread                    | 1 ms     | 1 GiB/s    |
-| Network Disk, Regional Sequential Read (1 MiB), 1 thread                 | 1 ms     | 1 GiB/s    |
+| Network Disk, Zonal Sequential Read (8 KiB), 1 thread                    | 500 μs   | 1 GiB/s    |
+| Network Disk, Regional Sequential Read (8 KiB), 1 thread                 | 500 μs   | 1 GiB/s    |
+| Network Disk, Zonal Sequential Write (8 KiB), 1 thread                   | 500 μs   | 1 GiB/s    |
 | Network Disk, Zonal Sequential Durable Write (64 KiB), 1 thread†         | 1 ms     | 1 GiB/s    |
-| Network Disk, Zonal Sequential Write (1 MiB), 1 thread                   | 2 ms     | 1 GiB/s    |
-| Network Disk, Regional Sequential Write (1 MiB), 1 thread                | 2 ms     | 1 GiB/s    |
+| Network Disk, Regional Sequential Write (8 KiB), 1 thread                | 1 ms     | 1 GiB/s    |
 | Network Disk, Regional Sequential Durable Write (64 KiB), 1 thread†      | 2 ms     | 1 GiB/s    |
 | CPU Compress (lz4, zstd -1), 1 thread                                    |          | 500 MiB/s  |
 | CPU Deserialize (JSON, Protobuf), 1 thread                               |          | 500 MiB/s  |
@@ -84,14 +84,14 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | Network Disk, Regional Random Write (8 KiB), 1 thread                    | 1 ms     | 500 MiB/s  |
 | CPU Sort (64-bit integers, 1 GiB), 1 thread                              |          | 300 MiB/s  |
 | CPU Encode Parquet (dictionary + zstd), 1 thread                         |          | 300 MiB/s  |
-| Network Disk, Zonal, HDD Sequential Read (1 MiB), 1 thread               | 1 ms     | 250 MiB/s  |
-| Network Disk, Regional, HDD Sequential Read (1 MiB), 1 thread            | 1 ms     | 250 MiB/s  |
-| Network Disk, Zonal, HDD Sequential Write (1 MiB), 1 thread              | 5 ms     | 250 MiB/s  |
+| Network Disk, Zonal, HDD Sequential Read (8 KiB), 1 thread               | 500 μs   | 250 MiB/s  |
+| Network Disk, Regional, HDD Sequential Read (8 KiB), 1 thread            | 500 μs   | 250 MiB/s  |
+| Network Disk, Zonal, HDD Sequential Write (8 KiB), 1 thread              | 500 μs   | 250 MiB/s  |
+| HDD Sequential Read (8 KiB), 1 thread                                    | 100 μs   | 200 MiB/s  |
+| HDD Sequential Write (8 KiB), 1 thread                                   | 100 μs   | 200 MiB/s  |
 | Network Disk, Zonal, HDD Sequential Durable Write (64 KiB), 1 thread†    | 500 μs   | 200 MiB/s  |
 | Network Disk, Regional, HDD Sequential Durable Write (64 KiB), 1 thread† | 1 ms     | 200 MiB/s  |
-| Network Disk, Regional, HDD Sequential Write (1 MiB), 1 thread           | 5 ms     | 200 MiB/s  |
-| HDD Sequential Read (1 MiB), 1 thread                                    | 5 ms     | 200 MiB/s  |
-| HDD Sequential Write (1 MiB), 1 thread                                   | 5 ms     | 200 MiB/s  |
+| Network Disk, Regional, HDD Sequential Write (8 KiB), 1 thread           | 1 ms     | 200 MiB/s  |
 | Blob Storage, Regional Read (1 GiB), 1 connection                        |          | 100 MiB/s  |
 | Network Disk, Zonal, HDD Random Write (8 KiB), 1 thread                  | 500 μs   | 20 MiB/s   |
 | Network Disk, Regional, HDD Random Write (8 KiB), 1 thread               | 1 ms     | 20 MiB/s   |
@@ -143,9 +143,9 @@ disks: local NVMe SSDs striped together, EBS gp3 at 16k IOPS / 1000 MiB/s and
 Hyperdisk Balanced at 80k IOPS / 1600 MiB/s, 2 TB pd-standard for network HDDs.
 Disk rows use io_uring with 32-128 requests in flight per thread; one core tops
 out at 500-850k small random reads per second, hence two threads. Their
-latency is the p50 of one request at a time, and one thread with one request
-in flight gets size / latency: 8 KiB random SSD reads at 100 μs are 80 MiB/s,
-but 1 MiB sequential reads at 300 μs already get 3 GiB/s. One thread reading a
+latency is the p50 of one 8 KiB request at a time, and one thread with one
+request in flight gets 8 KiB / latency: random SSD reads at 100 μs are 80
+MiB/s. One thread reading a
 file 8 KiB at a time gets 1-5 GiB/s, from kernel readahead. Regional disks copy
 every write to a second zone, which adds ~1 ms to every write.
 
@@ -244,20 +244,20 @@ GPU row is a B200 at 7 TiB/s), plus the transfer and request fees above:
 | Memory Sequential Read, 1 thread                    | \$0.0006      |
 | Memory Sequential Read, all cores                   | \$0.004       |
 | Memory Random Read (64 B), all cores                | \$0.008       |
-| SSD Sequential Read (1 MiB)                         | \$0.2         |
+| SSD Sequential Read (8 KiB)                         | \$0.2         |
 | SSD Random Read (8 KiB)                             | \$0.2         |
 | Network Same-Zone                                   | \$0.3         |
 | Blob Storage, Regional Read (8 MiB)                 | \$0.3         |
-| Network Disk, Zonal Sequential Read (1 MiB)         | \$0.8         |
-| Network Disk, Regional Sequential Read (1 MiB)      | \$0.8         |
+| Network Disk, Zonal Sequential Read (8 KiB)         | \$0.8         |
+| Network Disk, Regional Sequential Read (8 KiB)      | \$0.8         |
 | Blob Storage, Zonal Read (8 MiB)§                   | \$0.9         |
 | Network Disk, Zonal Random Read (8 KiB)             | \$2           |
 | Network Disk, Regional Random Read (8 KiB)          | \$2           |
 | Blob Storage, Zonal Read (128 KiB)§                 | \$2           |
-| Network Disk, Zonal, HDD Sequential Read (1 MiB)    | \$3           |
-| Network Disk, Regional, HDD Sequential Read (1 MiB) | \$3           |
+| Network Disk, Zonal, HDD Sequential Read (8 KiB)    | \$3           |
+| Network Disk, Regional, HDD Sequential Read (8 KiB) | \$3           |
 | Blob Storage, Regional Read (128 KiB)               | \$4           |
-| HDD Sequential Read (1 MiB)                         | \$4           |
+| HDD Sequential Read (8 KiB)                         | \$4           |
 | Network Cross-Zone                                  | \$10          |
 | Network Cross-Region                                | \$20          |
 | Network Disk, Zonal, HDD Random Read (8 KiB)        | \$80          |

@@ -22,7 +22,7 @@ use std::io::{Seek, SeekFrom};
 use std::os::unix::fs::{FileExt, OpenOptionsExt};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
@@ -208,7 +208,15 @@ fn uring_worker(file: &File, op: Op, block: u64, depth: usize, cur: &mut Cursor,
 
 /// One test: `threads` workers keeping `depth` requests in flight each, for
 /// `secs` (or, with `once`, until the range has been covered a single time).
+// Test names from --only; the precondition always runs.
+static ONLY: OnceLock<Vec<String>> = OnceLock::new();
+
 fn run(path: &str, size: u64, t: &Test, secs: u64, once: bool) {
+    if let Some(only) = ONLY.get() {
+        if t.name != "precondition" && !only.iter().any(|n| n == t.name) {
+            return;
+        }
+    }
     let file = Arc::new(open(path, t.direct));
     let next = Arc::new(AtomicU64::new(0));
     let stop = Arc::new(AtomicBool::new(false));
@@ -277,7 +285,7 @@ fn run(path: &str, size: u64, t: &Test, secs: u64, once: bool) {
 
 fn main() {
     let args: Vec<String> = std::env::args().filter(|a| a != "--bench").collect();
-    let usage = "usage: storage <file | /dev/device --destroy /dev/device> [--size 32g] [--secs 15] [--no-precondition]";
+    let usage = "usage: storage <file | /dev/device --destroy /dev/device> [--size 32g] [--secs 15] [--no-precondition] [--only test,...]";
     // `cargo bench --bench <name>` adds --bench to the arguments; without any
     // other arguments there is nothing to measure, so skip quietly.
     if args.len() < 2 {
@@ -291,6 +299,9 @@ fn main() {
             .map(|i| args[i + 1].clone())
     };
     let secs: u64 = flag("--secs").map(|s| s.parse().unwrap()).unwrap_or(15);
+    if let Some(only) = flag("--only") {
+        ONLY.set(only.split(',').map(String::from).collect()).unwrap();
+    }
     let mut size = parse_size(&flag("--size").unwrap_or("32g".into()));
     let precondition = !args.iter().any(|a| a == "--no-precondition");
     let device = path.starts_with("/dev/");
@@ -379,11 +390,11 @@ fn main() {
         secs,
         false,
     );
-    // One request at a time: the latency of a sequential read.
+    // One small request at a time: the latency of a sequential read.
     run(
         &path,
         size,
-        &seq("seq_read_1m_qd1", Op::Read, MIB, 1, true),
+        &seq("seq_read_8k_qd1", Op::Read, 8 * KIB, 1, true),
         secs,
         false,
     );
@@ -441,7 +452,7 @@ fn main() {
     run(
         &path,
         size,
-        &seq("seq_write_1m_qd1", Op::Write, MIB, 1, true),
+        &seq("seq_write_8k_qd1", Op::Write, 8 * KIB, 1, true),
         secs,
         false,
     );

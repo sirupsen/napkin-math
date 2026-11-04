@@ -204,8 +204,8 @@ cargo bench --bench storage -- /mnt/nvme/disk.dat                       # a file
 cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1      # an unused raw device
 ```
 
-`benches/storage.rs` runs sequential 1 MiB reads and writes at QD1 and QD32,
-random 8 KiB reads and writes at QD1 and QD128, and buffered 8 KiB sequential reads
+`benches/storage.rs` runs sequential 1 MiB reads and writes at QD32,
+sequential and random 8 KiB reads and writes at QD1, random 8 KiB at QD128, and buffered 8 KiB sequential reads
 and writes, all with `O_DIRECT` except the buffered ones. On Linux the
 `O_DIRECT` tests use io_uring (the only dependency): one thread with its own
 ring, the file and buffers registered, reaping completions a quarter of the
@@ -221,7 +221,8 @@ device or without `--destroy`. A file target includes the file system's cost; a
 raw device does not.
 
 The README uses the max-throughput results (1 MiB QD32 for sequential, 8 KiB
-QD128 for random) and QD1 latency (p50) for both. Local NVMe writes land in
+QD128 for random) and 8 KiB QD1 latency (p50) for both. `--only
+seq_read_8k_qd1,...` runs a subset. Local NVMe writes land in
 the drive's DRAM cache, so they beat reads at QD1 (30 us against 90). For an
 HDD, test the whole disk with `--size 1800g --no-precondition` so random reads
 seek across all of it. The rows come from local NVMe on GCP C4 and AWS
@@ -260,9 +261,11 @@ not `fio`, is the tool; run `fio` once on a new kind of disk to check the bench
 still reaches its limits there.
 
 On November 4, 2026, on the same striped disks (C4 / m8id / m8gd, raw device,
-p50), one 1 MiB request at a time took 415 / 260 / 151 us to read and 340 /
-385 / 289 us to write: one thread with one request in flight already gets 2.3-5.0
-GiB/s reading and 2.7-2.8 GiB/s writing. Buffered 8 KiB reads, sped up only by
+p50), one 8 KiB request at a time took 79 / 71 / 16 us to read sequentially
+(94 / 95 / 76 us at random) and 40 / 32 / 19 us to write either way. One 1 MiB
+request at a time took 415 / 260 / 151 us to read and 340 / 385 / 289 us to
+write, so one thread with one request in flight already gets 2.3-5.0 GiB/s
+reading and 2.7-2.8 GiB/s writing. Buffered 8 KiB reads, sped up only by
 kernel readahead, ran at 3.6 / 1.5 / 5.2 GiB/s from the device and 5.2 / 1.5 /
 3.9 GiB/s from an ext4 file.
 
@@ -294,14 +297,17 @@ flight):
 
 | | Hyperdisk Zonal | Hyperdisk Regional | EBS gp3 |
 | --- | --- | --- | --- |
-| Sequential read 1 MiB, QD1 / QD32 | 926 us / 1.6 GiB/s | 1.05 ms / 1.6 GiB/s | 1.86 ms / 1.0 GiB/s |
-| Sequential write 1 MiB, QD1 / QD32 | 1.12 ms / 1.6 GiB/s | 2.39 ms / 1.6 GiB/s | 3.38 ms / 1.0 GiB/s |
+| Sequential read 8 KiB QD1 / 1 MiB QD1 / 1 MiB QD32 | 333 us / 926 us / 1.6 GiB/s | 370 us / 1.05 ms / 1.6 GiB/s | 687 us / 1.86 ms / 1.0 GiB/s |
+| Sequential write 8 KiB QD1 / 1 MiB QD1 / 1 MiB QD32 | 361 us / 1.12 ms / 1.6 GiB/s | 1.25 ms / 2.39 ms / 1.6 GiB/s | 1.02 ms / 3.38 ms / 1.0 GiB/s |
 | Random read 8 KiB, QD1 / QD128 | 478 us / 633 MiB/s | 509 us / 633 MiB/s | 681 us / 133 MiB/s |
 | Random write 8 KiB, QD1 / QD128 | 409 us / 633 MiB/s | 1.27 ms / 557 MiB/s | 1.00 ms / 133 MiB/s |
 | Durable write 64 KiB, 1 / 32 in flight | 503 us / 1.6 GiB/s | 1.39 ms / 1.27 GiB/s | 1.52 ms / 0.99 GiB/s |
 | Appending durable write 8 KiB | 1.21 ms | 3.93 ms | 3.50 ms |
 
-The regional Hyperdisk adds ~0.9-1.3 ms to every write, the round trip to its
+(The 8 KiB columns were run later the same day, on the same Hyperdisks and a
+new gp3 with the same provisioning; the pd-standard ones below on new disks.) Sequential 8 KiB reads beat random ones on Hyperdisk (333 against
+497 us) and slightly on gp3 (687 against 735). The regional Hyperdisk adds
+~0.9-1.3 ms to every write, the round trip to its
 second zone, and matches the zonal one on reads and throughput. Network disks
 cap random I/O at the provisioned IOPS, reads and writes alike. The README
 averages the clouds and rounds: zonal is Hyperdisk and gp3, and the durable
@@ -317,8 +323,8 @@ Persistent Disk), and a 2 TiB EBS st1 on the m8i.12xlarge:
 
 | | pd-standard Zonal | pd-standard Regional | st1 |
 | --- | --- | --- | --- |
-| Sequential read 1 MiB, QD1 / QD32 | 1.17 ms / 251 MiB/s | 1.26 ms / 245 MiB/s | 13.8 ms / 249 MiB/s |
-| Sequential write 1 MiB, QD1 / QD32 | 3.94 ms / 251 MiB/s | 4.61 ms / 200 MiB/s | 3.52 ms / 477 MiB/s |
+| Sequential read 8 KiB QD1 / 1 MiB QD1 / 1 MiB QD32 | 438 us / 1.17 ms / 251 MiB/s | 448 us / 1.26 ms / 245 MiB/s | - / 13.8 ms / 249 MiB/s |
+| Sequential write 8 KiB QD1 / 1 MiB QD1 / 1 MiB QD32 | 429 us / 3.94 ms / 251 MiB/s | 1.08 ms / 4.61 ms / 200 MiB/s | - / 3.52 ms / 477 MiB/s |
 | Random read 8 KiB, QD1 / QD128 | 17.5 ms / 12 MiB/s | 19.3 ms / 12 MiB/s | 5.2 ms / 4 MiB/s |
 | Random write 8 KiB, QD1 / QD128 | 438 us / 25 MiB/s | 1.17 ms / 24 MiB/s | 1.90 ms / 4 MiB/s |
 | Durable write 64 KiB, 1 / 32 in flight | 697 us / 197 MiB/s | 1.47 ms / 192 MiB/s | 1.52 ms / 33 MiB/s |
@@ -336,7 +342,8 @@ and gets a flush per `fdatasync`, which costs it ~70 us.
 
 A d3.xlarge's instance-store HDD (one of three 2 TB disks, the whole disk with
 `--size 1800g --no-precondition`) read and wrote sequentially at 182-196 MiB/s,
-5.2-5.3 ms per 1 MiB one at a time, and did 8 KiB random reads at 12 ms QD1
+5.2-5.3 ms per 1 MiB one at a time and 78 / 74 us per 8 KiB, which the drive's
+cache serves without waiting for the platter, and did 8 KiB random reads at 12 ms QD1
 (199 IOPS at QD128) and random writes at 4.3 ms QD1 (237 IOPS); the drive's
 write cache reorders writes, so they beat random reads. A durable 8 KiB write
 took 0.97 ms from one writer (584/s, one flush each) and got slower with 32 in
