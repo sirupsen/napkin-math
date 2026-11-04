@@ -54,8 +54,9 @@ make test                                        # each benchmark once, smoke te
   preconditions and drops caches for this reason.
 - AWS caps a single TCP flow at 5 Gbit/s outside a placement group; use 8+
   flows to see the VM limit. Use TCP round trips (`network`), not ping, for RTT.
-- Graviton sha256/crc32/blake3 numbers are crate-specific (no ARM crypto
-  instructions in this build), not hardware limits.
+- Graviton crc32/blake3 numbers are crate-specific (no ARM CRC or NEON paths in
+  this build), not hardware limits. sha256 got 4x faster there with `sha2` 0.11
+  (1.4 GiB/s), and ring's AES-GCM runs at 4 GiB/s against 10 on x86.
 - The bench binary uses jemalloc; the random-memory numbers depend on it.
 - One 64-byte AVX-512 load per cache line never triggers Intel's L1 streaming
   prefetcher, so DRAM-sized AVX-512 reads need software prefetch (1 KiB ahead
@@ -71,6 +72,11 @@ make test                                        # each benchmark once, smoke te
   for a new kind of disk; nothing depends on it.
 - x86 memory writes need non-temporal stores to reach speed of light; a plain
   memset reads every line first and gets half.
+- nginx closes a keep-alive connection after 1000 requests unless
+  `keepalive_requests` is raised; `benches/services.sh` raises it.
+- C4 capacity in `us-central1` ran out on November 4, 2026; `script/bench-vm gcp
+  ... --zone us-east4-a` worked. C4 VMs come as Xeon 8581C or 6985P-C
+  depending on the zone, so record `lscpu`.
 
 ## README policy
 

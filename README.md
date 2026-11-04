@@ -22,125 +22,143 @@ newsletter.
 ## Numbers
 
 Below are numbers rounded for memorization, not faux precision. Last measured
-in October-November 2026 on GCP `c4-standard-48-lssd` and AWS `m8id.12xlarge` /
-`m8gd.12xlarge` (Graviton4). See [BENCHMARKING.md](BENCHMARKING.md) to run them
-yourself.
+in October-November 2026, averaged over GCP C4 and AWS m8i (x86) and m8g
+(Graviton4), 48 vCPU each, and their local-SSD variants; network disks on
+Hyperdisk, EBS and pd-standard, HDDs on an AWS d3. Blob storage was measured in
+March 2026, and the GPU rows are NVIDIA's specs. See
+[BENCHMARKING.md](BENCHMARKING.md) to run them yourself.
 
-| Operation                                                      | Latency    | Throughput |
-| -------------------------------------------------------------- | ---------- | ---------- |
-| GPU Memory Sequential Read (B200)                              |            | 7 TiB/s    |
-| GPU ↔ GPU Transfer, NVLink (B200)                              |            | 800 GiB/s  |
-| Memory Sequential Read, all cores                              |            | 200 GiB/s  |
-| Memory Sequential Write, all cores                             |            | 200 GiB/s  |
-| L1 Cache Read, 1 thread                                        | 1 ns       | 200 GiB/s  |
-| L2 Cache Read, 1 thread                                        | 5 ns       | 150 GiB/s  |
-| Memory Random Read (64 bytes), all cores                       |            | 100 GiB/s  |
-| Memory Random Write (64 bytes), all cores                      |            | 100 GiB/s  |
-| Memory Sequential Read, other socket, all cores‡               |            | 60 GiB/s   |
-| GPU ↔ CPU Transfer, PCIe (B200)                                | 10 μs      | 50 GiB/s   |
-| GPU ↔ GPU Network, RDMA (400 Gbit/s)                           | 5 μs       | 40 GiB/s   |
-| Memory Sequential Write, 1 thread                              |            | 30 GiB/s   |
-| L3 Cache Read, 1 thread                                        | 30 ns      | 30 GiB/s   |
-| Memory Sequential Read, 1 thread                               |            | 20 GiB/s   |
-| Memory Sequential Read, other socket, 1 thread‡                |            | 15 GiB/s   |
-| CPU Encrypt / Decrypt (AES-256-GCM), 1 thread                  |            | 10 GiB/s   |
-| CPU Encode / Decode Bitpacked Integers, 1 thread               |            | 10 GiB/s   |
-| SSD Sequential Read, 1 thread                                  |            | 5 GiB/s    |
-| CPU Hash, not crypto-safe (64 bytes), 1 thread                 | 10 ns      | 5 GiB/s    |
-| SSD Random Read (8 KiB), 2 threads                             | 100 μs     | 5 GiB/s    |
-| Network Bandwidth                                              |            | 3 GiB/s    |
-| Network Same-Zone                                              | 100 μs     | NW Limit   |
-| Network Cross-Zone                                             | 500 μs     | NW Limit   |
-| Network Cross-Region, Same-Continent                           | 25-60 ms   | NW Limit\* |
-| Network Cross-Region, Cross-Atlantic                           | 80-100 ms  | NW Limit\* |
-| Network Cross-Region, Cross-Pacific                            | 160-180 ms | NW Limit\* |
-| Blob Storage, Zonal Read (128 KiB)                             | 50 ms      | NW Limit   |
-| Blob Storage, Regional Read (128 KiB)                          | 100 ms     | NW Limit   |
-| Blob Storage, Regional Write (128 KiB)                         | 100 ms     | NW Limit   |
-| Blob Storage, Zonal Write (128 KiB)                            | 100 ms     | NW Limit   |
-| Memory Random Write (64 bytes), 1 thread                       |            | 3 GiB/s    |
-| SSD Sequential Write, 1 thread                                 |            | 3 GiB/s    |
-| Memory Random Read (64 bytes), 1 thread                        | 100 ns     | 3 GiB/s    |
-| SSD Random Write (8 KiB), 1 thread                             | 30 μs      | 3 GiB/s    |
-| CPU Decode Parquet (dictionary + zstd), 1 thread               |            | 2 GiB/s    |
-| SSD Sequential Durable Write (64 KiB), 1 thread†               | 50 μs      | 2 GiB/s    |
-| CPU Serialize (JSON, Protobuf), 1 thread                       |            | 1 GiB/s    |
-| CPU Decompress (lz4, zstd -1), 1 thread                        |            | 1 GiB/s    |
-| Network Disk, Zonal Sequential Read                            |            | 1 GiB/s    |
-| Network Disk, Regional Sequential Read                         |            | 1 GiB/s    |
-| Network Disk, Zonal Sequential Write                           |            | 1 GiB/s    |
-| Network Disk, Regional Sequential Write                        |            | 1 GiB/s    |
-| CPU Hash, crypto-safe (64 bytes), 1 thread                     | 100 ns     | 1 GiB/s    |
-| Network Disk, Zonal Sequential Durable Write (64 KiB)†         | 1 ms       | 1 GiB/s    |
-| Network Disk, Regional Sequential Durable Write (64 KiB)†      | 2 ms       | 1 GiB/s    |
-| CPU Compress (lz4, zstd -1), 1 thread                          |            | 500 MiB/s  |
-| CPU Sort (64-bit integers), 1 thread                           |            | 500 MiB/s  |
-| CPU Deserialize (JSON, Protobuf), 1 thread                     |            | 300 MiB/s  |
-| CPU Encode Parquet (dictionary + zstd), 1 thread               |            | 300 MiB/s  |
-| Network Disk, Zonal, HDD Sequential Read                       |            | 250 MiB/s  |
-| Network Disk, Zonal, HDD Sequential Write                      |            | 250 MiB/s  |
-| Network Disk, Regional, HDD Sequential Read                    |            | 250 MiB/s  |
-| Network Disk, Zonal Random Read (8 KiB)                        | 500 μs     | 250 MiB/s  |
-| Network Disk, Regional Random Read (8 KiB)                     | 500 μs     | 250 MiB/s  |
-| Network Disk, Zonal Random Write (8 KiB)                       | 500 μs     | 250 MiB/s  |
-| Network Disk, Regional Random Write (8 KiB)                    | 1 ms       | 250 MiB/s  |
-| HDD Sequential Read                                            |            | 200 MiB/s  |
-| HDD Sequential Write                                           |            | 200 MiB/s  |
-| Network Disk, Regional, HDD Sequential Write                   |            | 200 MiB/s  |
-| Network Disk, Zonal, HDD Sequential Durable Write (64 KiB)†    | 500 μs     | 200 MiB/s  |
-| Network Disk, Regional, HDD Sequential Durable Write (64 KiB)† | 1 ms       | 200 MiB/s  |
-| Network Disk, Zonal, HDD Random Write (8 KiB)                  | 500 μs     | 20 MiB/s   |
-| Network Disk, Regional, HDD Random Write (8 KiB)               | 1 ms       | 20 MiB/s   |
-| Network Disk, Zonal, HDD Random Read (8 KiB)                   | 20 ms      | 10 MiB/s   |
-| Network Disk, Regional, HDD Random Read (8 KiB)                | 20 ms      | 10 MiB/s   |
-| HDD Sequential Durable Write (8 KiB)†                          | 1 ms       | 8 MiB/s    |
-| HDD Random Write (8 KiB)                                       | 5 ms       | 2 MiB/s    |
-| HDD Random Read (8 KiB)                                        | 10 ms      | 2 MiB/s    |
-| CPU Atomic Increment                                           | 5 ns       |            |
-| CPU Mutex Lock + Unlock                                        | 10 ns      |            |
-| CPU System Call                                                | 100 ns     |            |
-| CPU Atomic Increment, contended                                | 100 ns     |            |
-| Memory Random Read, other socket‡                              | 250 ns     |            |
-| CPU Mutex Lock + Unlock, contended                             | 500 ns     |            |
-| CPU Context Switch                                             | 1 μs       |            |
-| CPU TCP Connect (+1 RTT)                                       | 10 μs      |            |
-| Proxy Request (Envoy, HAProxy, Nginx, ProxySQL)                | 50 μs      |            |
-| CPU Thread Spawn                                               | 50 μs      |            |
-| CPU TLS 1.3 Handshake (+1 RTT)                                 | 250 μs     |            |
-| CPU Process Spawn                                              | 300 μs     |            |
-| Database Query (MySQL, Memcached, Redis, ...)                  | 500 μs     |            |
-| Blob Storage, Zonal Conditional Write (128 KiB)                | 100 ms     |            |
-| Blob Storage, Regional Conditional Write (128 KiB)             | 100 ms     |            |
-| Blob Storage, Zonal List (1000 keys)                           | 100 ms     |            |
-| Blob Storage, Regional List (1000 keys)                        | 150 ms     |            |
+| Operation                                                                | Latency  | Throughput |
+| ------------------------------------------------------------------------ | -------- | ---------- |
+| GPU Memory Sequential Read (B200)                                        |          | 7 TiB/s    |
+| GPU ↔ GPU Transfer, NVLink (B200)                                        |          | 800 GiB/s  |
+| Memory Sequential Read, all cores                                        |          | 200 GiB/s  |
+| Memory Sequential Write, all cores                                       |          | 200 GiB/s  |
+| L1 Cache Read, 1 thread                                                  | 2 ns     | 200 GiB/s  |
+| L2 Cache Read, 1 thread                                                  | 5 ns     | 150 GiB/s  |
+| Memory Random Read (64 B), all cores                                     |          | 100 GiB/s  |
+| Memory Random Write (64 B), all cores                                    |          | 100 GiB/s  |
+| Memory Sequential Read, other socket, all cores‡                         |          | 60 GiB/s   |
+| CPU Hash, not crypto-safe (xxh3, 1 MiB), 1 thread                        |          | 50 GiB/s   |
+| CPU Decode Bitpacked Integers, 1 thread                                  |          | 50 GiB/s   |
+| GPU ↔ CPU Transfer, PCIe (B200)                                          | 10 μs    | 50 GiB/s   |
+| L3 Cache Read, 1 thread                                                  | 50 ns    | 40 GiB/s   |
+| GPU ↔ GPU Network, RDMA (400 Gbit/s)                                     | 5 μs     | 40 GiB/s   |
+| Memory Sequential Write, 1 thread                                        |          | 30 GiB/s   |
+| Memory Sequential Read, 1 thread                                         |          | 20 GiB/s   |
+| Memory Sequential Read, other socket, 1 thread‡                          |          | 15 GiB/s   |
+| CPU Encrypt / Decrypt (AES-256-GCM), 1 thread                            |          | 10 GiB/s   |
+| CPU Encode Bitpacked Integers, 1 thread                                  |          | 10 GiB/s   |
+| SSD Sequential Read (1 MiB), 1 thread                                    | 300 μs   | 5 GiB/s    |
+| SSD Random Read (8 KiB), 2 threads                                       | 100 μs   | 5 GiB/s    |
+| Network Bandwidth                                                        |          | 3 GiB/s    |
+| Memory Random Write (64 B), 1 thread                                     |          | 3 GiB/s    |
+| Memory Random Read (64 B), 1 thread                                      | 100 ns   | 3 GiB/s    |
+| SSD Random Write (8 KiB), 1 thread                                       | 30 μs    | 3 GiB/s    |
+| SSD Sequential Durable Write (64 KiB), 1 thread†                         | 50 μs    | 3 GiB/s    |
+| SSD Sequential Write (1 MiB), 1 thread                                   | 300 μs   | 3 GiB/s    |
+| Network Same-Zone                                                        | 100 μs   | NW Limit   |
+| Network Cross-Zone                                                       | 500 μs   | NW Limit   |
+| Network Cross-Region, Same-Continent                                     | 25-60 ms | NW Limit\* |
+| Blob Storage, Zonal Read (128 KiB)                                       | 50 ms    | NW Limit   |
+| Blob Storage, Regional Read (128 KiB)                                    | 100 ms   | NW Limit   |
+| Network Cross-Region, Cross-Atlantic                                     | 100 ms   | NW Limit\* |
+| Blob Storage, Zonal Write (128 KiB)                                      | 200 ms   | NW Limit   |
+| Blob Storage, Regional Write (128 KiB)                                   | 200 ms   | NW Limit   |
+| Network Cross-Region, US ↔ Singapore                                     | 200 ms   | NW Limit\* |
+| CPU Hash, crypto-safe (SHA-256, 1 MiB), 1 thread                         |          | 2 GiB/s    |
+| CPU Decode Parquet (dictionary + zstd), 1 thread                         |          | 2 GiB/s    |
+| CPU Serialize (JSON, Protobuf), 1 thread                                 |          | 1 GiB/s    |
+| CPU Decompress (lz4, zstd -1), 1 thread                                  |          | 1 GiB/s    |
+| Network Disk, Zonal Sequential Read (1 MiB), 1 thread                    | 1 ms     | 1 GiB/s    |
+| Network Disk, Regional Sequential Read (1 MiB), 1 thread                 | 1 ms     | 1 GiB/s    |
+| Network Disk, Zonal Sequential Durable Write (64 KiB), 1 thread†         | 1 ms     | 1 GiB/s    |
+| Network Disk, Zonal Sequential Write (1 MiB), 1 thread                   | 2 ms     | 1 GiB/s    |
+| Network Disk, Regional Sequential Write (1 MiB), 1 thread                | 2 ms     | 1 GiB/s    |
+| Network Disk, Regional Sequential Durable Write (64 KiB), 1 thread†      | 2 ms     | 1 GiB/s    |
+| CPU Compress (lz4, zstd -1), 1 thread                                    |          | 500 MiB/s  |
+| CPU Deserialize (JSON, Protobuf), 1 thread                               |          | 500 MiB/s  |
+| Network Disk, Zonal Random Read (8 KiB), 2 threads                       | 500 μs   | 500 MiB/s  |
+| Network Disk, Regional Random Read (8 KiB), 2 threads                    | 500 μs   | 500 MiB/s  |
+| Network Disk, Zonal Random Write (8 KiB), 1 thread                       | 500 μs   | 500 MiB/s  |
+| Network Disk, Regional Random Write (8 KiB), 1 thread                    | 1 ms     | 500 MiB/s  |
+| CPU Sort (64-bit integers, 1 GiB), 1 thread                              |          | 300 MiB/s  |
+| CPU Encode Parquet (dictionary + zstd), 1 thread                         |          | 300 MiB/s  |
+| Network Disk, Zonal, HDD Sequential Read (1 MiB), 1 thread               | 1 ms     | 250 MiB/s  |
+| Network Disk, Regional, HDD Sequential Read (1 MiB), 1 thread            | 1 ms     | 250 MiB/s  |
+| Network Disk, Zonal, HDD Sequential Write (1 MiB), 1 thread              | 5 ms     | 250 MiB/s  |
+| Network Disk, Zonal, HDD Sequential Durable Write (64 KiB), 1 thread†    | 500 μs   | 200 MiB/s  |
+| Network Disk, Regional, HDD Sequential Durable Write (64 KiB), 1 thread† | 1 ms     | 200 MiB/s  |
+| Network Disk, Regional, HDD Sequential Write (1 MiB), 1 thread           | 5 ms     | 200 MiB/s  |
+| HDD Sequential Read (1 MiB), 1 thread                                    | 5 ms     | 200 MiB/s  |
+| HDD Sequential Write (1 MiB), 1 thread                                   | 5 ms     | 200 MiB/s  |
+| Blob Storage, Regional Read (1 GiB), 1 connection                        |          | 100 MiB/s  |
+| Network Disk, Zonal, HDD Random Write (8 KiB), 1 thread                  | 500 μs   | 20 MiB/s   |
+| Network Disk, Regional, HDD Random Write (8 KiB), 1 thread               | 1 ms     | 20 MiB/s   |
+| Network Disk, Zonal, HDD Random Read (8 KiB), 2 threads                  | 20 ms    | 10 MiB/s   |
+| Network Disk, Regional, HDD Random Read (8 KiB), 2 threads               | 20 ms    | 10 MiB/s   |
+| HDD Sequential Durable Write (8 KiB), 1 thread†                          | 1 ms     | 5 MiB/s    |
+| HDD Random Write (8 KiB), 1 thread                                       | 5 ms     | 2 MiB/s    |
+| HDD Random Read (8 KiB), 2 threads                                       | 10 ms    | 2 MiB/s    |
+| CPU Hash, not crypto-safe (xxh3, 64 B)                                   | 5 ns     |            |
+| CPU Atomic Increment                                                     | 5 ns     |            |
+| CPU Mutex Lock + Unlock                                                  | 10 ns    |            |
+| CPU Atomic Increment, contended                                          | 30 ns    |            |
+| CPU Hash, crypto-safe (SHA-256, 64 B)                                    | 100 ns   |            |
+| CPU System Call                                                          | 100 ns   |            |
+| CPU Mutex Lock + Unlock, contended                                       | 200 ns   |            |
+| Memory Random Read (64 B), other socket‡                                 | 250 ns   |            |
+| CPU Context Switch                                                       | 1 μs     |            |
+| CPU Cross-core Wake-up                                                   | 2 μs     |            |
+| CPU TCP Connect (+1 RTT)                                                 | 10 μs    |            |
+| Proxy Request (HAProxy, Nginx) (+1 RTT)                                  | 20 μs    |            |
+| Cache Get (Memcached, Redis) (+1 RTT)                                    | 20 μs    |            |
+| CPU Thread Spawn                                                         | 30 μs    |            |
+| Database Query, primary key (MySQL, Postgres) (+1 RTT)                   | 30 μs    |            |
+| CPU TLS 1.3 Handshake (+1 RTT)                                           | 300 μs   |            |
+| CPU Process Spawn                                                        | 300 μs   |            |
+| Blob Storage, Zonal Conditional Write (128 KiB)                          | 100 ms   |            |
+| Blob Storage, Regional Conditional Write (128 KiB)                       | 100 ms   |            |
+| Blob Storage, Zonal List (1000 keys)                                     | 100 ms   |            |
+| Blob Storage, Regional List (1000 keys)                                  | 150 ms   |            |
 
-† pwrite + fdatasync into a preallocated file. Cloud SSDs and network disks
-have no write cache to flush (Azure Premium SSD flushes in ~30 μs), so a durable
-write costs a write.
+† pwrite + fdatasync into a preallocated file; one thread keeps 32 in flight
+with io_uring, and the latency is one at a time. Cloud SSDs and most network
+disks have no write cache to flush (pd-standard and Azure Premium SSD flush in
+30-80 μs), so a durable write costs a write. HDDs flush theirs (~1 ms), which
+32 in flight don't speed up.
 
 ‡ Only the largest shapes span two sockets. Reading the other socket's memory
-costs ~2.5x the latency, and all cores share the ~60 GiB/s link (Graviton4).
+costs ~2x the latency, and all cores share the ~60 GiB/s link (Graviton4).
 Keep memory on the socket that reads it: Linux allocates on the node of the
-thread that first touches a page. Intel's
-largest VMs also split one socket into a NUMA node per die; another die costs
-1.2x the latency and 0.7x one thread's bandwidth, but all cores lose only ~10%.
+thread that first touches a page. Intel's largest VMs also split one socket
+into a NUMA node per die; another die costs 1.2x the latency and 0.7x one
+thread's bandwidth, but all cores lose only ~10%.
 
-\* One TCP connection moves ~2 MiB per round trip, so 2 MiB / RTT: 20 MiB/s
+\* One TCP connection moves ~3 MiB per round trip, so 3 MiB / RTT: 30 MiB/s
 at 100 ms. Add connections to go faster.
 
-Throughput is with enough requests in flight to max out a 48 vCPU VM (AWS m8,
-GCP C4) and its disks (EBS gp3, Hyperdisk Balanced at max provisioning; HDDs are
-2 TB pd-standard). CPU and memory rows marked 1 thread scale with cores until
-memory bandwidth runs out (on x86 a vCPU is half a core). x86 memory writes need
-non-temporal stores to get there; a plain memset first reads every line it
-overwrites and gets half. One thread with one request in flight gets size /
-latency instead: 8 KiB random SSD reads at 100 μs are 80 MiB/s, writes at 30 μs
-250 MiB/s. SSD rows use io_uring with 32-128 requests in flight per thread; one
-core tops out at 500-850k small random reads per second, hence two threads. One
-thread reading a file sequentially gets 1-5 GiB/s, from kernel readahead. One
-TCP flow gets the VM's bandwidth on GCP but 5 Gbit/s (600 MiB/s) on AWS outside
-a placement group, and 2 MiB / RTT across regions (\*). Regional disks copy
-every write to a second zone, so only their write latency differs. Blob Storage
+Throughput is with enough requests in flight to max out a 48 vCPU VM and its
+disks: local NVMe SSDs striped together, EBS gp3 at 16k IOPS / 1000 MiB/s and
+Hyperdisk Balanced at 80k IOPS / 1600 MiB/s, 2 TB pd-standard for network HDDs.
+Disk rows use io_uring with 32-128 requests in flight per thread; one core tops
+out at 500-850k small random reads per second, hence two threads. Their
+latency is the p50 of one request at a time, and one thread with one request
+in flight gets size / latency: 8 KiB random SSD reads at 100 μs are 80 MiB/s,
+but 1 MiB sequential reads at 300 μs already get 3 GiB/s. One thread reading a
+file 8 KiB at a time gets 1-5 GiB/s, from kernel readahead. Regional disks copy
+every write to a second zone, which adds ~1 ms to every write.
+
+CPU and memory rows marked 1 thread scale with cores until memory bandwidth
+runs out (on x86 a vCPU is half a core). x86 memory writes need non-temporal
+stores to get there; on one thread, a plain memset first reads every line it
+overwrites and gets half. Random memory throughput is with 4 KiB pages, where
+the TLB misses; the 100 ns latency is with 2 MiB huge pages (~150 ns with 4
+KiB). The +1 RTT rows are measured over loopback, so add the network's round
+trip; a proxy also adds one to its backend.
+
+One TCP flow gets the VM's bandwidth on GCP but 5 Gbit/s (600 MiB/s) on AWS
+outside a placement group, and 3 MiB / RTT across regions (\*). Blob Storage
 latency is p99 from the same region; Zonal is S3 Express One Zone and GCS Rapid.
 Conditional writes are compare-and-swap on one object, one at a time; regional
 GCS also allows only ~1 write per second to the same object. Region-to-region
@@ -152,7 +170,7 @@ Approximate numbers that should be consistent between Cloud providers.
 
 | What                          | Amount | \$ / Month | Spot \$ /month |
 | ----------------------------- | ------ | ---------- | -------------- |
-| CPU                           | 1 vCPU | \$25       | \$10           |
+| CPU                           | 1 vCPU | \$30       | \$10           |
 | GPU (B200)                    | 1      | \$9000     | \$5000         |
 | Memory                        | 1 GB   | \$2.5      | \$1            |
 | Storage                       |        |            |                |
@@ -161,6 +179,7 @@ Approximate numbers that should be consistent between Cloud providers.
 | ├ Blob Storage, Zonal         | 1 GB   | \$0.1      |                |
 | ├ Network Disk, Zonal, HDD    | 1 GB   | \$0.04     |                |
 | ├ SSD                         | 1 GB   | \$0.15     | \$0.04         |
+| ├ SSD, storage-optimized      | 1 GB   | \$0.05     |                |
 | ├ HDD                         | 1 GB   | \$0.01     | \$0.001        |
 | ├ Network Disk, Regional, HDD | 1 GB   | \$0.08     |                |
 | ├ Network Disk, Zonal         | 1 GB   | \$0.1      |                |
@@ -174,7 +193,7 @@ Approximate numbers that should be consistent between Cloud providers.
 | ├ Cross-Region                | 1 GB   | \$0.02     |                |
 | ├ Internet Egress ††          | 1 GB   | \$0.1      |                |
 | CDN Egress                    | 1 GB   | \$0.08     |                |
-| CDN Fill ‡                    | 1 GB   | \$0.01     |                |
+| CDN Fill ¶                    | 1 GB   | \$0.01     |                |
 | Warehouse Query               | 1 GB   | \$0.005    |                |
 | Logs/Traces ♣                 | 1 GB   | \$0.5      |                |
 | Metrics (series)              | 1000   | \$20       |                |
@@ -183,7 +202,7 @@ Approximate numbers that should be consistent between Cloud providers.
 †† This refers to network leaving your cloud provider, e.g. sending data to S3
 from GCP or egress network for sending HTML from AWS to a client.
 
-‡ CDNs also charge ~\$1 per 1M requests, cache hits included.
+¶ CDNs also charge ~\$1 per 1M requests, cache hits included.
 
 ♣ [Datadog](https://www.datadoghq.com/pricing/?product=log-management#products)
 charges \$0.1/GB ingested plus ~\$1.5 per 1M indexed events for 7d retention.
@@ -199,51 +218,52 @@ operation (fewer, large files is cheaper):
 
 Zonal buckets also charge \$0.003 per GB written and \$0.0006 per GB read.
 
-Instance shapes are the same few ratios on every cloud, here per vCPU at list
-price (one B200 per 25 vCPU):
+Instance shapes are the same few ratios on every cloud, here per vCPU at AWS's
+list price (one B200 per 25 vCPU). Most cost a vCPU plus its memory and SSD at
+the unit prices above; the largest memory shapes and B200s cost more:
 
 | Shape         | vCPU | Memory (GiB) | VRAM (GB) | SSD (GB) | Network (GB/s) | \$ / mo / vCPU | Max (vCPU) |
 | ------------- | ---- | ------------ | --------- | -------- | -------------- | -------------- | ---------- |
 | CPU           | 1    | 2            |           |          | 0.07           | \$35           | 300        |
-| General       | 1    | 4            |           |          | 0.07           | \$35           | 300        |
-| General, SSD  | 1    | 4            |           | 60       | 0.07           | \$45           | 300        |
+| General       | 1    | 4            |           |          | 0.07           | \$40           | 300        |
+| General, SSD  | 1    | 4            |           | 60       | 0.07           | \$50           | 300        |
 | Memory        | 1    | 8            |           |          | 0.07           | \$50           | 300        |
-| Memory, High  | 1    | 16           |           |          | 0.06           | \$80           | 200        |
+| Memory, High  | 1    | 16           |           |          | 0.06           | \$70           | 200        |
 | Memory, Ultra | 1    | 32           |           |          | 0.1            | \$150          | 128        |
-| SSD           | 1    | 8            |           | 250      | 0.07           | \$70           | 200        |
+| SSD           | 1    | 8            |           | 250      | 0.07           | \$65           | 200        |
 | SSD, High     | 1    | 8            |           | 600      | 0.15           | \$95           | 200        |
 | GPU (B200)    | 1    | 14           | 7         | 100      | 2              | \$350          | 200        |
 
 Reading 1 TiB costs the VM time it takes at the row's throughput (48 vCPU + 192
-GB is \$1,700/month, \$0.0006/s; the 1-thread row is one vCPU; the GPU
-row is a B200 at its 8 TB/s spec), plus the transfer and request fees above:
+GB is \$1,900/month, \$0.0007/s; the 1-thread memory row pays for one vCPU; the
+GPU row is a B200 at 7 TiB/s), plus the transfer and request fees above:
 
-| What                                            | \$ / TiB read |
-| ----------------------------------------------- | ------------- |
-| GPU Memory Sequential Read (B200)               | \$0.0005      |
-| Memory Sequential Read, 1 thread                | \$0.0005      |
-| Memory Sequential Read, all cores               | \$0.003       |
-| Memory Random Read (64 bytes), all cores        | \$0.006       |
-| SSD Sequential Read                             | \$0.1         |
-| SSD Random Read (8 KiB)                         | \$0.1         |
-| Network Same-Zone                               | \$0.2         |
-| Blob Storage, Regional Read (8 MiB)             | \$0.3         |
-| Network Disk, Zonal Sequential Read             | \$0.7         |
-| Network Disk, Regional Sequential Read          | \$0.7         |
-| Blob Storage, Zonal Read (8 MiB)§               | \$0.8         |
-| Blob Storage, Zonal Read (128 KiB)§             | \$2           |
-| Network Disk, Zonal, HDD Sequential Read        | \$3           |
-| Network Disk, Regional, HDD Sequential Read     | \$3           |
-| Network Disk, Zonal Random Read (8 KiB)         | \$3           |
-| Network Disk, Regional Random Read (8 KiB)      | \$3           |
-| HDD Sequential Read                             | \$3           |
-| Blob Storage, Regional Read (128 KiB)           | \$4           |
-| Network Cross-Zone                              | \$10          |
-| Network Cross-Region                            | \$20          |
-| Network Disk, Zonal, HDD Random Read (8 KiB)    | \$70          |
-| Network Disk, Regional, HDD Random Read (8 KiB) | \$70          |
-| Network Internet Egress                         | \$100         |
-| HDD Random Read (8 KiB)                         | \$300         |
+| What                                                | \$ / TiB read |
+| --------------------------------------------------- | ------------- |
+| GPU Memory Sequential Read (B200)                   | \$0.0005      |
+| Memory Sequential Read, 1 thread                    | \$0.0006      |
+| Memory Sequential Read, all cores                   | \$0.004       |
+| Memory Random Read (64 B), all cores                | \$0.008       |
+| SSD Sequential Read (1 MiB)                         | \$0.2         |
+| SSD Random Read (8 KiB)                             | \$0.2         |
+| Network Same-Zone                                   | \$0.3         |
+| Blob Storage, Regional Read (8 MiB)                 | \$0.3         |
+| Network Disk, Zonal Sequential Read (1 MiB)         | \$0.8         |
+| Network Disk, Regional Sequential Read (1 MiB)      | \$0.8         |
+| Blob Storage, Zonal Read (8 MiB)§                   | \$0.9         |
+| Network Disk, Zonal Random Read (8 KiB)             | \$2           |
+| Network Disk, Regional Random Read (8 KiB)          | \$2           |
+| Blob Storage, Zonal Read (128 KiB)§                 | \$2           |
+| Network Disk, Zonal, HDD Sequential Read (1 MiB)    | \$3           |
+| Network Disk, Regional, HDD Sequential Read (1 MiB) | \$3           |
+| Blob Storage, Regional Read (128 KiB)               | \$4           |
+| HDD Sequential Read (1 MiB)                         | \$4           |
+| Network Cross-Zone                                  | \$10          |
+| Network Cross-Region                                | \$20          |
+| Network Disk, Zonal, HDD Random Read (8 KiB)        | \$80          |
+| Network Disk, Regional, HDD Random Read (8 KiB)     | \$80          |
+| Network Internet Egress                             | \$100         |
+| HDD Random Read (8 KiB)                             | \$400         |
 
 § Zonal GETs cost 4x less, but every byte read costs \$0.6/TiB, so zonal is
 cheaper below ~500 KiB per request and regional above.
@@ -261,11 +281,11 @@ by 10x_. E.g. on the Silesia corpus, lz4 gets 2x at ~500 MiB/s, zstd -9 3.5x at
 
 | What                   | Compression Ratio |
 | ---------------------- | ----------------- |
-| HTML                   | 3-8x              |
+| HTML                   | 4-8x              |
 | English                | 2-4x              |
-| Source Code            | 3-9x              |
-| Executables            | 2-3x              |
-| RPC (JSON)             | 5-15x             |
+| Source Code            | 3-10x             |
+| Executables            | 2-5x              |
+| RPC (JSON)             | 5-13x             |
 | Logs                   | 6-30x             |
 | Encrypted / compressed | 1x                |
 
@@ -285,7 +305,8 @@ datasets with `compression_ratio` and `compression_ratio_columns`:
 ALP gets the same ratio as zstd on floats and decodes at ~10 GiB/s on one core.
 Floats that use the full mantissa (coordinates, model weights) barely compress
 at all. Bitpacked integers take log2 of each 1024-value range in bits and decode
-at ~15 GiB/s; sorted or low-cardinality columns need RLE or a dictionary first.
+at ~15 GiB/s into a whole column, ~50 GiB/s a block at a time into cache;
+sorted or low-cardinality columns need RLE or a dictionary first.
 FSST decodes at ~2 GiB/s and keeps every string decodable on its own, where zstd
 over a whole column gets 3-10x. Dictionary and RLE columns also pay for the
 dictionary itself (each distinct value once); the smaller of the two rules

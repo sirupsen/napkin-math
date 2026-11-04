@@ -51,6 +51,7 @@ debug build.
 | `cache_read`, `cache_read_latency` | The `memory_sequential_read` SIMD loop, and the pointer chase, over 16 KiB, 256 KiB and 8 MiB | L1/L2/L3 Cache Read |
 | `cpu_encrypt` | ring AES-256-GCM and ChaCha20-Poly1305 seal and open on 16 KiB | CPU Encrypt / Decrypt |
 | `cpu_hash`, `cpu_hash_1mib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and 1 MiB buffers | CPU Hash rows |
+| `cpu_bitpack` | `bitpacking`'s BitPacker4x packing and unpacking 256 MiB of 12-bit integers | CPU Encode / Decode Bitpacked Integers |
 | `cpu_serialize` | Protobuf (prost), JSON (serde_json, to structs and to a dynamic `Value`) and postcard on a 1 MiB batch of events | CPU Serialize, CPU Deserialize |
 | `cpu_sort` | `sort_unstable` on random `u64`, 1 MiB to 1 GiB | CPU Sort |
 | `cpu_atomic_mutex` | Atomic increment and `Mutex` lock + unlock, alone and with a second core on the same line | CPU Atomic Increment, CPU Mutex Lock + Unlock |
@@ -59,24 +60,43 @@ debug build.
 | `cpu_handshake` | TCP connect over loopback, and a full TLS 1.3 handshake (rustls, ECDSA P-256, X25519) in memory | CPU TCP Connect, CPU TLS 1.3 Handshake |
 | `cpu_spawn` | `thread::spawn` + join, and spawning `true` and waiting for it | CPU Thread Spawn, CPU Process Spawn |
 
-In October 2026 on a c4-standard-8 (Xeon 8581C), serialization ran at
-0.9-1.2 GiB/s for every format and deserialization into structs at 350-400
-MiB/s (200 MiB/s into a dynamic JSON `Value`): allocating the objects, not the
-format, sets the speed.
+On November 4, 2026, the whole suite ran on a c4-standard-48 (Xeon 8581C), an
+m8i.12xlarge (Xeon 6975P-C) and an m8g.12xlarge (Graviton4), one thread unless
+noted:
 
-On October 24, 2026 on a c4-standard-16-lssd (Xeon 6985P-C), these ran at:
-L1/L2/L3 latency 1.4 / 4.9 / 31 ns and throughput 227 / 159 / 28 GiB/s; memset
-and memcpy 11.3 / 11.5 GiB/s; random 64 B writes 1.9 GiB/s (2.7-5.1 on the
-other hosts, hence 3 GiB/s); AES-256-GCM 10.3 GiB/s and ChaCha20-Poly1305 2.5
-GiB/s; atomic increment 6 ns (72 ns contended); mutex 12 ns (546 ns
-contended); thread spawn 52 us; process spawn 305 us; loopback TCP connect 7.8
-us; TLS 1.3 handshake 259 us of CPU for both sides. TCP connect and the TLS
-handshake each add one network round trip on top.
+| | C4 | m8i | m8g | README |
+| --- | --- | --- | --- | --- |
+| L1 / L2 / L3 latency (16 KiB / 256 KiB / 8 MiB) | 1.5 / 4.3 / 25 ns | 1.6 / 4.4 / 35 ns | 1.8 / 4.1 / 93 ns | 2 / 5 / 50 ns |
+| L1 / L2 / L3 read | 330 / 169 / 37 GiB/s | 300 / 175 / 28 | 101 / 76 / 51 | 200 / 150 / 40 |
+| Memory read, 1 thread / 48 threads | 18.2 / 152 GiB/s | 21.4 / 203 | 28.6 / 293 | 20 / 200 |
+| Memory write, 1 thread / 48 threads (non-temporal on x86) | 28.1 / 100 GiB/s | 22.0 / 150 | 59.0 / 321 | 30 / 200 |
+| Random 64 B read / write, 1 thread, 16 GiB | 2.9 / 2.2 GiB/s | 2.5 / 3.7 | 1.9 / 1.7 | 3 / 3 |
+| Random 64 B read / write, 48 threads, 16 GiB | 56 / 39 GiB/s | 43 / 65 | 137 / 128 | 100 / 100 |
+| Random read latency, 1 GiB, huge pages / 4 KiB pages | 102 / 129 ns | 128 / 175 | 116 / 154 | 100 |
+| AES-256-GCM encrypt / decrypt | 9.7 / 9.9 GiB/s | 9.5 / 9.7 | 4.1 / 4.1 | 10 |
+| xxh3, 64 B / 1 MiB | 2.8 ns / 68 GiB/s | 2.7 / 69 | 5.4 / 20 | 5 ns / 50 GiB/s |
+| crc32 / siphash, 64 B | 27 / 18 ns | 29 / 17 | 21 / 23 | |
+| sha256, 64 B / 1 MiB | 84 ns / 1.8 GiB/s | 85 / 1.75 | 80 / 1.43 | 100 ns / 2 GiB/s |
+| BitPacker4x pack / unpack, 12 bits | 9.6 / 61 GiB/s | 14.5 / 56 | 18.9 / 47 | 10 / 50 |
+| Protobuf serialize / deserialize | 1.08 GiB/s / 414 MiB/s | 1.09 / 406 | 1.17 / 295 | 1 GiB/s / 500 MiB/s |
+| JSON serialize / deserialize (to `Value`) | 1.18 GiB/s / 464 (226) MiB/s | 1.16 / 444 (214) | 0.99 / 377 (201) | |
+| Sort `u64`, 1 MiB / 64 MiB / 1 GiB | 634 / 474 / 339 MiB/s | 615 / 451 / 341 | 560 / 401 / 349 | 300 (1 GiB) |
+| Atomic increment / contended | 6.2 / 30 ns | 6.6 / 35 | 6.5 / 19 | 5 / 30 |
+| Mutex lock + unlock / contended | 12.7 / 142 ns | 13.0 / 335 | 14.7 / 108 | 10 / 200 |
+| `getppid` / `stat` / `getrusage` | 80 / 213 / 773 ns | 82 / 218 / 789 | 134 / 271 / 1028 | 100 |
+| futex round trip, same core / cross core | 1.50 / 3.07 us | 1.41 / 3.92 | 1.80 / 5.04 | 1 / 2 us per switch |
+| Thread spawn + join / process spawn + wait | 31 / 345 us | 43 / 430 | 25 / 311 | 30 / 300 |
+| Loopback TCP connect / TLS 1.3 handshake (both sides) | 8.7 / 273 us | 8.2 / 281 | 11.9 / 296 | 10 / 300 |
 
-On October 26, 2026 on an m8id.12xlarge (Xeon 6975P-C, 48 vCPU), AES-256-GCM
-decrypted at 9.7 GiB/s and encrypted at 9.5 GiB/s (ChaCha20-Poly1305 2.3 GiB/s
-both ways), and a 16 GiB memset across 48 pinned threads ran at 145 GiB/s
-(11.5 GiB/s on one thread).
+A futex round trip is two wake-ups, so the README halves it: a context switch
+costs ~1 us, and waking a thread on another core ~2 us. Graviton4's AES-GCM
+is ring's ARM path at 4 GiB/s, against 10 on x86. Serialization runs at ~1
+GiB/s for every format, and deserializing into structs at 300-450 MiB/s (200
+into a dynamic JSON `Value`): allocating the objects, not the format, sets the
+speed. TCP connect and the TLS handshake each add one network round trip on
+top. Bitpacking unpacks a 128-value block at a time into a buffer that stays in
+L1, the way a reader consumes a column; FastLanes decoding whole columns into
+memory runs at 10-17 GiB/s (below).
 
 The README collapses `memory_sequential_read`'s scalar and SIMD variants into one
 single-thread row and one threaded row for memorability. `memory_random` issues
@@ -153,11 +173,11 @@ was just loaded; AVX2 makes two loads per 64-byte line and AVX-512 one. An AVX2
 loop that reads only half of each line drops to the same 18.5 GiB/s. More
 accumulators, more streams, and one software prefetch per line at 0.5-8 KiB
 only got AVX-512 to 19. Prefetching both 1 KiB ahead into L1 and 16 KiB ahead
-into L2 got it to 23 GiB/s on m8i and 18.5 on C4, so buffers over 64 MiB now
+into L2 got it to 21-23 GiB/s on m8i and 18.5-18.7 on C4, so buffers over 64 MiB now
 take that path.
 
 That is about the limit for one core. By Little's law, bandwidth is lines in
-flight x 64 B / latency: 23 GiB/s at 136 ns is ~52 lines, about what a
+flight x 64 B / latency: 21-23 GiB/s at 136 ns is ~50 lines, about what a
 Granite Rapids L2 tracks. On Graviton4 every loop shape (LLVM's, NEON with 4-16
 accumulators, 64-byte `ld1`, `ldnp`, software prefetch) read 31 GiB/s, and two
 streams 35 (~67 lines at 115 ns). The README's 20 GiB/s rounds the x86 side; an
@@ -184,8 +204,8 @@ cargo bench --bench storage -- /mnt/nvme/disk.dat                       # a file
 cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1      # an unused raw device
 ```
 
-`benches/storage.rs` runs sequential 1 MiB reads and writes at QD32, random
-8 KiB reads and writes at QD1 and QD128, and buffered 8 KiB sequential reads
+`benches/storage.rs` runs sequential 1 MiB reads and writes at QD1 and QD32,
+random 8 KiB reads and writes at QD1 and QD128, and buffered 8 KiB sequential reads
 and writes, all with `O_DIRECT` except the buffered ones. On Linux the
 `O_DIRECT` tests use io_uring (the only dependency): one thread with its own
 ring, the file and buffers registered, reaping completions a quarter of the
@@ -201,20 +221,11 @@ device or without `--destroy`. A file target includes the file system's cost; a
 raw device does not.
 
 The README uses the max-throughput results (1 MiB QD32 for sequential, 8 KiB
-QD128 for random) and QD1 latency for random reads and writes. On October 24,
-2026, Hyperdisk Balanced (80k IOPS / 1600 MiB/s) did 8 KiB random writes at
-449 us QD1 and 633 MiB/s max, the same as its reads: network disks cap random
-I/O at the provisioned IOPS either way. One GCP local NVMe disk wrote at 30 us
-QD1, capped at 335 MiB/s per disk. An m8id.12xlarge instance-store disk did
-8 KiB random writes at 30 us QD1 and 2.8 GiB/s max (reads: 84 us, 5.9 GiB/s);
-writes land in the drive's DRAM cache, so they beat reads at QD1. A d3.xlarge
-HDD did 8 KiB random writes at 4.2 ms QD1 and 2 MiB/s max (237 IOPS); the
-drive's write cache reorders them, so they beat random reads (12 ms). For an
+QD128 for random) and QD1 latency (p50) for both. Local NVMe writes land in
+the drive's DRAM cache, so they beat reads at QD1 (30 us against 90). For an
 HDD, test the whole disk with `--size 1800g --no-precondition` so random reads
-seek across all of it. The October 2026 rows came from local NVMe on GCP C4 and
-AWS m8id/m8gd, EBS gp3 at 16k IOPS / 1000 MiB/s, GCP Hyperdisk Balanced at
-80k IOPS / 1600 MiB/s on a c4-standard-16, and the instance-store HDDs of an AWS
-d3.xlarge.
+seek across all of it. The rows come from local NVMe on GCP C4 and AWS
+m8id/m8gd, the network disks and HDDs below.
 
 On November 1, 2026, all local disks of a VM were striped (`mdadm` RAID0, 256
 KiB chunks) and measured with `storage` and `fio` (io_uring, 4 KiB random at
@@ -232,7 +243,7 @@ From one thread (`fio --numjobs=1`, io_uring), on the same striped disks:
 | --- | --- | --- | --- |
 | Seq read 1 MiB QD32 | 5.2 GiB/s (15% of a core) | 5.9 | 5.9 |
 | Seq write 1 MiB QD32 | 2.7 GiB/s | 2.7 | 2.7 |
-| 8 KiB rand read QD128 | 486k IOPS (3.8 GiB/s) | 610k (4.8) | 469k (3.7) |
+| 8 KiB rand read QD128 | 486k IOPS (3.7 GiB/s) | 610k (4.7) | 469k (3.6) |
 | 4 KiB rand read QD256, batched | 702k IOPS | 842k | 637k |
 | 4-8 KiB rand write | 631k IOPS | 427k | 425k |
 
@@ -247,6 +258,13 @@ for writes) matched `fio`: 1.32M / 678k IOPS on C4, 757k / 436k on m8id (88% of
 `fio`'s reads, 94% of the published limit), 867k / 435k on m8gd. So the bench,
 not `fio`, is the tool; run `fio` once on a new kind of disk to check the bench
 still reaches its limits there.
+
+On November 4, 2026, on the same striped disks (C4 / m8id / m8gd, raw device,
+p50), one 1 MiB request at a time took 415 / 260 / 151 us to read and 340 /
+385 / 289 us to write: one thread with one request in flight already gets 2.3-5.0
+GiB/s reading and 2.7-2.8 GiB/s writing. Buffered 8 KiB reads, sped up only by
+kernel readahead, ran at 3.6 / 1.5 / 5.2 GiB/s from the device and 5.2 / 1.5 /
+3.9 GiB/s from an ext4 file.
 
 AWS publishes no throughput limit for instance store. The README's SSD rows used
 to come from one of the C4's 8 disks (650 MiB/s read, 335 write, its per-disk
@@ -266,52 +284,63 @@ That is where the README's old `8 GiB/s` sequential SSD read came from.
 
 ### Network Disk, Zonal and Regional
 
-On October 27, 2026, `storage` (raw device) and `storage_durable_write` (ext4)
-ran on a zonal and a regional disk with the same provisioning, attached to one
-48 vCPU VM per cloud: Hyperdisk Balanced and Hyperdisk Balanced High
-Availability (replicas in `us-central1-c` and `us-central1-a`, 80k IOPS / 1600
-MiB/s) on a c4-standard-48, and Azure Premium SSD P30 LRS and ZRS (5000 IOPS /
-200 MB/s) on a Standard_D48ds_v6 in `eastus2` (p50). An earlier run on 16 vCPU
-VMs gave the same numbers within a few percent.
+On November 4, 2026, `storage` (raw device) and `storage_durable_write` (ext4)
+ran on zonal and regional disks attached to one 48 vCPU VM per cloud:
+Hyperdisk Balanced and Hyperdisk Balanced High Availability (replicas in
+`us-central1-c` and `us-central1-a`, 80k IOPS / 1600 MiB/s each) on a
+c4-standard-48, and a 200 GB EBS gp3 at 16k IOPS / 1000 MiB/s on an
+m8i.12xlarge (p50; durable writes from one thread, 1 at a time and 32 in
+flight):
 
-| | Hyperdisk Zonal | Hyperdisk Regional | Azure LRS | Azure ZRS |
-| --- | --- | --- | --- | --- |
-| Random read 8 KiB, QD1 | 458 us | 481 us | 3.01 ms | 2.25 ms |
-| Random write 8 KiB, QD1 | 392 us | 1.28 ms | 1.54 ms | 1.69 ms |
-| Random read / write 8 KiB, QD128 | 633 / 633 MiB/s | 633 / 631 MiB/s | 39 / 40 MiB/s | 41 / 42 MiB/s |
-| Sequential read / write 1 MiB, QD32 | 1.6 / 1.6 GiB/s | 1.6 / 1.6 GiB/s | 195 / 195 MiB/s | 195 / 203 MiB/s |
-| Durable write 64 KiB, 1 writer | 548 us | 1.37 ms | 1.89 ms | 2.01 ms |
-| Durable write 64 KiB, 32 writers | 1.6 GiB/s | 1.3 GiB/s | 119 MiB/s | 195 MiB/s |
-| Appending durable write 8 KiB | 1.21 ms | 3.93 ms | 6.12 ms | 5.16 ms |
+| | Hyperdisk Zonal | Hyperdisk Regional | EBS gp3 |
+| --- | --- | --- | --- |
+| Sequential read 1 MiB, QD1 / QD32 | 926 us / 1.6 GiB/s | 1.05 ms / 1.6 GiB/s | 1.86 ms / 1.0 GiB/s |
+| Sequential write 1 MiB, QD1 / QD32 | 1.12 ms / 1.6 GiB/s | 2.39 ms / 1.6 GiB/s | 3.38 ms / 1.0 GiB/s |
+| Random read 8 KiB, QD1 / QD128 | 478 us / 633 MiB/s | 509 us / 633 MiB/s | 681 us / 133 MiB/s |
+| Random write 8 KiB, QD1 / QD128 | 409 us / 633 MiB/s | 1.27 ms / 557 MiB/s | 1.00 ms / 133 MiB/s |
+| Durable write 64 KiB, 1 / 32 in flight | 503 us / 1.6 GiB/s | 1.39 ms / 1.27 GiB/s | 1.52 ms / 0.99 GiB/s |
+| Appending durable write 8 KiB | 1.21 ms | 3.93 ms | 3.50 ms |
 
-The regional Hyperdisk adds ~0.9 ms to every write, the round trip to its
-second zone, and matches the zonal one on reads and throughput. Azure ZRS
-writes within ~10% of LRS on the same size, but a P30 is slower than either
-Hyperdisk at every queue depth. The README rows use the Hyperdisk Regional
-latencies, rounded: 1 ms for an 8 KiB random write and 2 ms for a 64 KiB durable
-write (1.4-2.0 ms on both clouds). Azure Premium SSD reports `write back` and
-gets one flush per `fdatasync`, ~30 us from one writer and several ms with 32;
-every other cloud disk here is `write through`. AWS has no regional block
-storage: EBS volumes live in one zone.
+The regional Hyperdisk adds ~0.9-1.3 ms to every write, the round trip to its
+second zone, and matches the zonal one on reads and throughput. Network disks
+cap random I/O at the provisioned IOPS, reads and writes alike. The README
+averages the clouds and rounds: zonal is Hyperdisk and gp3, and the durable
+rows also count Azure Premium SSD P30 from October 27 (64 KiB, one writer: 1.89
+ms LRS, 2.01 ms ZRS), hence 1 ms zonal and 2 ms regional. Azure's P30s (5000
+IOPS / 200 MB/s) were slower than either Hyperdisk at every queue depth, and
+ZRS wrote within ~10% of LRS. AWS has no regional block storage: EBS volumes
+live in one zone.
 
 Network HDDs, the same day: 2 TB pd-standard zonal and regional (replicas in
 `us-central1-c` and `us-central1-a`) on an n2d-standard-48 (C4 can't attach
-Persistent Disk), and a 2 TiB EBS st1 on an m8i.12xlarge (p50):
+Persistent Disk), and a 2 TiB EBS st1 on the m8i.12xlarge:
 
 | | pd-standard Zonal | pd-standard Regional | st1 |
 | --- | --- | --- | --- |
-| Sequential read / write 1 MiB, QD32 | 245 / 245 MiB/s | 245 / 200 MiB/s | 444 / 468 MiB/s |
-| Random read 8 KiB, QD1 / QD128 | 16.6 ms / 12 MiB/s | 17.1 ms / 12 MiB/s | 5.4 ms / 4 MiB/s |
-| Random write 8 KiB, QD1 / QD128 | 433 us / 24 MiB/s | 1.09 ms / 24 MiB/s | 1.9 ms / 4 MiB/s |
-| Durable write 64 KiB, 1 writer / 32 | 675 us / 192 MiB/s | 1.39 ms / 193 MiB/s | 1.56 ms / 33 MiB/s |
-| Durable write 1 MiB, 32 writers | 246 MiB/s | 200 MiB/s | 343 MiB/s |
+| Sequential read 1 MiB, QD1 / QD32 | 1.17 ms / 251 MiB/s | 1.26 ms / 245 MiB/s | 13.8 ms / 249 MiB/s |
+| Sequential write 1 MiB, QD1 / QD32 | 3.94 ms / 251 MiB/s | 4.61 ms / 200 MiB/s | 3.52 ms / 477 MiB/s |
+| Random read 8 KiB, QD1 / QD128 | 17.5 ms / 12 MiB/s | 19.3 ms / 12 MiB/s | 5.2 ms / 4 MiB/s |
+| Random write 8 KiB, QD1 / QD128 | 438 us / 25 MiB/s | 1.17 ms / 24 MiB/s | 1.90 ms / 4 MiB/s |
+| Durable write 64 KiB, 1 / 32 in flight | 697 us / 197 MiB/s | 1.47 ms / 192 MiB/s | 1.52 ms / 33 MiB/s |
 
 Both scale with size: pd-standard by ~0.12 MB/s and 0.75 read IOPS per GB, st1
-by 40 MB/s per TB baseline and 250 MB/s per TB burst (these runs fit in the
-burst). The README's Network Disk HDD rows are pd-standard, so Zonal and
-Regional compare like for like. st1 streams faster but is worse at small
-random I/O, which it isn't built for. Writes to pd-standard land fast and are
-destaged later, so its random writes beat its random reads by ~40x.
+by 40 MB/s per TB baseline and 250 MB/s per TB burst. st1 read at 444 MiB/s on
+October 27 and 249 here, after a week of runs had used up its burst credits.
+The README's Network Disk HDD rows are pd-standard, so Zonal and Regional
+compare like for like. st1 is worse at small random I/O, which it isn't built
+for. Writes to pd-standard land fast and are destaged later, so its random
+writes beat its random reads by ~40x. Its sequential reads come in bursts: p50
+is ~1.2 ms, but one request at a time still averages the 250 MiB/s cap (4 ms
+each). pd-standard on n2d is the one network disk that reports `write back`
+and gets a flush per `fdatasync`, which costs it ~70 us.
+
+A d3.xlarge's instance-store HDD (one of three 2 TB disks, the whole disk with
+`--size 1800g --no-precondition`) read and wrote sequentially at 182-196 MiB/s,
+5.2-5.3 ms per 1 MiB one at a time, and did 8 KiB random reads at 12 ms QD1
+(199 IOPS at QD128) and random writes at 4.3 ms QD1 (237 IOPS); the drive's
+write cache reorders writes, so they beat random reads. A durable 8 KiB write
+took 0.97 ms from one writer (584/s, one flush each) and got slower with 32 in
+flight (184/s), as the drive serves flushes one at a time.
 
 ## Durable write rows
 
@@ -337,8 +366,9 @@ On October 27, 2026, on ext4, median of three 20-second runs:
 | Hyperdisk Balanced, 80k IOPS / 1600 MiB/s | 374 us | 515 us | 1.6 GiB/s (64 KiB x32) | 1.3 ms |
 | d3.xlarge HDD | 1.0 ms | 6.2 ms | 101 MiB/s (1 MiB x32) | 1.9 ms |
 
-Every SSD and network disk reports `write through` in
-`/sys/block/*/queue/write_cache`, and saw 0.00 flushes per commit: `fdatasync`
+Every SSD and network disk here reports `write through` in
+`/sys/block/*/queue/write_cache` (Azure Premium SSD, above, reports `write
+back`), and saw 0.00 flushes per commit: `fdatasync`
 took ~1 us because there was nothing to send. The HDDs report `write back` and
 saw exactly one flush per commit from one writer. Parallel writers share
 flushes there but still get slower at 8 KiB (826 to 274 commits/s). A 1 MiB
@@ -347,14 +377,15 @@ commit instead of 1 (data plus ext4's journal), which is the extra
 `fdatasync` time in the last column. On a MacBook's SSD, which does flush,
 `fdatasync` takes ~3.6 ms.
 
-On November 2, 2026, on ext4 over all of a VM's local disks, one thread with
+On November 4, 2026, on ext4 over all of a VM's local disks, one thread with
 32 write + `fdatasync` pairs in flight on io_uring (`--depths 32`) committed
-64 KiB at 2.3 GiB/s on c4-standard-48-lssd, 2.6 on m8id and 2.6 on m8gd, as
-much as 32 writer threads (2.3-2.4). One writer alone took 36-54 us per commit
-(1.1-1.6 GiB/s). The README row is that one thread.
+64 KiB at 2.66 GiB/s on c4-standard-48-lssd, 2.60 on m8id and 2.60 on m8gd, as
+much as 32 writer threads (2.49-2.67; 2.3-2.6 on November 2). One writer alone
+took 54 / 38 / 36 us per commit, 8 KiB 41 / 32 / 18 us. The README row is that
+one thread.
 
-The README rows use 64 KiB for SSD and network disks, the largest write that
-costs about the same as 8 KiB, and 8 KiB for HDD. Until October 26, 2026, these
+The README rows use 64 KiB for SSD and network disks, which costs 20-100% more
+than 8 KiB from one writer but reaches the disk's bandwidth, and 8 KiB for HDD. Until October 26, 2026, these
 rows were buffered 8 KiB appends from one writer (300 us, 30 MiB/s on SSD).
 
 ## Network rows
@@ -388,8 +419,11 @@ On October 27, 2026 (p50 round trip, then streams):
 
 The Network Bandwidth row (3 GiB/s) is the 8+ flow results on these 48 vCPU
 VMs: 22-32 Gbit/s. One cross-region flow moved 1.5-3.4 MiB per round trip
-(median ~3 MiB) with Ubuntu 24.04's default TCP buffers; the README rounds that
-to 2 MiB with earlier 22.04 runs (1.8-2.6 MiB). More flows add up: 32 flows from
+(median ~3 MiB) with Ubuntu 24.04's default TCP buffers, the README's 3 MiB
+(1.8-2.6 MiB on 22.04). The cross-region rows round the round trips: 24-32 ms
+within the US here and 55 ms `us-west1` -> `us-east4` by ping on October 23
+(25-60 ms), 95-111 ms across the Atlantic (100 ms), and 202-224 ms from the US
+to Singapore (200 ms; Tokyo is closer). More flows add up: 32 flows from
 `us-central1` to `us-east4` reached 10.7 Gbit/s.
 
 `network` was checked against `netperf` TCP_RR and `iperf3` on every pair above.
@@ -398,6 +432,37 @@ Streams matched iperf3 within ~5%, except the GCP cross-zone single flow
 both were noisy and `network` came out lower (p50 140 vs 242 us same-AZ, 578 vs
 673 us cross-AZ). An October 23 run on m8id measured 81 us same-AZ and 456 us
 cross-AZ, so treat the AWS round trips as 100-500 us.
+
+## Proxy and database rows
+
+```bash
+benches/services.sh        # on a throwaway Ubuntu 24.04 VM; it reconfigures system services
+```
+
+`benches/services.sh` installs nginx, HAProxy, Redis, Memcached, Postgres and
+MySQL, loads the same 100k keys into each, and runs `benches/services.rs`: one
+connection doing one request at a time over loopback, 10 seconds per target, a
+random key each time. Postgres and MySQL run `SELECT v FROM kv WHERE k = ...`
+on a primary key as a plain query, parsed and planned every time. nginx answers
+on its own, and nginx and HAProxy each proxy to it over a kept-alive upstream
+connection. On November 4, 2026, mean round trip in us:
+
+| | C4, Xeon 8581C | m8i, Xeon 6975P-C | m8g, Graviton4 |
+| --- | --- | --- | --- |
+| nginx | 19 | 32 | 12 |
+| nginx, through nginx | 41 | 67 | 26 |
+| nginx, through HAProxy | 43 | 68 | 27 |
+| Redis GET | 18 | 31 | 20 |
+| Memcached get | 15 | 33 | 14 |
+| Postgres, primary key | 29 | 42 | 29 |
+| MySQL, primary key | 28 | 44 | 40 |
+
+A proxy adds 15-35 us (24 on average), a primary-key query takes 30-45 us and
+a cache get 15-35 us, each including a loopback round trip of 12-32 us. Over a
+network, add the round trips: the client's to the server, and the proxy's to
+its backend. The README rows used to be guesses (50 us per proxy, 500 us per
+query). A query that reads many rows, sorts or joins costs more, and one that
+misses the database's cache waits for its disk.
 
 ## Compression rows
 
@@ -410,13 +475,29 @@ NAPKIN_COMPRESSION_CODECS="lz4_flex,zstd -3" cargo bench --bench cpu_compress --
 compress/decompress speed of lz4, snappy, zstd (-1, -3, -9, -19), gzip (-1, -6)
 and brotli (-5, -11) for each file, as best of N runs over at least a second.
 The CPU Compress/Decompress rows use the
-[Silesia corpus](https://sun.aei.polsl.pl/~sdeor/index.php?page=silesia) (on the
-c4-standard-8: lz4 2.1x at 442/1246 MiB/s, zstd -1 2.9x at 395/819 MiB/s). The
-ratio table used Silesia's `dickens` (English), `samba` (source) and `mozilla`
-(executables), a Wikipedia article (HTML), a tarball of the cargo registry
-sources, `/usr/bin` and a page of GitHub API JSON.
-The Logs row is loghub's full `Apache.log` (5 MiB, 11x lz4 to 29x zstd -19) and
-`Linux.log` (2 MiB, 6x to 20x).
+[Silesia corpus](https://sun.aei.polsl.pl/~sdeor/index.php?page=silesia). On
+November 4, 2026, compress / decompress in MiB/s, on C4 (Xeon 8581C), m8i and
+m8g:
+
+| Silesia | Ratio | C4 | m8i | m8g |
+| --- | --- | --- | --- | --- |
+| lz4 | 2.10 | 531 / 1518 | 519 / 1574 | 528 / 1631 |
+| snappy | 2.07 | 566 / 1080 | 566 / 1105 | 564 / 1105 |
+| zstd -1 | 2.90 | 480 / 995 | 474 / 1026 | 440 / 919 |
+| zstd -9 | 3.59 | 71 / 940 | 68 / 943 | 50 / 830 |
+| zstd -19 | 4.01 | 4 / 866 | 3 / 858 | 2 / 697 |
+
+The ratio table, lz4 to zstd -19 (brotli -11 in parentheses where it beats
+both), on the same day:
+
+| What | File | Ratio |
+| --- | --- | --- |
+| HTML | two Wikipedia articles (1.5 MiB) | 3.9-8.0x (8.9) |
+| English | Silesia `dickens` | 1.6-3.6x |
+| Source Code | Silesia `samba` / the first 64 MB of a tarball of the cargo registry's sources | 2.8-5.5x / 4.0-9.8x |
+| Executables | Silesia `mozilla` / the first 64 MB of a tarball of macOS's `/usr/bin` | 1.9-3.4x / 2.2-5.6x |
+| RPC (JSON) | 100 issues from GitHub's API (0.7 MiB) | 5.6-12.9x (14.5) |
+| Logs | loghub's full `Apache.log` (5 MiB) / `Linux.log` (2 MiB) | 11.3-28.9x / 6.3-19.6x |
 
 The structured-data tables and the two CPU Decode rows come from
 `benches/compression_ratio.rs`, built with `--features encodings` so the default
@@ -430,14 +511,18 @@ cargo bench --features encodings --bench compression_ratio -- timeseries nab/*.c
 ```
 
 On October 24, 2026 (ratios on any machine; speeds single-threaded on an AWS
-m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
+m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size; the
+November 4 runs on C4, m8i and m8g follow each item):
 
 - Parquet, against Arrow's in-memory buffers: NYC taxi (yellow, January 2024,
   3M rows x 19 columns, mostly numeric) 5.4x with dictionary + RLE and 9.0x
   with zstd -3; ClickBench `hits_0.parquet` (1M rows x 105 columns, many
   strings) 2.2x and 10.4x. Plain encoding is 1.0x. Decoding to Arrow: plain
   5.4 / 3.0 GiB/s, dictionary + RLE 4.2 / 2.6 GiB/s, + zstd 2.1 / 1.7 GiB/s
-  (taxi / hits).
+  (taxi / hits). On November 4, dictionary + RLE + zstd decoded at 2.17 /
+  2.09 / 1.85 GiB/s on taxi and 1.83 / 1.77 / 1.46 on hits (C4 / m8i / m8g),
+  and encoded at 0.44 / 0.42 / 0.29 and 0.18 / 0.17 / 0.24 GiB/s: the README's
+  2 GiB/s and 300 MiB/s.
 - Search indexes over 53 datasets in four kinds, as index size / text size.
   `benches/index_datasets.sh` downloads and prepares them (~15 GB of
   downloads, 40 GB on disk, skipping whatever is already there), and
@@ -563,7 +648,8 @@ m8id.12xlarge, Xeon 6975P-C, reported against the decoded output size):
   frequencies are 1. Unpacking MS MARCO's full 128-ID blocks with
   `bitpacking`'s `BitPacker4x` ran at 3.1 billion IDs/s, 11.6 GiB/s of u32
   output. Packing them ran at 8.8 GiB/s of u32 input, against 12.2 GiB/s
-  for unpacking on the same October 26 run, so one row covers both. Writing
+  for unpacking on the same October 26 run; the README's bitpacking rows now
+  come from `cpu_bitpack`. Writing
   Parquet from Arrow with dictionary + RLE + zstd -3 ran at 0.43 GiB/s on taxi
   and 0.17 GiB/s on ClickBench (105 columns, many strings), against 2.1 and 1.8
   GiB/s for reading it back: encoding is 5-10x slower than decoding.
@@ -626,7 +712,9 @@ Xeon 6975P-C, built with `-C target-cpu=native`):
   taxi's 8 integer columns (zstd 5.2x) and 2.5x on ClickBench's 76 (zstd
   7.7x: `hits` is sorted by counter, date and user, so its values come in
   runs that RLE or a dictionary would catch first). Decode 12-18 GiB/s, delta
-  ~6 GiB/s.
+  ~6 GiB/s. On November 4, all integer columns decoded at 16.6 / 15.3 / 9.6
+  GiB/s on taxi and 16.4 / 15.3 / 13.9 on hits (C4 / m8i / m8g), and taxi's
+  floats at 13.0 / 15.5 / 10.6.
 - Strings: FSST with one symbol table per 64 Ki strings, compressed lengths
   bitpacked so every string decodes on its own, against the bytes plus a
   4-byte offset each. ClickBench `Title` 2.06x, `URL` 1.97x, `Referer` 1.86x,
@@ -636,94 +724,57 @@ Xeon 6975P-C, built with `-C target-cpu=native`):
 
 ## Blob storage rows (March 2026)
 
-On the same setup (128 requests in flight from a VM in the same region), the
-zonal tiers S3 Express One Zone and GCS Rapid (gRPC, reads through a plain and
-an open object handle) gave p99 (p50), median over runs:
+The blob storage benchmark code isn't in this repository yet; this describes
+the setup behind the README's blob rows. A latency probe ran from a VM in the
+same region with 128 requests in flight on warm connections, from March 10 to
+20, 2026. It swept GETs, PUTs and conditional PUTs over 8 KiB to 8 MiB for 300
+seconds per row, listed one random 1000-key page per sample of a 1M-key
+namespace, and read random 128 KiB- and 8 MiB-aligned ranges of 128 objects of
+1 GiB. The regional tiers and the zonal tiers S3 Express One Zone and GCS Rapid
+(gRPC, reads through a plain and an open object handle) gave p99 (p50), median
+over runs:
 
 | | S3 | GCS gRPC | Azure | S3 Express One Zone | GCS Rapid |
 | --- | --- | --- | --- | --- | --- |
 | Read 128 KiB | 77 (58) ms | 56 (16) | 97 (66) | 60 (50) | 26-27 (12-13) |
 | Write 128 KiB | 154 (64) | 373 (66) | 38 (22) | 104 (51) | 164-333 (80-85) |
-| Conditional write (if-match) 128 KiB | - | 105 (63) | 20 (8) | 33 (6) | 3.9-7.4 s (61-64 ms) |
+| Conditional write (if-match) 128 KiB | - | 105 (63) | 20 (8) | 33 (6) | 93-97 (64-67) |
 | Conditional write (if-none-match) 128 KiB | 124 (46) | 153 (60) | 330 (23) | 484 (35) | 149-469 (72-75) |
 | List 1000 keys | 131 (78) | 87 (42) | 174 (88) | 27 (23) | 152-189 (69) |
 
-Zonal buckets only win on reads (Blob Storage, Zonal Read: 50 ms). Zonal
-writes are no faster than regional ones (100 ms, from S3 Express; GCS Rapid is
-slower). The Zonal Conditional Write row (100 ms) is if-match, a
-compare-and-swap on one object, one at a time: S3 Express 12-54 ms p99 (6 ms
-p50) and GCS Rapid 93-102 ms (63-67 ms). It used to be 500 ms, from
-if-none-match at 128 creates in flight, where S3 Express is 35 ms p50 but 484
-ms p99 (no retries; every sample took one attempt). GCS Rapid's seconds-long
-if-match p99s (7.6-8.4 s, max 80 s) came from runs that pushed ~430 writes/s
-at one object; one at a time it took 14 writes/s with no errors. One run had
-31% of its writes fail their precondition: several writers on one object. The
-Zonal List row (100 ms) splits S3 Express (27 ms) and GCS Rapid (150-190 ms).
-Both zonal tiers cost about \$0.11 per GB-month, ~5x regional.
+The README rows average the providers' p99s and round. Zonal buckets win on
+reads (50 ms against 100 ms) and S3 Express on lists (27 ms), but zonal writes
+are no faster than regional ones: both average ~180-190 ms, hence 200 ms. The
+Conditional Write rows (100 ms) are if-match, a compare-and-swap on one object,
+one at a time: S3 Express 12-54 ms p99 (6 ms p50), GCS Rapid 93-97 ms (64-67
+ms), GCS 105 ms and Azure 20 ms; S3 Standard has no if-match, and its
+if-none-match took 124 ms. The zonal row used to be 500 ms, from if-none-match
+at 128 creates in flight, where S3 Express is 35 ms p50 but 484 ms p99 (no
+retries; every sample took one attempt). Two GCS Rapid if-match runs that
+pushed ~430 writes/s at one object had p99s of 7.6-8.4 s (max 80 s); one at a
+time it took 14 writes/s with no errors. One run had 31% of its writes fail
+their precondition: several writers on one object. Both zonal tiers cost about
+\$0.11 per GB-month, ~5x regional.
 
+p50 for an 8 KiB range read was 56 ms on S3, 104 on GCS's XML API, 35 on its
+gRPC API and 45 on Azure; for an 8 KiB PUT 49 / 141 / 71 / 32 ms. GCS Rapid
+read 8 KiB in 6-14 ms. The Read and Write rows use 128 KiB, the largest size
+whose p99 is still about what 8 KiB costs: S3's read p99 stays at 80-90 ms up
+to 128 KiB and reaches 110-125 ms at 256 KiB, Azure's 75-115 ms and then
+115-125 ms. GCS gRPC stays near 100 ms up to 2 MiB, while GCS XML is noisy at
+130-390 ms. With 128 requests in flight, a lone request may stay flat to a
+larger size. For PUTs, p99 at 8 / 128 / 256 KiB was 100 / 140 / 186 ms on S3,
+51 / 38 / 114 ms on Azure and 271 / 229 / 338 ms on GCS XML.
 
-The blob storage benchmark code isn't in this repository yet; this describes
-the setup behind the README's blob rows.
-
-The `blob_storage` Criterion group was opt-in and credentialed: set
-`NAPKIN_GCS_BUCKET` and/or `NAPKIN_S3_BUCKET`. Both the GCS and S3 paths used
-the AWS S3 SDK. The GCS side talked to the GCS XML interoperability endpoint
-and required `NAPKIN_GCS_ACCESS_KEY` plus `NAPKIN_GCS_SECRET_KEY`. The S3 side
-used the local AWS profile in `NAPKIN_S3_PROFILE` (default `tpuf-test`) plus
-`NAPKIN_S3_REGION` (default `us-west-2`).
-
-The concurrent `get_offsets` and `put_multipart` paths fanned out onto a
-multi-thread Tokio runtime, so they could get close to the host NIC limit when
-the range count / object count was high enough. On March 9, 2026, same-region
-`1 GiB` single-stream GETs landed at about `95 MiB/s` on S3 (`m6id.12xlarge`
-in `us-west-2a`) and about `190-200 MiB/s` on GCS XML (`c4-standard-48-lssd`
-in `us-central1-c`). On the same machines, concurrent range GETs reached about
-`2.0 GiB/s` on S3 and about `4.9 GiB/s` on GCS, while multipart PUTs reached
-about `1.8-1.9 GiB/s` on S3 and about `3.3 GiB/s` on GCS. Older AWS S3 guidance
-suggested budgeting about `85-90 MB/s` per concurrent request when saturating a
-`10 Gbps` instance, which matched the measured S3 single-stream result closely.
-The old `500 MiB/s` single-stream blob GET row did not reproduce on either
-provider, so it was revised down to a conservative generic `100 MiB/s`.
-
-The blob latency cells came from a small-object latency probe
-(`src/bin/s3_latency.rs`, March 10-20, 2026), with 128 requests in flight on
-warm connections from a VM in the same region. The README cells are p99 across
-S3 Standard, GCS and Azure Blob. For reference, p50 was: an 8 KiB range read 56 /
-104 (XML) / 35 (gRPC) / 45 ms, an 8 KiB PUT 49 / 141 / 71 / 32 ms and a
-1000-key LIST page 78 / 56 / 89 ms. LIST p99 was 137 / 156 / 174 ms (S3 / GCS
-XML / Azure).
-
-The Read and Write rows are p99 at the knee: the largest size
-whose p99 is still about what 8 KiB costs. Over 1 GiB objects with 128 KiB- and 1
-MiB-aligned ranges, S3 p99 stays at 80-90 ms up to 128 KiB and reaches 110-125
-ms at 256 KiB; Azure at 75-115 ms up to 128 KiB and 115-125 ms at 256 KiB. GCS
-gRPC stays near 100 ms up to 2 MiB, while GCS XML is noisy at 130-390 ms. Those
-runs had 128 requests in flight, so a lone request may stay flat to a larger
-size. For PUTs, p99 at 8 / 128 / 256 KiB was 100 / 140 / 186 ms on S3, 51 / 38 /
-114 ms on Azure and 271 / 229 / 338 ms on GCS XML.
-
-GCS Rapid read 8 KiB in 6-14 ms. Throughput peaked
-at the hosts' NICs with 32-128 connections: GETs at 2.0 (S3), 4.3 (GCS) and 3.9
-GiB/s (Azure), PUTs at 1.9, 3.1 and 2.2 GiB/s.
-
-`./script/blob-latency <s3|s3x|gcs|r2|tigris|azure>` swept `get`, `put`, `if_none_match` and
-`put_if_match` across an `8 KiB .. 8 MiB` size ladder, except `if_none_match`,
-which defaulted to a single `128 KiB` row because its latency was effectively
-flat across sizes. `NAPKIN_BLOB_LATENCY_OPS`, `NAPKIN_BLOB_LATENCY_SIZES` and
-`NAPKIN_BLOB_LATENCY_IF_NONE_MATCH_SIZES` narrowed a run. Each row had a
-wall-clock budget of `300` seconds (`NAPKIN_BLOB_LATENCY_ROW_SECONDS`),
-optionally capped by `NAPKIN_BLOB_LATENCY_SAMPLE_CAP`.
-
-The `list` op seeded a `1M`-key namespace and measured one randomized
-`1000`-key page per sample via `start_after`
-(`NAPKIN_BLOB_LATENCY_LIST_NAMESPACE_KEYS`, `NAPKIN_BLOB_LATENCY_LIST_KEYS`,
-`NAPKIN_BLOB_LATENCY_LIST_SEED_CONCURRENCY`); `list_full_scan` walked the whole
-namespace. For aligned range-read latency,
-`./script/blob-random-range-latency` measured the `128 KiB`-aligned shape and
-`./script/blob-random-range-latency-8m` the `8 MiB`-aligned shape over a
-`128 x 1 GiB` object pool, and
-`./script/blob-random-range-latency-8m-multipart` seeded those objects via
-multipart upload with `8 MiB` parts to measure reads against part boundaries.
+Throughput came from a Criterion group that used the AWS S3 SDK for both S3
+and GCS (through GCS's XML API), on an m6id.12xlarge in `us-west-2a` and a
+c4-standard-48-lssd in `us-central1-c` on March 9, 2026. One 1 GiB GET on one
+connection ran at 95 MiB/s on S3 and 190-200 MiB/s on GCS: the README's
+1-connection read row (100 MiB/s). AWS says to budget 85-90 MB/s per
+connection. It used to say 500 MiB/s, which reproduced on neither. With 32-128
+connections, GETs peaked at the hosts' NICs: 2.0 GiB/s on S3, 4.3-4.9 on GCS
+and 3.9 on Azure, and PUTs (multipart, 32 MiB parts) at 1.9, 3.1-3.3 and 2.2
+GiB/s.
 
 ## GPU rows
 
