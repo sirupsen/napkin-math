@@ -168,36 +168,36 @@ latencies: [cloudping](https://www.cloudping.co/).
 
 Approximate numbers that should be consistent between Cloud providers.
 
-| What                          | Amount | \$ / Month | Spot \$ /month |
-| ----------------------------- | ------ | ---------- | -------------- |
-| CPU                           | 1 vCPU | \$30       | \$10           |
-| GPU (B200)                    | 1      | \$9000     | \$5000         |
-| Memory                        | 1 GB   | \$2.5      | \$1            |
-| Storage                       |        |            |                |
-| ├ Warehouse Storage           | 1 GB   | \$0.02     |                |
-| ├ Blob Storage, Regional      | 1 GB   | \$0.02     |                |
-| ├ Blob Storage, Zonal         | 1 GB   | \$0.1      |                |
-| ├ Network Disk, Zonal, HDD    | 1 GB   | \$0.04     |                |
-| ├ SSD                         | 1 GB   | \$0.15     | \$0.04         |
-| ├ SSD, storage-optimized      | 1 GB   | \$0.05     |                |
-| ├ HDD                         | 1 GB   | \$0.01     | \$0.001        |
-| ├ Network Disk, Regional, HDD | 1 GB   | \$0.08     |                |
-| ├ Network Disk, Zonal         | 1 GB   | \$0.1      |                |
-| ├ Network Disk, Regional      | 1 GB   | \$0.2      |                |
-| Network                       |        |            |                |
-| ├ Same-Zone                   | 1 GB   | \$0        |                |
-| ├ Blob Storage, Same-Region   | 1 GB   | \$0        |                |
-| ├ Ingress                     | 1 GB   | \$0        |                |
-| ├ L4 Load Balancer            | 1 GB   | \$0.005    |                |
-| ├ Cross-Zone                  | 1 GB   | \$0.01     |                |
-| ├ Cross-Region                | 1 GB   | \$0.02     |                |
-| ├ Internet Egress ††          | 1 GB   | \$0.1      |                |
-| CDN Egress                    | 1 GB   | \$0.08     |                |
-| CDN Fill ¶                    | 1 GB   | \$0.01     |                |
-| Warehouse Query               | 1 GB   | \$0.005    |                |
-| Logs/Traces ♣                 | 1 GB   | \$0.5      |                |
-| Metrics (series)              | 1000   | \$20       |                |
-| KMS Keys                      | 1      | \$1        |                |
+| What                          | Amount | \$ / Month | 1-year \$ / Month | Spot \$ / Month |
+| ----------------------------- | ------ | ---------- | ----------------- | --------------- |
+| CPU                           | 1 vCPU | \$30       | \$20              | \$10            |
+| GPU (B200)                    | 1      | \$10000    | \$8000            | \$5000          |
+| Memory                        | 1 GB   | \$2.5      | \$2               | \$1             |
+| Storage                       |        |            |                   |                 |
+| ├ Warehouse Storage           | 1 GB   | \$0.02     |                   |                 |
+| ├ Blob Storage, Regional      | 1 GB   | \$0.02     |                   |                 |
+| ├ Blob Storage, Zonal         | 1 GB   | \$0.1      |                   |                 |
+| ├ Network Disk, Zonal, HDD    | 1 GB   | \$0.04     |                   |                 |
+| ├ SSD                         | 1 GB   | \$0.15     | \$0.1             | \$0.04          |
+| ├ SSD, storage-optimized      | 1 GB   | \$0.05     | \$0.05            |                 |
+| ├ HDD                         | 1 GB   | \$0.01     |                   | \$0.001         |
+| ├ Network Disk, Regional, HDD | 1 GB   | \$0.08     |                   |                 |
+| ├ Network Disk, Zonal         | 1 GB   | \$0.1      |                   |                 |
+| ├ Network Disk, Regional      | 1 GB   | \$0.2      |                   |                 |
+| Network                       |        |            |                   |                 |
+| ├ Same-Zone                   | 1 GB   | \$0        |                   |                 |
+| ├ Blob Storage, Same-Region   | 1 GB   | \$0        |                   |                 |
+| ├ Ingress                     | 1 GB   | \$0        |                   |                 |
+| ├ L4 Load Balancer            | 1 GB   | \$0.005    |                   |                 |
+| ├ Cross-Zone                  | 1 GB   | \$0.01     |                   |                 |
+| ├ Cross-Region                | 1 GB   | \$0.02     |                   |                 |
+| ├ Internet Egress ††          | 1 GB   | \$0.1      |                   |                 |
+| CDN Egress                    | 1 GB   | \$0.08     |                   |                 |
+| CDN Fill ¶                    | 1 GB   | \$0.01     |                   |                 |
+| Warehouse Query               | 1 GB   | \$0.005    |                   |                 |
+| Logs/Traces ♣                 | 1 GB   | \$0.5      |                   |                 |
+| Metrics (series)              | 1000   | \$20       |                   |                 |
+| KMS Keys                      | 1      | \$1        |                   |                 |
 
 †† This refers to network leaving your cloud provider, e.g. sending data to S3
 from GCP or egress network for sending HTML from AWS to a client.
@@ -219,20 +219,22 @@ operation (fewer, large files is cheaper):
 Zonal buckets also charge \$0.003 per GB written and \$0.0006 per GB read.
 
 Instance shapes are the same few ratios on every cloud, here per vCPU at AWS's
-list price (one B200 per 25 vCPU). Most cost a vCPU plus its memory and SSD at
-the unit prices above; the largest memory shapes and B200s cost more:
+prices (one B200 per 25 vCPU): on-demand, a 1-year Compute Savings Plan with no
+upfront (~25% off), and spot (~70% off; ~45% for Memory, High and B200s). Most
+cost a vCPU plus its memory and SSD at the unit prices above; the largest memory
+shapes and B200s cost more:
 
-| Shape         | vCPU | Memory (GiB) | VRAM (GB) | SSD (GB) | Network (GB/s) | \$ / mo / vCPU | Max (vCPU) |
-| ------------- | ---- | ------------ | --------- | -------- | -------------- | -------------- | ---------- |
-| CPU           | 1    | 2            |           |          | 0.07           | \$35           | 300        |
-| General       | 1    | 4            |           |          | 0.07           | \$40           | 300        |
-| General, SSD  | 1    | 4            |           | 60       | 0.07           | \$50           | 300        |
-| Memory        | 1    | 8            |           |          | 0.07           | \$50           | 300        |
-| Memory, High  | 1    | 16           |           |          | 0.06           | \$70           | 200        |
-| Memory, Ultra | 1    | 32           |           |          | 0.1            | \$150          | 128        |
-| SSD           | 1    | 8            |           | 250      | 0.07           | \$65           | 200        |
-| SSD, High     | 1    | 8            |           | 600      | 0.15           | \$95           | 200        |
-| GPU (B200)    | 1    | 14           | 7         | 100      | 2              | \$350          | 200        |
+| Shape         | vCPU | Memory (GiB) | VRAM (GB) | SSD (GB) | Network (GB/s) | \$ / mo / vCPU | 1-year | Spot  | Max (vCPU) |
+| ------------- | ---- | ------------ | --------- | -------- | -------------- | -------------- | ------ | ----- | ---------- |
+| CPU           | 1    | 2            |           |          | 0.07           | \$35           | \$25   | \$10  | 300        |
+| General       | 1    | 4            |           |          | 0.07           | \$40           | \$30   | \$15  | 300        |
+| General, SSD  | 1    | 4            |           | 60       | 0.07           | \$50           | \$35   | \$15  | 300        |
+| Memory        | 1    | 8            |           |          | 0.07           | \$50           | \$35   | \$15  | 300        |
+| Memory, High  | 1    | 16           |           |          | 0.06           | \$70           | \$50   | \$40  | 200        |
+| Memory, Ultra | 1    | 32           |           |          | 0.1            | \$150          | \$110  | \$50  | 128        |
+| SSD           | 1    | 8            |           | 250      | 0.07           | \$65           | \$50   | \$15  | 200        |
+| SSD, High     | 1    | 8            |           | 600      | 0.15           | \$95           | \$70   | \$30  | 200        |
+| GPU (B200)    | 1    | 14           | 7         | 100      | 2              | \$450          | \$350  | \$250 | 200        |
 
 Reading 1 TiB costs the VM time it takes at the row's throughput (48 vCPU + 192
 GB is \$1,900/month, \$0.0007/s; the 1-thread memory row pays for one vCPU; the

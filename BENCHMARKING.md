@@ -745,6 +745,31 @@ Xeon 6975P-C, built with `-C target-cpu=native`):
   string per line; enwik8 lines 1.71x; MS MARCO passages 1.79x. zstd -3 over
   each whole column gets 3-11x. Decode 2-4 GiB/s.
 
+## Cost rows
+
+The shape prices are AWS us-east-1 Linux list prices on November 4, 2026, per
+vCPU per month (730 h), from `aws pricing get-products` (on-demand),
+`aws savingsplans describe-savings-plans-offering-rates` (1-year Compute
+Savings Plan, no upfront; the newest families have no reserved instances) and
+`aws ec2 describe-spot-price-history` (median of the latest price per zone):
+
+| Shape | Instance | On-demand | 1-year | Spot |
+| --- | --- | --- | --- | --- |
+| CPU | c8i.12xlarge | \$34 | \$25 | \$12 |
+| General | m8i.12xlarge | \$39 | \$28 | \$14 |
+| General, SSD | m8id.12xlarge | \$48 | \$35 | \$13 |
+| Memory | r8i.12xlarge | \$51 | \$37 | \$15 |
+| Memory, High | x8g.12xlarge | \$71 | \$53 | \$38 |
+| Memory, Ultra | x2iedn.8xlarge | \$152 | \$112 | \$47 |
+| SSD | i8g.12xlarge | \$63 | \$49 | \$17 |
+| SSD, High | i8ge.12xlarge | \$87 | \$68 | \$28 |
+| GPU (B200) | p6-b200.48xlarge | \$433 | \$341 | ~\$250 |
+
+B200 spot is from us-west-2 and us-east-2 (\$43-86/h per instance; us-east-1
+had one zone at \$167/h). The unit rows come from the differences: the SSD in
+`m8id` over `m8i` is \$0.15 / \$0.11 per GB, and memory in `r8i` over `m8i` is
+\$3 / \$2 per GiB. Graviton (`c8g`, `m8g`, `r8g`) is ~15% cheaper on-demand.
+
 ## Blob storage rows (March 2026)
 
 The blob storage benchmark code isn't in this repository yet; this describes
