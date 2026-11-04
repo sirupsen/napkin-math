@@ -33,6 +33,7 @@ rustc-hash = { version = "2", optional = true }
 encodings = ["dep:alp", "dep:arrow-array", "dep:bitpacking", "dep:bytes", "dep:fastlanes", "dep:fsst-rs", "dep:parquet", "dep:roaring", "dep:casefold", "dep:sparse-ngrams", "dep:rustc-hash"]
 
 [dev-dependencies]
+bitpacking = "0.9"
 blake3 = "1"
 core_affinity = "0.8"
 crc32fast = "1"
@@ -78,6 +79,11 @@ bench = false
 
 [[bench]]
 name = "network"
+harness = false
+bench = false
+
+[[bench]]
+name = "services"
 harness = false
 bench = false
 

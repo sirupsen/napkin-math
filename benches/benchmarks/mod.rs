@@ -4,6 +4,7 @@ pub const GIB: usize = 1 << 30;
 
 pub mod cache_read;
 pub mod cpu_atomic_mutex;
+pub mod cpu_bitpack;
 pub mod cpu_context_switch;
 pub mod cpu_encrypt;
 pub mod cpu_handshake;

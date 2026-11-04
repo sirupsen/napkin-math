@@ -7,6 +7,7 @@ static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 criterion_main! {
     benchmarks::cache_read::benches,
     benchmarks::cpu_atomic_mutex::benches,
+    benchmarks::cpu_bitpack::benches,
     benchmarks::cpu_context_switch::benches,
     benchmarks::cpu_encrypt::benches,
     benchmarks::cpu_handshake::benches,

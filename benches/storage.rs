@@ -379,6 +379,14 @@ fn main() {
         secs,
         false,
     );
+    // One request at a time: the latency of a sequential read.
+    run(
+        &path,
+        size,
+        &seq("seq_read_1m_qd1", Op::Read, MIB, 1, true),
+        secs,
+        false,
+    );
     drop_page_cache();
     run(
         &path,
@@ -427,6 +435,13 @@ fn main() {
         &path,
         size,
         &rand("rand_write_4k_qd256", Op::Write, 4 * KIB, 1, 256),
+        secs,
+        false,
+    );
+    run(
+        &path,
+        size,
+        &seq("seq_write_1m_qd1", Op::Write, MIB, 1, true),
         secs,
         false,
     );
