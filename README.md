@@ -45,7 +45,7 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | L3 Cache Read, 1 thread                                                  | 50 ns    | 40 GiB/s   |
 | GPU ↔ GPU Network, RDMA (400 Gbit/s)                                     | 5 μs     | 40 GiB/s   |
 | Memory Sequential Write, 1 thread                                        |          | 30 GiB/s   |
-| Memory Sequential Read, 1 thread                                         |          | 20 GiB/s   |
+| Memory Sequential Read, 1 thread                                         |          | 30 GiB/s   |
 | Memory Sequential Read, other socket, 1 thread‡                          |          | 15 GiB/s   |
 | CPU Encrypt / Decrypt (AES-256-GCM), 1 thread                            |          | 10 GiB/s   |
 | CPU Encode Bitpacked Integers, 1 thread                                  |          | 10 GiB/s   |
@@ -241,7 +241,7 @@ GPU row is a B200 at 7 TiB/s), plus the transfer and request fees above:
 | What                                                | \$ / TiB read |
 | --------------------------------------------------- | ------------- |
 | GPU Memory Sequential Read (B200)                   | \$0.0005      |
-| Memory Sequential Read, 1 thread                    | \$0.0006      |
+| Memory Sequential Read, 1 thread                    | \$0.0004      |
 | Memory Sequential Read, all cores                   | \$0.004       |
 | Memory Random Read (64 B), all cores                | \$0.008       |
 | SSD Sequential Read (8 KiB)                         | \$0.2         |

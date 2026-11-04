@@ -23,6 +23,12 @@ fn cpu_bitpack_benchmark(c: &mut Criterion) {
     let block_bytes = block * BITS as usize / 8;
     let mut packed = vec![0u8; values.len() / block * block_bytes];
     let mut unpacked = vec![0u32; block];
+    // Check one round trip up front: a filtered run may skip either benchmark.
+    for (v, p) in values.chunks(block).zip(packed.chunks_mut(block_bytes)) {
+        packer.compress(v, p, BITS);
+    }
+    packer.decompress(&packed[packed.len() - block_bytes..], &mut unpacked, BITS);
+    assert_eq!(unpacked, values[values.len() - block..]);
 
     let mut group = c.benchmark_group("cpu_bitpack");
     group.sample_size(20);
@@ -43,7 +49,6 @@ fn cpu_bitpack_benchmark(c: &mut Criterion) {
         })
     });
     group.finish();
-    assert_eq!(unpacked, values[values.len() - block..]);
 }
 
 criterion_group!(benches, cpu_bitpack_benchmark);

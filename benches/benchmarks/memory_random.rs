@@ -133,7 +133,7 @@ impl Drop for PointerChase {
 }
 
 #[cfg(target_os = "linux")]
-unsafe fn advise_huge_pages(ptr: *mut libc::c_void, bytes: usize, huge_pages: bool) {
+pub(super) unsafe fn advise_huge_pages(ptr: *mut libc::c_void, bytes: usize, huge_pages: bool) {
     let advice = if huge_pages {
         libc::MADV_HUGEPAGE
     } else {
@@ -143,7 +143,7 @@ unsafe fn advise_huge_pages(ptr: *mut libc::c_void, bytes: usize, huge_pages: bo
 }
 
 #[cfg(not(target_os = "linux"))]
-unsafe fn advise_huge_pages(_ptr: *mut libc::c_void, _bytes: usize, _huge_pages: bool) {}
+pub(super) unsafe fn advise_huge_pages(_ptr: *mut libc::c_void, _bytes: usize, _huge_pages: bool) {}
 
 // Load-to-use latency: a dependent pointer chase, one hop per sample step.
 pub(super) fn chase_group(c: &mut Criterion, group_name: &str, shapes: &[(&str, usize, bool)]) {

@@ -44,7 +44,7 @@ debug build.
 
 | Group (file in `benches/benchmarks/`) | Measures | README row |
 | ----- | -------- | ---------- |
-| `memory_sequential_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD | Memory Sequential Read |
+| `memory_sequential_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD, and 1 thread on huge pages | Memory Sequential Read |
 | `memory_sequential_write` | memset and memcpy of 1 GiB on 1 thread, memset of 16 GiB on all cores, and on x86 the same memsets with non-temporal stores | Memory Sequential Write |
 | `memory_random` | One pass of independent random 64 B reads/writes over 1 GiB (1 thread), and random lines of a shared 16 GiB buffer from 1 thread and all cores, with and without huge pages | Memory Random Read/Write, throughput |
 | `memory_random_read_latency` (in `memory_random.rs`) | Dependent pointer chase over 1 GiB, with and without huge pages | Memory Random Read, latency |
@@ -68,7 +68,7 @@ noted:
 | --- | --- | --- | --- | --- |
 | L1 / L2 / L3 latency (16 KiB / 256 KiB / 8 MiB) | 1.5 / 4.3 / 25 ns | 1.6 / 4.4 / 35 ns | 1.8 / 4.1 / 93 ns | 2 / 5 / 50 ns |
 | L1 / L2 / L3 read | 330 / 169 / 37 GiB/s | 300 / 175 / 28 | 101 / 76 / 51 | 200 / 150 / 40 |
-| Memory read, 1 thread / 48 threads | 18.2 / 152 GiB/s | 21.4 / 203 | 28.6 / 293 | 20 / 200 |
+| Memory read, 1 thread / 48 threads | 18.2 / 152 GiB/s | 21.4 / 203 | 28.6 / 293 | 30 / 200 (below) |
 | Memory write, 1 thread / 48 threads (non-temporal on x86) | 28.1 / 100 GiB/s | 22.0 / 150 | 59.0 / 321 | 30 / 200 |
 | Random 64 B read / write, 1 thread, 16 GiB | 2.9 / 2.2 GiB/s | 2.5 / 3.7 | 1.9 / 1.7 | 3 / 3 |
 | Random 64 B read / write, 48 threads, 16 GiB | 56 / 39 GiB/s | 43 / 65 | 137 / 128 | 100 / 100 |
@@ -179,9 +179,25 @@ take that path.
 That is about the limit for one core. By Little's law, bandwidth is lines in
 flight x 64 B / latency: 21-23 GiB/s at 136 ns is ~50 lines, about what a
 Granite Rapids L2 tracks. On Graviton4 every loop shape (LLVM's, NEON with 4-16
-accumulators, 64-byte `ld1`, `ldnp`, software prefetch) read 31 GiB/s, and two
-streams 35 (~67 lines at 115 ns). The README's 20 GiB/s rounds the x86 side; an
-Apple M5 Max core reads 85-106 GiB/s at the same ~110 ns, ~190 lines in flight.
+accumulators, 64-byte `ld1`, `ldnp`, software prefetch) read 31 GiB/s from one
+stream. Reading two places at once, the buffer's two halves interleaved, read
+35 (~67 lines at 115 ns): the hardware prefetcher runs only so far ahead of
+each stream it tracks, and a second stream gets its own. On x86, which already
+prefetches in software, two streams were 3-6% slower. An Apple M5 Max core
+reads 85-106 GiB/s at the same ~110 ns, ~190 lines in flight.
+
+On November 4, 2026, the same loops over 2 MiB huge pages (single thread, GiB/s,
+4 KiB pages / huge pages): AVX-512 with prefetch 19.5 / 21.6 on C4 and 19.0 /
+21.0 on m8i, AVX2 19.1 / 20.4 and 18.9 / 20.2, scalar 16.2 / 19.5 and 16.1 /
+19.5, and Graviton4's NEON 31.0 / 31.1. With 4 KiB pages the prefetchers stop
+at every page boundary and loads miss the TLB; Graviton4 doesn't care.
+Prefetch distances from 1K/16K to 2K/64K moved AVX-512 by 2% at most. The
+bench now reads two streams on ARM and has a huge-pages row; its run the same
+day gave 18.5 / 22.2 GiB/s on C4, 20.4 / 19.4 on m8i and 35.2 / 33.9 on m8g
+(4 KiB / huge pages). The README's 1-thread row (30 GiB/s) averages the best of
+each: ~20 on x86 and 35 on Graviton4. On November 4 the C4's scalar loop first
+read 6.6 GiB/s in the full suite and 15.6-16.2 in two later runs on fresh VMs:
+treat one slow number on a cloud VM as noise until it repeats.
 
 On a two-socket m8g.48xlarge (Graviton4, 96 cores per socket), with `numactl`
 pinning threads to node 0 and memory to node 0 or node 1: random read latency

@@ -1,6 +1,7 @@
 use criterion::*;
 use std::hint::black_box;
 
+use super::memory_random::advise_huge_pages;
 use super::GIB;
 
 #[cfg(target_arch = "x86_64")]
@@ -137,29 +138,57 @@ pub(super) fn memory_read_sequential_single_thread_vectorized(vec: &[Int]) -> u6
 }
 
 // Eight independent 16-byte accumulators. LLVM's own loop for the scalar sum
-// reads L1 at ~83 GiB/s on Graviton4; this reaches ~100.
+// reads L1 at ~83 GiB/s on Graviton4; this reaches ~100. From DRAM, one stream
+// tops out at 31 GiB/s on Graviton4 and two (the two halves, interleaved) at
+// 35, so buffers over 64 MiB read as two.
 #[cfg(target_arch = "aarch64")]
 unsafe fn memory_read_sequential_single_thread_neon(vec: &[Int]) -> u64 {
     use std::arch::aarch64::*;
     let mut acc = [vdupq_n_u64(0); 8];
     let ptr = vec.as_ptr();
     let mut i = 0usize;
+    if vec.len() * std::mem::size_of::<Int>() > 64 << 20 {
+        let half = vec.len() / 2;
+        let other = ptr.add(half);
+        while i + 8 <= half {
+            for j in 0..4 {
+                acc[j] = vaddq_u64(acc[j], vld1q_u64(ptr.add(i + 2 * j)));
+                acc[j + 4] = vaddq_u64(acc[j + 4], vld1q_u64(other.add(i + 2 * j)));
+            }
+            i += 8;
+        }
+        // Whatever the loop left of the first half, then the second half's tail.
+        let mut sum = 0u64;
+        for k in i..half {
+            sum = sum.wrapping_add(*ptr.add(k));
+        }
+        for k in half + i..vec.len() {
+            sum = sum.wrapping_add(*ptr.add(k));
+        }
+        return sum.wrapping_add(fold_neon(&acc));
+    }
     while i + 16 <= vec.len() {
         for (j, a) in acc.iter_mut().enumerate() {
             *a = vaddq_u64(*a, vld1q_u64(ptr.add(i + 2 * j)));
         }
         i += 16;
     }
-    let mut total = acc[0];
-    for a in &acc[1..] {
-        total = vaddq_u64(total, *a);
-    }
-    let mut sum = vgetq_lane_u64(total, 0).wrapping_add(vgetq_lane_u64(total, 1));
+    let mut sum = fold_neon(&acc);
     while i < vec.len() {
         sum = sum.wrapping_add(*ptr.add(i));
         i += 1;
     }
     sum
+}
+
+#[cfg(target_arch = "aarch64")]
+unsafe fn fold_neon(acc: &[std::arch::aarch64::uint64x2_t; 8]) -> u64 {
+    use std::arch::aarch64::*;
+    let mut total = acc[0];
+    for a in &acc[1..] {
+        total = vaddq_u64(total, *a);
+    }
+    vgetq_lane_u64(total, 0).wrapping_add(vgetq_lane_u64(total, 1))
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -320,6 +349,21 @@ fn memory_sequential_read_benchmark(c: &mut Criterion) {
     let size_bytes = GIB;
     let size_in_elements = size_bytes / bytes_per_iteration;
     let vec: Vec<Int> = (0..size_in_elements).map(|i| i as Int).collect();
+    // With 4 KiB pages, x86's prefetchers stop at every page boundary and loads
+    // miss the TLB; 2 MiB pages read ~10% faster there (Graviton4: the same).
+    let mut vec_huge: Vec<Int> = Vec::with_capacity(size_in_elements);
+    unsafe { advise_huge_pages(vec_huge.as_mut_ptr().cast(), size_bytes, true) };
+    vec_huge.extend(0..size_in_elements as Int);
+    // Every loop has its own tail handling; check they all add up the same.
+    let want = memory_read_sequential_single_thread_non_vectorized(&vec[..size_in_elements - 3]);
+    assert_eq!(
+        memory_read_sequential_single_thread_vectorized(&vec[..size_in_elements - 3]),
+        want
+    );
+    assert_eq!(
+        memory_read_sequential_single_thread_avx2(&vec[..size_in_elements - 3]),
+        want
+    );
 
     // Keep all-core benchmarks on a single hardware thread per core after `./run` disables HT.
     let core_ids = Arc::new(core_affinity::get_core_ids().unwrap());
@@ -345,6 +389,9 @@ fn memory_sequential_read_benchmark(c: &mut Criterion) {
     // "SIMD" is the widest the CPU has: AVX-512, else AVX2, else NEON on ARM.
     group.bench_function("1 thread, SIMD", |b| {
         b.iter(|| black_box(memory_read_sequential_single_thread_vectorized(&vec)))
+    });
+    group.bench_function("1 thread, SIMD, huge pages", |b| {
+        b.iter(|| black_box(memory_read_sequential_single_thread_vectorized(&vec_huge)))
     });
     #[cfg(target_arch = "x86_64")]
     if is_x86_feature_detected!("avx512f") {

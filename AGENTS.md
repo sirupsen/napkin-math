@@ -72,6 +72,9 @@ make test                                        # each benchmark once, smoke te
   for a new kind of disk; nothing depends on it.
 - x86 memory writes need non-temporal stores to reach speed of light; a plain
   memset reads every line first and gets half.
+- Graviton4 reads 35 GiB/s from one thread only with two interleaved streams
+  (31 with one): its prefetcher runs a fixed distance ahead per stream. On x86,
+  2 MiB huge pages are worth ~10% for one thread's sequential read.
 - nginx closes a keep-alive connection after 1000 requests unless
   `keepalive_requests` is raised; `benches/services.sh` raises it.
 - C4 capacity in `us-central1` ran out on November 4, 2026; `script/bench-vm gcp
