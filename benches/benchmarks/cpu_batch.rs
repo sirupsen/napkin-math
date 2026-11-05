@@ -9,9 +9,14 @@ use xxhash_rust::xxh3::xxh3_64;
 
 use super::{KIB, MIB};
 
-const SIZES: [usize; 8] = [
+const SIZES: [usize; 13] = [
+    8,
+    16,
+    32,
     64,
+    128,
     256,
+    512,
     KIB,
     4 * KIB,
     16 * KIB,
@@ -20,8 +25,8 @@ const SIZES: [usize; 8] = [
     MIB,
 ];
 
-// One call per batch at each size. Small batches pay the per-call setup; the
-// README's latency is the smallest batch that gets the full throughput.
+// One call at each size. A README row's size is the largest that takes about as long as the
+// smallest, and its throughput is the fastest at any size.
 fn cpu_batch_benchmark(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0xba7c);
     let bytes: Vec<u8> = (0..MIB).map(|_| rng.random()).collect();

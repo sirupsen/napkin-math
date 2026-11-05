@@ -98,6 +98,71 @@ fn parquet(path: &str) {
     }
 }
 
+// Time per data page against the page size limit, for dictionary + RLE + zstd -3: the README row's
+// size is the largest page that takes about as long as the smallest.
+fn parquet_pages(path: &str) {
+    let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(path).unwrap())
+        .unwrap()
+        .build()
+        .unwrap();
+    let batches: Vec<RecordBatch> = reader.map(|b| b.unwrap()).collect();
+    let schema = batches[0].schema();
+    let naive: usize = batches
+        .iter()
+        .flat_map(|b| b.columns().iter().map(|c| c.get_buffer_memory_size()))
+        .sum();
+    println!("{path}: {naive} bytes in Arrow");
+    println!("| page limit | pages | encode GiB/s | us/page | decode GiB/s | us/page |");
+    println!("| ---------- | ----- | ------------ | ------- | ------------ | ------- |");
+    for kib in [4usize, 16, 64, 256, 1024] {
+        let props = WriterProperties::builder()
+            .set_compression(Compression::ZSTD(ZstdLevel::try_new(3).unwrap()))
+            .set_data_page_size_limit(kib << 10)
+            .set_data_page_row_count_limit(usize::MAX)
+            .build();
+        let mut file = bytes::Bytes::new();
+        let encode = best_of(2, || {
+            let mut out = Vec::new();
+            let mut writer =
+                ArrowWriter::try_new(&mut out, schema.clone(), Some(props.clone())).unwrap();
+            for batch in &batches {
+                writer.write(batch).unwrap();
+            }
+            writer.close().unwrap();
+            file = bytes::Bytes::from(out);
+        });
+        let options = parquet::arrow::arrow_reader::ArrowReaderOptions::new()
+            .with_page_index_policy(parquet::file::metadata::PageIndexPolicy::Required);
+        let meta = ParquetRecordBatchReaderBuilder::try_new_with_options(file.clone(), options)
+            .unwrap();
+        let metadata = meta.metadata();
+        let mut pages = 0;
+        for row_group in 0..metadata.num_row_groups() {
+            let index = metadata.page_index_for_row_group(row_group);
+            for column in 0..schema.fields().len() {
+                pages += index.page_locations(column).expect("offset index").len();
+            }
+        }
+        let decode = best_of(2, || {
+            let reader = ParquetRecordBatchReaderBuilder::try_new(file.clone())
+                .unwrap()
+                .build()
+                .unwrap();
+            for batch in reader {
+                std::hint::black_box(batch.unwrap());
+            }
+        });
+        let gib = |secs: f64| naive as f64 / secs / (1 << 30) as f64;
+        println!(
+            "| {kib} KiB | {pages} | {:.2} | {:.1} | {:.2} | {:.1} |",
+            gib(encode),
+            encode * 1e6 / pages as f64,
+            gib(decode),
+            decode * 1e6 / pages as f64
+        );
+    }
+}
+
 // Checks two napkin rules against Parquet's dictionary + RLE-hybrid encoding,
 // uncompressed, one column at a time with one dictionary per column: a column
 // with d distinct values costs log2(d) bits per value plus its dictionary, and
@@ -898,7 +963,7 @@ fn main() {
         .skip(1)
         .filter(|a| a != "--bench")
         .collect();
-    let usage = "usage: compression_ratio parquet|cardinality|postings|timeseries|columns|index_sizes <files...>";
+    let usage = "usage: compression_ratio parquet|parquet_pages|cardinality|postings|timeseries|columns|index_sizes <files...>";
     // `cargo bench --bench <name>` adds --bench to the arguments; without any
     // other arguments there is nothing to measure, so skip quietly.
     if args.is_empty() {
@@ -908,6 +973,7 @@ fn main() {
     let (mode, files) = args.split_first().expect(usage);
     match mode.as_str() {
         "parquet" => files.iter().for_each(|f| parquet(f)),
+        "parquet_pages" => files.iter().for_each(|f| parquet_pages(f)),
         "cardinality" => files.iter().for_each(|f| cardinality(f)),
         "postings" => {
             let details = files.iter().any(|f| f == "--details");

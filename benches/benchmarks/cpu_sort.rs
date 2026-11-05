@@ -40,4 +40,29 @@ fn cpu_sort_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, cpu_sort_benchmark);
+// Small sorts, for the README's latency: the largest that takes about as long as the smallest.
+// Each iteration sorts a fresh shuffled copy, and criterion doesn't time the copy.
+fn cpu_sort_small_benchmark(c: &mut Criterion) {
+    let mut rng = StdRng::seed_from_u64(0x50a7);
+    let mut group = c.benchmark_group("cpu_sort_small");
+    group.warm_up_time(std::time::Duration::from_millis(500));
+    group.measurement_time(std::time::Duration::from_secs(1));
+    group.sample_size(20);
+    for bytes in [32, 64, 128, 256, 512, 1 << 10, 4 << 10, 16 << 10, 64 << 10, 256 << 10] {
+        let input: Vec<u64> = (0..bytes / 8).map(|_| rng.random()).collect();
+        group.throughput(Throughput::Bytes(bytes as u64));
+        group.bench_function(BenchmarkId::new("u64", bytes), |b| {
+            b.iter_batched_ref(
+                || input.clone(),
+                |values| {
+                    values.sort_unstable();
+                    black_box(values[0])
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, cpu_sort_benchmark, cpu_sort_small_benchmark);

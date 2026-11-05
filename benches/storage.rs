@@ -11,6 +11,8 @@
 //   cargo bench --bench storage -- /mnt/disk/disk.dat                 # a file on a mounted file system
 //   cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1   # an unused raw device
 //   cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1 --size 1800g --no-precondition   # HDD
+//   cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1 --sweep   # one request at a time, 4 KiB to 1 MiB
+//   cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1 --sweep-throughput   # flat out, 4 KiB to 16 MiB
 //
 // The whole range is written first, because reads of never-written blocks can
 // skip the flash; --no-precondition skips that for raw devices (an HDD has no
@@ -382,6 +384,38 @@ fn main() {
             0,
             true,
         );
+    }
+    // Throughput against request size, flat out: a README row's throughput is the fastest here, and
+    // BENCHMARKING.md records the smallest size that reaches it.
+    if args.iter().any(|a| a == "--sweep-throughput") {
+        for kib in [4, 8, 16, 32, 64, 128, 256, 1024, 4096, 16384] {
+            // Small requests need more in flight, and two threads for reads.
+            let (threads, depth) = if kib < 1024 { (2, 64) } else { (1, 32) };
+            for (kind, op) in [("read", Op::Read), ("write", Op::Write)] {
+                let t = if matches!(op, Op::Write) { 1 } else { threads };
+                let d = if matches!(op, Op::Write) { threads * depth } else { depth };
+                let name = format!("rand_{kind}_{kib}k_flat").leak();
+                run(&path, size, &rand(&*name, op, kib * KIB, t, d), secs, false);
+                let name = format!("seq_{kind}_{kib}k_flat").leak();
+                run(&path, size, &seq(&*name, op, kib * KIB, threads * depth, true), secs, false);
+            }
+        }
+        return;
+    }
+    // Latency against request size, one request at a time, and random throughput at 1 MiB: a README
+    // row's size is the largest that takes about as long as the smallest.
+    if args.iter().any(|a| a == "--sweep") {
+        for kib in [4, 8, 16, 32, 64, 128, 256, 1024] {
+            for (kind, op) in [("read", Op::Read), ("write", Op::Write)] {
+                let name = format!("seq_{kind}_{kib}k_qd1").leak();
+                run(&path, size, &seq(&*name, op, kib * KIB, 1, true), secs, false);
+                let name = format!("rand_{kind}_{kib}k_qd1").leak();
+                run(&path, size, &rand(&*name, op, kib * KIB, 1, 1), secs, false);
+            }
+        }
+        run(&path, size, &rand("rand_read_1m_qd32", Op::Read, MIB, 1, 32), secs, false);
+        run(&path, size, &rand("rand_write_1m_qd32", Op::Write, MIB, 1, 32), secs, false);
+        return;
     }
     run(
         &path,

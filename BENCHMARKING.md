@@ -51,8 +51,10 @@ debug build.
 | `cache_read`, `cache_read_latency` | The `memory_sequential_read` SIMD loop, and the pointer chase, over 16 KiB, 256 KiB and 8 MiB | L1/L2/L3 Cache Read |
 | `cpu_encrypt` | ring AES-256-GCM and ChaCha20-Poly1305 seal and open on 16 KiB | CPU Encrypt / Decrypt |
 | `cpu_hash`, `cpu_hash_1mib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and 1 MiB buffers | CPU Hash rows |
-| `cpu_batch` | xxh3, SHA-256 and AES-256-GCM at 64 B to 1 MiB per call | Latency of the CPU Hash and Encrypt rows |
+| `cpu_batch` | xxh3, SHA-256 and AES-256-GCM at 8 B to 1 MiB per call | Latency of the CPU Hash and Encrypt rows |
 | `cpu_serialize_batch` | Protobuf and JSON at 1 to 4096 events per call | Latency of the CPU Serialize and Deserialize rows |
+| `memory_random_block`, `memory_random_block_latency` | Random reads and writes from 64 B to 1 MiB, one at a time and flat out | Throughput of the Memory Random rows |
+| `cpu_sort_small` | Sorting `u64`s, 32 B to 256 KiB | Latency of CPU Sort |
 | `memory_sequential_read_latency`, `memory_write_latency`, `memory_latency_all_cores` | Pointer chases through consecutive or shuffled lines; the write ones with an atomic add | Latency of the Memory rows |
 | `cpu_bitpack` | `bitpacking`'s BitPacker4x packing and unpacking 256 MiB of 12-bit integers | CPU Encode / Decode Bitpacked Integers |
 | `cpu_serialize` | Protobuf (prost), JSON (serde_json, to structs and to a dynamic `Value`) and postcard on a 1 MiB batch of events | CPU Serialize, CPU Deserialize |
@@ -127,27 +129,105 @@ From the other socket of a two-socket m8g.48xlarge (`numactl --cpunodebind=0
 loads, one thread, 4 KiB pages 1.2 / 3.1 GiB/s. 96 threads at 96 ns per line is
 the 60 GiB/s the link carries.
 
-Batch size against throughput, in `cpu_batch`, `cpu_serialize_batch` and
-`cpu_compress --chunks`, GiB/s on C4 / m8i / m8g. The README uses the smallest
-batch at 90% of the peak on every CPU, and the latency is the time per call:
+Every README row is one latency and one throughput. The size in parentheses is
+the largest that takes about as long as the smallest (within ~1.5x, or the same
+rounded number), and throughput is the fastest at any size. Time per call on C4 /
+m8i / m8g, from `cpu_batch`, `cpu_sort_small`, `cpu_serialize_batch`,
+`cpu_compress --chunks` and `compression_ratio parquet_pages`, with the peak
+throughput across sizes:
 
-| | 64 B | 1 KiB | 4 KiB | 16 KiB | 1 MiB | README |
-| --- | --- | --- | --- | --- | --- | --- |
-| xxh3 | 21 / 22 / 11 | 53 / 51 / 20 | 63 / 65 / 20 | 66 / 67 / 20 | 67 / 70 / 20 | 4 KiB: 60 / 59 / 190 ns |
-| SHA-256 | 0.72 / 0.71 / 0.70 | 1.6 / 1.6 / 1.35 | 1.7 / 1.7 / 1.4 | 1.8 / 1.7 / 1.4 | 1.8 / 1.75 / 1.4 | 1 KiB: 584 / 593 / 707 ns |
-| AES-256-GCM encrypt | 1.0 / 1.0 / 0.8 | 6.6 / 6.5 / 3.2 | 8.8 / 8.7 / 3.7 | 9.7 / 9.5 / 4.1 | 10 / 9.8 / 4.3 | 16 KiB: 1.6 / 1.6 / 3.7 us |
+| | Size: latency, per CPU | Next size up | Peak | README |
+| --- | --- | --- | --- | --- |
+| xxh3 | 32 B: 1.9 / 1.8 / 2.9 ns | 64 B: 2.8 / 2.8 / 5.4 ns | 68 / 70 / 20 GiB/s | 2 ns, 50 GiB/s |
+| SHA-256 | 64 B: 82 / 84 / 84 ns | 128 B: 114 / 116 / 127 ns | 1.8 / 1.75 / 1.43 GiB/s | 100 ns, 2 GiB/s |
+| AES-256-GCM encrypt | 256 B: 74 / 77 / 118 ns | 512 B: 94 / 99 / 174 ns | 10 / 9.8 / 4.3 GiB/s | 100 ns, 10 GiB/s |
+| AES-256-GCM decrypt | 256 B: 83 / 82 / 131 ns | 512 B: 102 / 106 / 187 ns | 9.9 / 9.7 / 4.1 GiB/s | |
+| lz4 compress / decompress | 1 KiB: 1.8 / 0.33 us | | 600 MiB/s / 3 GiB/s | |
+| zstd -1 compress / decompress | 1 KiB: 5.1-6.0 / 1.7-1.8 us | | 500 MiB/s / 1.5 GiB/s | 3 / 1 us, 500 MiB/s / 2 GiB/s |
+| Parquet encode, taxi / hits | 4 KiB page: 56-75 / 48-70 us | 16 KiB: 192-263 / 156-243 us | 0.17-0.44 GiB/s | 50 us, 300 MiB/s |
+| Parquet decode, taxi / hits | 4 KiB page: 13-14 / 9-10 us | 16 KiB: 40-45 / 25-29 us | 1.6-2.2 GiB/s | 10 us, 2 GiB/s |
+| Sort `u64` | 1 KiB: 504 / 534 / 561 ns | 4 KiB: 2.7 / 2.8 / 3.2 us | see below | 500 ns, 300 MiB/s |
 
-Serializing one event (122 B of Protobuf, 265 B of JSON) already gets the full
-speed: 50-230 ns to serialize and 250-590 ns to deserialize. On Silesia split
-into chunks, with a reused zstd context, lz4 is flat down to 1 KiB (570 MiB/s and
-2.6 GiB/s) and costs ratio instead (1.53x at 1 KiB, 2.09x at 1 MiB). zstd -1
-needs 64 KiB (400-500 MiB/s and 1.1-1.4 GiB/s, against 180 MiB/s and 470 MiB/s at
-1 KiB): 64 KiB takes 100-160 us to compress and 21-57 us to decompress. Bitpacking
-works on its fixed 128-value block, so its latency is the block's 512 B at the
-speed above: ~50 and ~10 ns. These rows are calculated, not timed: Parquet is
-Arrow's default 1 MiB page at the measured speed, Sort is 1 GiB / 340 MiB/s, and
-the 1 GiB blob read is 1 GiB / 100 MiB/s. GPU memory and NVLink have no latency:
-those rows are NVIDIA's specs.
+One event is the smallest thing to serialize (122 B of Protobuf, 265 B of JSON):
+50-230 ns to serialize and 250-590 ns to deserialize, and also the fastest,
+1.1-2.3 GiB/s and ~500 MiB/s. Compression, Parquet and sorting have no flat part:
+latency grows with the input from the start, so those sizes are a judgment call,
+the smallest worth doing (lz4 reaches 1.2x and zstd -1 1.6x at 1 KiB, and zstd
+expands 64 B). Sort is the one row where throughput isn't the peak: 4 integers
+sort at 7-13 GiB/s, 1 KiB at 2 GiB/s, 1 MiB at 600 MiB/s and 1 GiB at 340 MiB/s,
+and the peak would make a big sort look 30x too fast. Bitpacking works on its
+fixed 128-value block, so its latency is the block's 512 B at the speed above.
+
+Random memory against size, on huge pages (`memory_random_block_latency`,
+`memory_random_block`; C4 / m8i / m8g). One read at a time took 111 / 136 / 131 ns
+at 64 B, 125 / 155 / 135 at 128 B, 161 / 174 / 148 at 256 B and 281 / 223 / 174 at
+1 KiB. Throughput at 64 B and 1 MiB: 1 thread 4.2 -> 16.8 / 3.9 -> 17.1 / 3.9 ->
+30.8 GiB/s reading, 6.8 -> 17 / 8.7 -> 15.2 / 3.7 -> 62.6 writing; 48 threads 80 ->
+136 / 69 -> 187 / 161 -> 347 reading and 54 -> 102 / 84 -> 148 / 165 -> 339 writing.
+From the other socket of an m8g.48xlarge, 1 MiB: one thread 15.8 GiB/s reading, 96
+threads 61.
+
+Disks against request size (`storage --sweep`, November 5, p50, one request at a
+time; 4 / 8 / 16 / 32 / 64 / 128 / 256 KiB / 1 MiB), and random 1 MiB QD32:
+
+| | Read at random | Write at random | Rand 1 MiB read / write |
+| --- | --- | --- | --- |
+| c4-standard-48-lssd | 86 / 94 / 106 / 103 / 104 / 110 / 142 / 374 us | 38 / 40 / 41 / 44 / 50 / 62 / 97 / 267 | 5.1 / 2.6 GiB/s |
+| m8id.12xlarge | 94 / 95 / 98 / 101 / 106 / 117 / 153 / 290 | 32 / 32 / 32 / 33 / 38 / 46 / 94 / 385 | 6.5 / 2.9 |
+| m8gd.12xlarge | 67 / 77 / 89 / 109 / 148 / 204 / 278 / 380 | 18 / 19 / 23 / 25 / 34 / 49 / 74 / 289 | 6.3 / 2.9 |
+| Hyperdisk Balanced | 193 / 199 / 215 / 233 / 262 / 320 / 470 / 770 | 343 / 416 / 465 / 497 / 580 / 701 / 894 / 1170 | 1.6 / 1.6 |
+| EBS gp3 | 676 / 712 / 708 / 702 / 911 / 1126 / 1556 / 1803 | 980 / 1033 / 1025 / 1146 / 1518 / 2169 / 3275 / 3409 | 1.1 / 1.0 |
+| Hyperdisk Balanced HA | 216 / 227 / 236 / 241 / 270 / 335 / 420 / 796 | 1241 / 1324 / 1362 / 1352 / 1482 / 1647 / 1871 / 2478 | 1.6 / 1.6 |
+| pd-standard, zonal | 19 / 17 / 17 / 17 / 17 / 18 / 20 / 31 ms | 409 / 413 / 509 / 518 / 562 / 665 / 861 / 4084 us | 244 / 246 MiB/s |
+| pd-standard, regional | 20 / 18 / 17 / 17 / 17 / 18 / 18 / 33 ms | 1143 / 1154 / 1250 / 1271 / 1319 / 1498 / 1727 / 4944 us | 244 / 200 |
+| d3 HDD | 12 / 13 / 13 / 13 / 13 / 13 / 14 / 18 ms | 4.1 / 4.2 / 4.2 / 4.4 / 4.6 / 4.9 / 5.9 / 11.0 ms | 68 / 92 |
+
+Sequential reads, 4 KiB to 256 KiB: C4 47-139 us, m8id 40-146, m8gd 15-77, Hyperdisk 299-747, gp3
+634-1575, Hyperdisk HA 377-902, pd-standard 373-663, d3 63-1268. Averaged, SSD reads
+are 34 us at 4 KiB and 46 at 8 KiB. Regional disk reads use the zonal rows: AWS has no regional block storage, and
+Hyperdisk HA reads as fast as Hyperdisk. Reads of never-written blocks skip the disk
+(pd-standard answered in 145 us), so write the range first. EBS st1 read in 5-13 ms
+up to 256 KiB even sequentially, and wrote in 1.2-1.9 ms; the README's network HDD
+rows are pd-standard. HDD durable writes reach 69 MiB/s with 1 MiB commits.
+
+Network round trips against size (`network --sizes`, p50, 1 B / 1 KiB / 4 KiB / 16 KiB
+/ 64 KiB / 256 KiB / 1 MiB each way): GCP C4 same zone 64 / 68 / 73 / 71 / 119 / 173 /
+646 us, AWS m8i same AZ 109 / 110 / 118 / 107 / 357 / 471 / 1818 us, GCP cross-zone
+433 / 327 / 431 / 419 / 490 / 618 / 1116 us, and GCP `us-east4` -> `us-central1` 23.5 /
+23.5 / 23.4 / 24.6 / 27.5 / 25.0 / 27.3 ms. Cross-region throughput with 32 connections is measured
+only `us-central1` -> `us-east4` (10.7 Gbit/s); the farther rows are 32 x 3 MiB / RTT.
+
+The smallest size that reaches each row's throughput (within ~5% of the peak on
+every provider, flat out: `storage --sweep-throughput`, 4 KiB to 16 MiB, and the
+sweeps above), which the README's table doesn't show:
+
+| Row | Throughput | Smallest size that reaches it |
+| --- | --- | --- |
+| SSD Sequential Read / Write | 5 / 3 GiB/s | 16 / 4 KiB |
+| SSD Random Read / Write | 5 / 3 GiB/s | 16 / 8 KiB |
+| Network Disk, Zonal Sequential Read / Write | 1 / 1 GiB/s | 16 / 32 KiB |
+| Network Disk, Zonal Random Read / Write | 1 / 1 GiB/s | 64 / 64 KiB (gp3's 16k IOPS; Hyperdisk's 80k needs 32 KiB) |
+| Network Disk, Regional Sequential Read / Write | 1 / 1 GiB/s | 16 / 32 KiB |
+| Network Disk, Regional Random Read / Write | 1 / 1 GiB/s | 32 / 32 KiB |
+| Network Disk, HDD Sequential Read / Write | 250 / 250 (regional 200) MiB/s | 4 / 4 KiB |
+| Network Disk, HDD Random Read / Write | 250 / 250 (regional 200) MiB/s | 256 / 128 KiB |
+| HDD Sequential Read / Write | 200 / 200 MiB/s | 4 KiB / 1 MiB |
+| HDD Random Read / Write | 100 / 100 MiB/s | 4 / 1 MiB |
+| Memory Random Read / Write | 20 / 30 GiB/s, 200 / 200 all cores | 64 KiB |
+| Memory Sequential, other socket | 15 GiB/s | any |
+| xxh3 / SHA-256 | 50 / 2 GiB/s | 4 KiB |
+| AES-256-GCM | 10 GiB/s | 16 KiB |
+| lz4 / zstd -1 compress | 500 MiB/s | 1 / 64 KiB |
+| lz4 / zstd -1 decompress | 2 GiB/s | 64 B / 256 KiB |
+| Serialize, Deserialize | 2 GiB/s, 500 MiB/s | 1 event |
+| Parquet encode / decode | 300 MiB/s, 2 GiB/s | 64 KiB page |
+| Sort | 300 MiB/s | 1 GiB (the size, not the peak) |
+
+Regional Hyperdisk reaches 1.6 GiB/s, its provisioned limit, and zonal gp3 1 GiB/s;
+the README calls all of them 1 GiB/s. d3's random read tops out at 88 MiB/s at 4 MiB
+and falls to 80 at 16 MiB.
+
+GPU memory and NVLink have no latency: those rows are NVIDIA's specs.
 
 The README collapses `memory_sequential_read`'s scalar and SIMD variants into one
 single-thread row and one threaded row for memorability. `memory_random` issues
@@ -287,8 +367,8 @@ actually lands on has 2x the test size free, and refuses to write to a mounted
 device or without `--destroy`. A file target includes the file system's cost; a
 raw device does not.
 
-The README uses the max-throughput results (1 MiB QD32 for sequential, 8 KiB
-QD128 for random) and 8 KiB QD1 latency (p50) for both. `--only
+The README uses the max-throughput results (1 MiB QD32) and the p50 at QD1 of the
+largest size that's about as fast as 4 KiB (`--sweep`, below). `--only
 seq_read_8k_qd1,...` runs a subset. Local NVMe writes land in
 the drive's DRAM cache, so they beat reads at QD1 (30 us against 90). For an
 HDD, test the whole disk with `--size 1800g --no-precondition` so random reads
@@ -543,7 +623,7 @@ misses the database's cache waits for its disk.
 ```bash
 cargo bench --bench cpu_compress -- silesia.tar dickens ...
 NAPKIN_COMPRESSION_CODECS="lz4_flex,zstd -3" cargo bench --bench cpu_compress -- file
-cargo bench --bench cpu_compress -- --chunks silesia.tar   # lz4 and zstd -1, 1 KiB to 4 MiB per call
+cargo bench --bench cpu_compress -- --chunks silesia.tar   # lz4 and zstd -1, 64 B to 4 MiB per call
 ```
 
 `benches/cpu_compress.rs` reports the ratio and single-threaded

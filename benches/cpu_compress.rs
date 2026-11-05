@@ -128,21 +128,22 @@ fn mib_per_sec(bytes: usize, elapsed: Duration) -> f64 {
 }
 
 // lz4 and zstd -1 on the file split into chunks, one call per chunk, each on its own. zstd reuses
-// its context, as anything calling it in a loop would. The time per chunk at the smallest chunk
-// that gets the full throughput is the README's latency.
+// its context, as anything calling it in a loop would. A README row's size is the largest that
+// takes about as long as the smallest, and its throughput the fastest at any size.
 fn chunks(path: &str) {
     let input = std::fs::read(path).unwrap();
     println!("| chunk | codec | ratio | compress MiB/s | us | decompress MiB/s | us |");
     println!("| ----- | ----- | ----- | -------------- | -- | ---------------- | -- |");
-    for kib in [1, 4, 16, 64, 256, 1024, 4096] {
-        let size = kib * 1024;
-        let parts: Vec<&[u8]> = input.chunks_exact(size).collect();
+    for size in [64, 256, 1 << 10, 4 << 10, 16 << 10, 64 << 10, 256 << 10, 1 << 20, 4 << 20] {
+        // Millions of tiny calls would take minutes, and don't change the answer.
+        let sample = if size < 4096 { &input[..input.len().min(16 << 20)] } else { &input[..] };
+        let parts: Vec<&[u8]> = sample.chunks_exact(size).collect();
         let total = parts.len() * size;
         let per_chunk = |d: Duration| d.as_secs_f64() * 1e6 / parts.len() as f64;
         let row = |codec: &str, compressed: usize, c: Duration, d: Duration| {
             println!(
-                "| {} KiB | {} | {:.2} | {:.0} | {:.2} | {:.0} | {:.2} |",
-                kib,
+                "| {} B | {} | {:.2} | {:.0} | {:.2} | {:.0} | {:.2} |",
+                size,
                 codec,
                 total as f64 / compressed as f64,
                 mib_per_sec(total, c),

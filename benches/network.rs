@@ -3,7 +3,7 @@
 //
 //   cargo bench --bench network -- --server              # on host A, listens on TCP 5900
 //   cargo bench --bench network -- 10.0.0.12             # on host B, with A's private IP
-//   cargo bench --bench network -- 10.0.0.12 --secs 15 --flows 1,8,32
+//   cargo bench --bench network -- 10.0.0.12 --secs 15 --flows 1,8,32 --sizes 1,1024,65536
 //
 // Round trips: one connection with TCP_NODELAY sends a message and waits for
 // the same number of bytes back, for 1 B and 32 KiB messages. Streams: N
@@ -119,7 +119,7 @@ fn streams(host: &str, flows: usize, secs: u64) {
 
 fn main() {
     let args: Vec<String> = std::env::args().filter(|a| a != "--bench").collect();
-    let usage = "usage: network --server | network <server-ip> [--secs 15] [--flows 1,8,32]";
+    let usage = "usage: network --server | network <server-ip> [--secs 15] [--flows 1,8,32] [--sizes 1,32768]";
     // `cargo bench --bench <name>` adds --bench to the arguments; without any
     // other arguments there is nothing to measure, so skip quietly.
     if args.len() < 2 {
@@ -155,7 +155,12 @@ fn main() {
             .trim(),
         target
     );
-    for size in [1, 32 << 10] {
+    let sizes: Vec<usize> = flag("--sizes")
+        .unwrap_or("1,32768".into())
+        .split(',')
+        .map(|f| f.parse().unwrap())
+        .collect();
+    for size in sizes {
         round_trips(&target, size, secs);
     }
     for f in flows {

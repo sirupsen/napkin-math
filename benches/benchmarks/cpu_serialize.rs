@@ -185,8 +185,8 @@ fn cpu_serialize_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-// The same formats on 1 to 4096 events at a time: per-call setup against batch size. The README's
-// latency is the smallest batch that gets the full throughput.
+// The same formats on 1 to 4096 events at a time. A README row's latency is one event, and its
+// throughput the fastest at any batch size.
 fn cpu_serialize_batch_benchmark(c: &mut Criterion) {
     let events = serialization_corpus().payload.events;
     let mut group = c.benchmark_group("cpu_serialize_batch");

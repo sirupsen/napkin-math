@@ -313,6 +313,46 @@ fn memory_write_latency_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
+// One random block at a time, each read depending on every word of the block before: the latency
+// of a random read against its size. Only the first word of a block is non-zero, the next block's
+// index, so the sum of the block is where to go next.
+fn memory_random_block_latency_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("memory_random_block_latency");
+    for block in [64usize, 128, 256, 512, 1 << 10, 4 << 10, 16 << 10] {
+        let chase = PointerChase::new(GIB, true);
+        let words = block / 8;
+        let blocks = GIB / block;
+        let base = chase.ptr as *mut u64;
+        let mut order: Vec<usize> = (0..blocks).collect();
+        let mut rng = StdRng::seed_from_u64(0xb10c);
+        for i in (1..blocks).rev() {
+            let j = rng.random_range(0..i);
+            order.swap(i, j);
+        }
+        unsafe { ptr::write_bytes(base, 0, GIB / 8) };
+        for (i, next) in order.iter().enumerate() {
+            unsafe { base.add(i * words).write(*next as u64) };
+        }
+        let walk = |mut at: usize, steps: u64| {
+            for _ in 0..steps {
+                let words = unsafe { std::slice::from_raw_parts(base.add(at * words), words) };
+                at = black_box(words.iter().fold(0u64, |a, b| a.wrapping_add(*b))) as usize;
+            }
+            at
+        };
+        let mut at = walk(0, blocks as u64);
+        group.throughput(Throughput::Bytes(block as u64));
+        group.bench_function(BenchmarkId::from_parameter(block), |b| {
+            b.iter_custom(|iters| {
+                let start = Instant::now();
+                at = walk(at, iters);
+                start.elapsed()
+            })
+        });
+    }
+    group.finish();
+}
+
 // All cores reading or writing random 64-byte lines of one shared 16 GiB buffer, far larger
 // than any L3. Each pinned thread draws its own indices from a xorshift generator: an index
 // array for 16 GiB would be 2 GiB of extra traffic, and the generator doesn't depend on the
@@ -352,6 +392,36 @@ impl SharedLines {
             }
         });
         lines
+    }
+
+    // Random blocks instead of lines: 256 MiB per thread, whatever the size.
+    fn run_blocks(&self, cores: &[core_affinity::CoreId], write: bool, block: usize) -> std::time::Duration {
+        let start = Instant::now();
+        let bytes = self.len * 64;
+        std::thread::scope(|s| {
+            for (t, core) in cores.iter().enumerate() {
+                s.spawn(move || {
+                    core_affinity::set_for_current(*core);
+                    let mut x = 0x9E3779B97F4A7C15u64 ^ (t as u64).wrapping_mul(0xD1B54A32D192ED03);
+                    let mut sum = 0u64;
+                    for _ in 0..ACCESSES_PER_THREAD * 64 / block {
+                        x ^= x << 13;
+                        x ^= x >> 7;
+                        x ^= x << 17;
+                        let at = (x as usize & (bytes - 1)) & !(block - 1);
+                        let p = unsafe { (self.ptr as *mut u8).add(at) };
+                        if write {
+                            unsafe { ptr::write_bytes(p, x as u8, block) };
+                        } else {
+                            let words = unsafe { std::slice::from_raw_parts(p as *const u64, block / 8) };
+                            sum = words.iter().fold(sum, |a, b| a.wrapping_add(*b));
+                        }
+                    }
+                    black_box(sum);
+                });
+            }
+        });
+        start.elapsed()
     }
 
     fn run(&self, cores: &[core_affinity::CoreId], write: bool) -> std::time::Duration {
@@ -402,6 +472,25 @@ fn memory_random_threads_benchmark(c: &mut Criterion) {
                 let name = format!("{op}, 16 GiB, {n} thread{}{pages}", if n == 1 { "" } else { "s" });
                 group.bench_function(name, |b| {
                     b.iter_custom(|iters| (0..iters).map(|_| lines.run(threads, write)).sum())
+                });
+            }
+        }
+    }
+    group.finish();
+}
+
+// Throughput of random reads and writes against their size, on huge pages.
+fn memory_random_block_benchmark(c: &mut Criterion) {
+    let cores = core_affinity::get_core_ids().unwrap();
+    let lines = SharedLines::new(true, &cores);
+    let mut group = c.benchmark_group("memory_random_block");
+    group.sample_size(10);
+    for block in [64usize, 256, 1 << 10, 4 << 10, 64 << 10, 1 << 20] {
+        for threads in [&cores[..1], &cores[..]] {
+            group.throughput(Throughput::Bytes((threads.len() * ACCESSES_PER_THREAD * 64) as u64));
+            for (op, write) in [("read", false), ("write", true)] {
+                group.bench_function(format!("{op}, {block} B, {} threads", threads.len()), |b| {
+                    b.iter_custom(|iters| (0..iters).map(|_| lines.run_blocks(threads, write, block)).sum())
                 });
             }
         }
@@ -467,5 +556,7 @@ criterion_group!(
     memory_random_read_latency_benchmark,
     memory_sequential_read_latency_benchmark,
     memory_latency_all_cores_benchmark,
-    memory_write_latency_benchmark
+    memory_write_latency_benchmark,
+    memory_random_block_latency_benchmark,
+    memory_random_block_benchmark
 );
