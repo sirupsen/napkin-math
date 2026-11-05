@@ -47,7 +47,7 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | Memory Sequential Read (64 B), 1 thread                                  | 5 ns    | 30 GiB/s   |
 | Memory Sequential Write (64 B), 1 thread                                 | 10 ns   | 30 GiB/s   |
 | Memory Random Write (64 B), 1 thread                                     | 150 ns  | 30 GiB/s   |
-| Memory Random Read (128 B), 1 thread                                     | 100 ns  | 20 GiB/s   |
+| Memory Random Read (64 B), 1 thread                                      | 100 ns  | 20 GiB/s   |
 | Memory Sequential Read (64 B), other socket, 1 thread‡                   | 5 ns    | 15 GiB/s   |
 | Memory Random Read (64 B), other socket, 1 thread‡                       | 250 ns  | 15 GiB/s   |
 | CPU Encode Bitpacked Integers (128 at a time), 1 thread                  | 50 ns   | 10 GiB/s   |

@@ -161,7 +161,7 @@ fixed 128-value block, so its latency is the block's 512 B at the speed above.
 Random memory against size, on huge pages (`memory_random_block_latency`,
 `memory_random_block`; C4 / m8i / m8g). One read at a time took 111 / 136 / 131 ns
 at 64 B, 125 / 155 / 135 at 128 B, 161 / 174 / 148 at 256 B and 281 / 223 / 174 at
-1 KiB. Throughput at 64 B and 1 MiB: 1 thread 4.2 -> 16.8 / 3.9 -> 17.1 / 3.9 ->
+1 KiB. The README's row is one 64 B cache line, though 128 B costs only ~10% more. Throughput at 64 B and 1 MiB: 1 thread 4.2 -> 16.8 / 3.9 -> 17.1 / 3.9 ->
 30.8 GiB/s reading, 6.8 -> 17 / 8.7 -> 15.2 / 3.7 -> 62.6 writing; 48 threads 80 ->
 136 / 69 -> 187 / 161 -> 347 reading and 54 -> 102 / 84 -> 148 / 165 -> 339 writing.
 From the other socket of an m8g.48xlarge, 1 MiB: one thread 15.8 GiB/s reading, 96
