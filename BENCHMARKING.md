@@ -130,18 +130,20 @@ loads, one thread, 4 KiB pages 1.2 / 3.1 GiB/s. 96 threads at 96 ns per line is
 the 60 GiB/s the link carries.
 
 Every README row is one latency and one throughput. The size in parentheses is
-the largest that takes about as long as the smallest (within ~1.5x, or the same
-rounded number), and throughput is the fastest at any size. Time per call on C4 /
+the largest whose latency is within ~15% of the smallest on every machine and
+rounds to the same number, and throughput is the fastest at any size. A looser first
+try (within 1.5x, on the average across machines) called 64 KiB flat on SSDs, where
+Graviton takes 2.2x as long and writes round to 50 us instead of 30. Time per call on C4 /
 m8i / m8g, from `cpu_batch`, `cpu_sort_small`, `cpu_serialize_batch`,
 `cpu_compress --chunks` and `compression_ratio parquet_pages`, with the peak
 throughput across sizes:
 
 | | Size: latency, per CPU | Next size up | Peak | README |
 | --- | --- | --- | --- | --- |
-| xxh3 | 32 B: 1.9 / 1.8 / 2.9 ns | 64 B: 2.8 / 2.8 / 5.4 ns | 68 / 70 / 20 GiB/s | 2 ns, 50 GiB/s |
-| SHA-256 | 64 B: 82 / 84 / 84 ns | 128 B: 114 / 116 / 127 ns | 1.8 / 1.75 / 1.43 GiB/s | 100 ns, 2 GiB/s |
-| AES-256-GCM encrypt | 256 B: 74 / 77 / 118 ns | 512 B: 94 / 99 / 174 ns | 10 / 9.8 / 4.3 GiB/s | 100 ns, 10 GiB/s |
-| AES-256-GCM decrypt | 256 B: 83 / 82 / 131 ns | 512 B: 102 / 106 / 187 ns | 9.9 / 9.7 / 4.1 GiB/s | |
+| xxh3 | 16 B: 1.5 / 1.5 / 2.4 ns | 32 B: 1.9 / 1.8 / 2.9 ns | 68 / 70 / 20 GiB/s | 2 ns, 50 GiB/s |
+| SHA-256 | 32 B: 57 / 58 / 63 ns | 64 B: 82 / 84 / 84 ns (a second block) | 1.8 / 1.75 / 1.43 GiB/s | 50 ns, 2 GiB/s |
+| AES-256-GCM encrypt | 64 B: 58 / 60 / 77 ns | 128 B: 68 / 70 / 90 ns | 10 / 9.8 / 4.3 GiB/s | 50 ns, 10 GiB/s |
+| AES-256-GCM decrypt | 64 B: 65 / 67 / 91 ns | 128 B: 68 / 70 / 104 ns | 9.9 / 9.7 / 4.1 GiB/s | |
 | lz4 compress / decompress | 1 KiB: 1.8 / 0.33 us | | 600 MiB/s / 3 GiB/s | |
 | zstd -1 compress / decompress | 1 KiB: 5.1-6.0 / 1.7-1.8 us | | 500 MiB/s / 1.5 GiB/s | 3 / 1 us, 500 MiB/s / 2 GiB/s |
 | Parquet encode, taxi / hits | 4 KiB page: 56-75 / 48-70 us | 16 KiB: 192-263 / 156-243 us | 0.17-0.44 GiB/s | 50 us, 300 MiB/s |
@@ -538,8 +540,11 @@ much as 32 writer threads (2.49-2.67; 2.3-2.6 on November 2). One writer alone
 took 54 / 38 / 36 us per commit, 8 KiB 41 / 32 / 18 us. The README row is that
 one thread.
 
-The README rows use 64 KiB for SSD and network disks, which costs 20-100% more
-than 8 KiB from one writer but reaches the disk's bandwidth, and 8 KiB for HDD. Until October 26, 2026, these
+The README's latency is 8 KiB for SSD and zonal disks and 64 KiB for regional disks,
+where the second zone's round trip dominates (8 KiB 1.27 ms, 64 KiB 1.41 ms). Its
+throughput is 64 KiB, which reaches the disk's bandwidth. The zonal pd-standard row's 8
+KiB was not run through `storage_durable_write`: it is the raw write (391 us) plus
+the ~70 us flush above. Until October 26, 2026, these
 rows were buffered 8 KiB appends from one writer (300 us, 30 MiB/s on SSD).
 
 ## Network rows
