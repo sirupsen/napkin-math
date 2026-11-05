@@ -114,6 +114,38 @@ impl PointerChase {
         Self { ptr, len, bytes }
     }
 
+    fn point_at_self(&self) {
+        for i in 0..self.len {
+            unsafe {
+                (*self.ptr.add(i))[0] = i;
+            }
+        }
+    }
+
+    #[inline(never)]
+    pub(super) fn chase_write(&self, start: usize, steps: u64) -> usize {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        let mut idx = start;
+        for _ in 0..steps {
+            let word = unsafe { &*(self.ptr.add(idx) as *const AtomicU64) };
+            let old = word.fetch_add(1 << 32, Ordering::Relaxed);
+            idx = (old & 0xffff_ffff) as usize;
+        }
+        idx
+    }
+
+    // Every line points at the next one, so the prefetchers run ahead of the
+    // chase: the latency of one sequential read, one at a time.
+    pub(super) fn sequential(bytes: usize, huge_pages: bool) -> Self {
+        let chase = Self::new(bytes, huge_pages);
+        for i in 0..chase.len {
+            unsafe {
+                (*chase.ptr.add(i))[0] = (i + 1) % chase.len;
+            }
+        }
+        chase
+    }
+
     #[inline(never)]
     pub(super) fn chase(&self, start: usize, steps: u64) -> usize {
         let mut idx = start;
@@ -175,6 +207,112 @@ fn memory_random_read_latency_benchmark(c: &mut Criterion) {
     );
 }
 
+fn memory_sequential_read_latency_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("memory_sequential_read_latency");
+    for (name, huge_pages) in [("1 GiB, huge pages", true), ("1 GiB, 4 KiB pages", false)] {
+        let chase = PointerChase::sequential(GIB, huge_pages);
+        let mut idx = chase.chase(0, chase.len as u64);
+        group.bench_function(name, |b| {
+            b.iter_custom(|iters| {
+                let start = Instant::now();
+                idx = chase.chase(idx, iters);
+                start.elapsed()
+            })
+        });
+        black_box(idx);
+    }
+    group.finish();
+}
+
+// One chase per core at the same time, 512 MiB each on huge pages, so the latency is what each
+// core sees with every other core missing too. Each thread builds its own, on its own core.
+fn memory_latency_all_cores_benchmark(c: &mut Criterion) {
+    let cores = core_affinity::get_core_ids().unwrap();
+    let mut group = c.benchmark_group("memory_latency_all_cores");
+    group.sample_size(10);
+    for (name, sequential, write) in [
+        ("random", false, false),
+        ("sequential", true, false),
+        ("random write", false, true),
+        ("sequential write", true, true),
+    ] {
+        let chases: Vec<PointerChase> = std::thread::scope(|s| {
+            let handles: Vec<_> = cores
+                .iter()
+                .map(|core| {
+                    let core = *core;
+                    s.spawn(move || {
+                        core_affinity::set_for_current(core);
+                        let chase = if sequential {
+                            PointerChase::sequential(512 << 20, true)
+                        } else {
+                            PointerChase::new(512 << 20, true)
+                        };
+                        black_box(chase.chase(0, chase.len as u64));
+                        chase
+                    })
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        // Each thread carries on where it stopped, so repeated samples keep walking cold lines.
+        let positions: Vec<std::sync::atomic::AtomicUsize> = (0..cores.len())
+            .map(|_| std::sync::atomic::AtomicUsize::new(0))
+            .collect();
+        let positions = &positions;
+        group.bench_function(name, |b| {
+            b.iter_custom(|iters| {
+                let start = Instant::now();
+                std::thread::scope(|s| {
+                    for (t, (chase, core)) in chases.iter().zip(cores.iter().copied()).enumerate() {
+                        s.spawn(move || {
+                            core_affinity::set_for_current(core);
+                            let at = positions[t].load(std::sync::atomic::Ordering::Relaxed);
+                            let at = if write {
+                                chase.chase_write(at, iters)
+                            } else {
+                                chase.chase(at, iters)
+                            };
+                            positions[t].store(at, std::sync::atomic::Ordering::Relaxed);
+                        });
+                    }
+                });
+                start.elapsed()
+            })
+        });
+    }
+    group.finish();
+}
+
+// How long a write takes when the thread has to wait for it: an atomic add on the line, which only
+// finishes once this core owns the line. A plain store retires into the store buffer, and a store
+// plus a fence doesn't wait either: 8 random bytes then a fence took 10-15 ns on all three CPUs,
+// a tenth of a miss. The chase's next index is in the low half of the word, so each write depends
+// on the one before it. "same line" is the atomic alone, on a line this core already owns.
+fn memory_write_latency_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("memory_write_latency");
+    let chases = [
+        ("same line", PointerChase::new(4096, true), 1),
+        ("sequential", PointerChase::sequential(GIB, true), 0),
+        ("random", PointerChase::new(GIB, true), 0),
+    ];
+    for (name, chase, self_loop) in chases.iter() {
+        if *self_loop == 1 {
+            chase.point_at_self();
+        }
+        let mut idx = chase.chase_write(0, chase.len as u64);
+        group.bench_function(*name, |b| {
+            b.iter_custom(|iters| {
+                let start = Instant::now();
+                idx = chase.chase_write(idx, iters);
+                start.elapsed()
+            })
+        });
+        black_box(idx);
+    }
+    group.finish();
+}
+
 // All cores reading or writing random 64-byte lines of one shared 16 GiB buffer, far larger
 // than any L3. Each pinned thread draws its own indices from a xorshift generator: an index
 // array for 16 GiB would be 2 GiB of extra traffic, and the generator doesn't depend on the
@@ -183,6 +321,9 @@ struct SharedLines {
     ptr: *mut CacheLine,
     len: usize,
 }
+
+unsafe impl Send for PointerChase {}
+unsafe impl Sync for PointerChase {}
 
 unsafe impl Sync for SharedLines {}
 unsafe impl Send for SharedLines {}
@@ -323,5 +464,8 @@ criterion_group!(
     benches,
     memory_random_benchmark,
     memory_random_threads_benchmark,
-    memory_random_read_latency_benchmark
+    memory_random_read_latency_benchmark,
+    memory_sequential_read_latency_benchmark,
+    memory_latency_all_cores_benchmark,
+    memory_write_latency_benchmark
 );

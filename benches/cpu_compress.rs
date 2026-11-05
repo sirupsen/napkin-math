@@ -4,6 +4,7 @@
 // uncompressed size, like lzbench.
 //
 //   cargo bench --bench cpu_compress -- silesia.tar dickens ...
+//   cargo bench --bench cpu_compress -- --chunks silesia.tar   # lz4 and zstd -1, one call per chunk
 use std::io::{Read, Write};
 use std::time::{Duration, Instant};
 
@@ -126,6 +127,69 @@ fn mib_per_sec(bytes: usize, elapsed: Duration) -> f64 {
     bytes as f64 / (1024.0 * 1024.0) / elapsed.as_secs_f64()
 }
 
+// lz4 and zstd -1 on the file split into chunks, one call per chunk, each on its own. zstd reuses
+// its context, as anything calling it in a loop would. The time per chunk at the smallest chunk
+// that gets the full throughput is the README's latency.
+fn chunks(path: &str) {
+    let input = std::fs::read(path).unwrap();
+    println!("| chunk | codec | ratio | compress MiB/s | us | decompress MiB/s | us |");
+    println!("| ----- | ----- | ----- | -------------- | -- | ---------------- | -- |");
+    for kib in [1, 4, 16, 64, 256, 1024, 4096] {
+        let size = kib * 1024;
+        let parts: Vec<&[u8]> = input.chunks_exact(size).collect();
+        let total = parts.len() * size;
+        let per_chunk = |d: Duration| d.as_secs_f64() * 1e6 / parts.len() as f64;
+        let row = |codec: &str, compressed: usize, c: Duration, d: Duration| {
+            println!(
+                "| {} KiB | {} | {:.2} | {:.0} | {:.2} | {:.0} | {:.2} |",
+                kib,
+                codec,
+                total as f64 / compressed as f64,
+                mib_per_sec(total, c),
+                per_chunk(c),
+                mib_per_sec(total, d),
+                per_chunk(d),
+            );
+        };
+
+        let packed: Vec<Vec<u8>> = parts.iter().map(|p| lz4_flex::block::compress(p)).collect();
+        let c = best_of(|| {
+            for p in &parts {
+                std::hint::black_box(lz4_flex::block::compress(p));
+            }
+        });
+        let mut out = vec![0u8; size];
+        let d = best_of(|| {
+            for p in &packed {
+                let n = lz4_flex::block::decompress_into(p, &mut out).unwrap();
+                std::hint::black_box((n, out.as_ptr()));
+            }
+        });
+        row("lz4_flex", packed.iter().map(Vec::len).sum(), c, d);
+
+        let mut compressor = zstd::bulk::Compressor::new(1).unwrap();
+        let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
+        let mut packed_out = vec![0u8; zstd::zstd_safe::compress_bound(size)];
+        let packed: Vec<Vec<u8>> = parts
+            .iter()
+            .map(|p| compressor.compress(p).unwrap())
+            .collect();
+        let c = best_of(|| {
+            for p in &parts {
+                let n = compressor.compress_to_buffer(*p, &mut packed_out).unwrap();
+                std::hint::black_box(n);
+            }
+        });
+        let d = best_of(|| {
+            for p in &packed {
+                let n = decompressor.decompress_to_buffer(p, &mut out).unwrap();
+                std::hint::black_box((n, out.as_ptr()));
+            }
+        });
+        row("zstd -1", packed.iter().map(Vec::len).sum(), c, d);
+    }
+}
+
 fn main() {
     let only: Option<Vec<String>> = std::env::var("NAPKIN_COMPRESSION_CODECS")
         .ok()
@@ -138,7 +202,13 @@ fn main() {
     // `cargo bench --bench <name>` adds --bench to the arguments; without any
     // other arguments there is nothing to measure, so skip quietly.
     if paths.is_empty() {
-        eprintln!("usage: cpu_compress <files...> (no arguments, skipping)");
+        eprintln!("usage: cpu_compress [--chunks] <files...> (no arguments, skipping)");
+        return;
+    }
+    if paths[0] == "--chunks" {
+        for path in &paths[1..] {
+            chunks(path);
+        }
         return;
     }
     println!("| file | MiB | codec | ratio | compress MiB/s | decompress MiB/s |");

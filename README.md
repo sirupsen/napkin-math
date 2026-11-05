@@ -32,31 +32,32 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | ------------------------------------------------------------------------ | -------- | ---------- |
 | GPU Memory Sequential Read (B200)                                        |          | 7 TiB/s    |
 | GPU ↔ GPU Transfer, NVLink (B200)                                        |          | 800 GiB/s  |
-| Memory Sequential Read, all cores                                        |          | 200 GiB/s  |
-| Memory Sequential Write, all cores                                       |          | 200 GiB/s  |
 | L1 Cache Read, 1 thread                                                  | 2 ns     | 200 GiB/s  |
+| Memory Sequential Read, all cores                                        | 20 ns    | 200 GiB/s  |
+| Memory Sequential Write, all cores                                       | 30 ns    | 200 GiB/s  |
 | L2 Cache Read, 1 thread                                                  | 5 ns     | 150 GiB/s  |
-| Memory Random Read (64 B), all cores                                     |          | 100 GiB/s  |
-| Memory Random Write (64 B), all cores                                    |          | 100 GiB/s  |
-| Memory Sequential Read, other socket, all cores‡                         |          | 60 GiB/s   |
-| CPU Hash, not crypto-safe (xxh3, 1 MiB), 1 thread                        |          | 50 GiB/s   |
-| CPU Decode Bitpacked Integers, 1 thread                                  |          | 50 GiB/s   |
+| Memory Random Read (64 B), all cores                                     | 150 ns   | 100 GiB/s  |
+| Memory Random Write (64 B), all cores                                    | 150 ns   | 100 GiB/s  |
+| Memory Sequential Read, other socket, all cores‡                         | 100 ns   | 60 GiB/s   |
+| CPU Decode Bitpacked Integers (128 at a time), 1 thread                  | 10 ns    | 50 GiB/s   |
+| CPU Hash, not crypto-safe (xxh3, 4 KiB), 1 thread                        | 100 ns   | 50 GiB/s   |
 | GPU ↔ CPU Transfer, PCIe (B200)                                          | 10 μs    | 50 GiB/s   |
 | L3 Cache Read, 1 thread                                                  | 50 ns    | 40 GiB/s   |
 | GPU ↔ GPU Network, RDMA (400 Gbit/s)                                     | 5 μs     | 40 GiB/s   |
-| Memory Sequential Write, 1 thread                                        |          | 30 GiB/s   |
-| Memory Sequential Read, 1 thread                                         |          | 30 GiB/s   |
-| Memory Sequential Read, other socket, 1 thread‡                          |          | 15 GiB/s   |
-| CPU Encrypt / Decrypt (AES-256-GCM), 1 thread                            |          | 10 GiB/s   |
-| CPU Encode Bitpacked Integers, 1 thread                                  |          | 10 GiB/s   |
+| Memory Sequential Read, 1 thread                                         | 5 ns     | 30 GiB/s   |
+| Memory Sequential Write, 1 thread                                        | 10 ns    | 30 GiB/s   |
+| CPU Hash, not crypto-safe (xxh3, 64 B), 1 thread                         | 5 ns     | 20 GiB/s   |
+| Memory Sequential Read, other socket, 1 thread‡                          | 5 ns     | 15 GiB/s   |
+| CPU Encode Bitpacked Integers (128 at a time), 1 thread                  | 50 ns    | 10 GiB/s   |
+| CPU Encrypt / Decrypt (AES-256-GCM, 16 KiB), 1 thread                    | 2 μs     | 10 GiB/s   |
 | SSD Sequential Read (8 KiB), 1 thread                                    | 50 μs    | 5 GiB/s    |
 | SSD Random Read (8 KiB), 2 threads                                       | 100 μs   | 5 GiB/s    |
-| Network Bandwidth                                                        |          | 3 GiB/s    |
-| Memory Random Write (64 B), 1 thread                                     |          | 3 GiB/s    |
 | Memory Random Read (64 B), 1 thread                                      | 100 ns   | 3 GiB/s    |
+| Memory Random Write (64 B), 1 thread                                     | 150 ns   | 3 GiB/s    |
 | SSD Random Write (8 KiB), 1 thread                                       | 30 μs    | 3 GiB/s    |
 | SSD Sequential Write (8 KiB), 1 thread                                   | 30 μs    | 3 GiB/s    |
 | SSD Sequential Durable Write (64 KiB), 1 thread†                         | 50 μs    | 3 GiB/s    |
+| Network Bandwidth                                                        | 100 μs   | 3 GiB/s    |
 | Network Same-Zone                                                        | 100 μs   | NW Limit   |
 | Network Cross-Zone                                                       | 500 μs   | NW Limit   |
 | Network Cross-Region, Same-Continent                                     | 25-60 ms | NW Limit\* |
@@ -66,24 +67,26 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | Blob Storage, Zonal Write (128 KiB)                                      | 200 ms   | NW Limit   |
 | Blob Storage, Regional Write (128 KiB)                                   | 200 ms   | NW Limit   |
 | Network Cross-Region, US ↔ Singapore                                     | 200 ms   | NW Limit\* |
-| CPU Hash, crypto-safe (SHA-256, 1 MiB), 1 thread                         |          | 2 GiB/s    |
-| CPU Decode Parquet (dictionary + zstd), 1 thread                         |          | 2 GiB/s    |
-| CPU Serialize (JSON, Protobuf), 1 thread                                 |          | 1 GiB/s    |
-| CPU Decompress (lz4, zstd -1), 1 thread                                  |          | 1 GiB/s    |
+| CPU Hash, crypto-safe (SHA-256, 1 KiB), 1 thread                         | 500 ns   | 2 GiB/s    |
+| CPU Decode Parquet (dictionary + zstd, 1 MiB page), 1 thread             | 500 μs   | 2 GiB/s    |
+| CPU Serialize (JSON, Protobuf, 200 B), 1 thread                          | 100 ns   | 1 GiB/s    |
+| Memory Random Read (64 B), other socket, 1 thread‡                       | 250 ns   | 1 GiB/s    |
+| CPU Decompress (lz4, zstd -1, 64 KiB), 1 thread                          | 50 μs    | 1 GiB/s    |
 | Network Disk, Zonal Sequential Read (8 KiB), 1 thread                    | 500 μs   | 1 GiB/s    |
 | Network Disk, Regional Sequential Read (8 KiB), 1 thread                 | 500 μs   | 1 GiB/s    |
 | Network Disk, Zonal Sequential Write (8 KiB), 1 thread                   | 500 μs   | 1 GiB/s    |
 | Network Disk, Zonal Sequential Durable Write (64 KiB), 1 thread†         | 1 ms     | 1 GiB/s    |
 | Network Disk, Regional Sequential Write (8 KiB), 1 thread                | 1 ms     | 1 GiB/s    |
 | Network Disk, Regional Sequential Durable Write (64 KiB), 1 thread†      | 2 ms     | 1 GiB/s    |
-| CPU Compress (lz4, zstd -1), 1 thread                                    |          | 500 MiB/s  |
-| CPU Deserialize (JSON, Protobuf), 1 thread                               |          | 500 MiB/s  |
+| CPU Hash, crypto-safe (SHA-256, 64 B), 1 thread                          | 100 ns   | 500 MiB/s  |
+| CPU Deserialize (JSON, Protobuf, 200 B), 1 thread                        | 500 ns   | 500 MiB/s  |
+| CPU Compress (lz4, zstd -1, 64 KiB), 1 thread                            | 100 μs   | 500 MiB/s  |
 | Network Disk, Zonal Random Read (8 KiB), 2 threads                       | 500 μs   | 500 MiB/s  |
 | Network Disk, Regional Random Read (8 KiB), 2 threads                    | 500 μs   | 500 MiB/s  |
 | Network Disk, Zonal Random Write (8 KiB), 1 thread                       | 500 μs   | 500 MiB/s  |
 | Network Disk, Regional Random Write (8 KiB), 1 thread                    | 1 ms     | 500 MiB/s  |
-| CPU Sort (64-bit integers, 1 GiB), 1 thread                              |          | 300 MiB/s  |
-| CPU Encode Parquet (dictionary + zstd), 1 thread                         |          | 300 MiB/s  |
+| CPU Encode Parquet (dictionary + zstd, 1 MiB page), 1 thread             | 3 ms     | 300 MiB/s  |
+| CPU Sort (64-bit integers, 1 GiB), 1 thread                              | 3 s      | 300 MiB/s  |
 | Network Disk, Zonal, HDD Sequential Read (8 KiB), 1 thread               | 500 μs   | 250 MiB/s  |
 | Network Disk, Regional, HDD Sequential Read (8 KiB), 1 thread            | 500 μs   | 250 MiB/s  |
 | Network Disk, Zonal, HDD Sequential Write (8 KiB), 1 thread              | 500 μs   | 250 MiB/s  |
@@ -92,7 +95,7 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | Network Disk, Zonal, HDD Sequential Durable Write (64 KiB), 1 thread†    | 500 μs   | 200 MiB/s  |
 | Network Disk, Regional, HDD Sequential Durable Write (64 KiB), 1 thread† | 1 ms     | 200 MiB/s  |
 | Network Disk, Regional, HDD Sequential Write (8 KiB), 1 thread           | 1 ms     | 200 MiB/s  |
-| Blob Storage, Regional Read (1 GiB), 1 connection                        |          | 100 MiB/s  |
+| Blob Storage, Regional Read (1 GiB), 1 connection                        | 10 s     | 100 MiB/s  |
 | Network Disk, Zonal, HDD Random Write (8 KiB), 1 thread                  | 500 μs   | 20 MiB/s   |
 | Network Disk, Regional, HDD Random Write (8 KiB), 1 thread               | 1 ms     | 20 MiB/s   |
 | Network Disk, Zonal, HDD Random Read (8 KiB), 2 threads                  | 20 ms    | 10 MiB/s   |
@@ -100,14 +103,11 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | HDD Sequential Durable Write (8 KiB), 1 thread†                          | 1 ms     | 5 MiB/s    |
 | HDD Random Write (8 KiB), 1 thread                                       | 5 ms     | 2 MiB/s    |
 | HDD Random Read (8 KiB), 2 threads                                       | 10 ms    | 2 MiB/s    |
-| CPU Hash, not crypto-safe (xxh3, 64 B)                                   | 5 ns     |            |
 | CPU Atomic Increment                                                     | 5 ns     |            |
 | CPU Mutex Lock + Unlock                                                  | 10 ns    |            |
 | CPU Atomic Increment, contended                                          | 30 ns    |            |
-| CPU Hash, crypto-safe (SHA-256, 64 B)                                    | 100 ns   |            |
 | CPU System Call                                                          | 100 ns   |            |
 | CPU Mutex Lock + Unlock, contended                                       | 200 ns   |            |
-| Memory Random Read (64 B), other socket‡                                 | 250 ns   |            |
 | CPU Context Switch                                                       | 1 μs     |            |
 | CPU Cross-core Wake-up                                                   | 2 μs     |            |
 | CPU TCP Connect (+1 RTT)                                                 | 10 μs    |            |
@@ -156,6 +156,16 @@ overwrites and gets half. Random memory throughput is with 4 KiB pages, where
 the TLB misses; the 100 ns latency is with 2 MiB huge pages (~150 ns with 4
 KiB). The +1 RTT rows are measured over loopback, so add the network's round
 trip; a proxy also adds one to its backend.
+
+Memory latency is one access at a time, each waiting for the last; the all-cores
+rows are with every core doing the same. Sequential reads take 5 ns because the
+prefetchers got there first. A write only waits if something makes it: a plain
+store retires into the store buffer in ~1 ns, so the write latency is an atomic
+add, which has to own the line first.
+
+CPU rows with a size are one call on the smallest batch that gets ~90% of the
+throughput; smaller batches pay per-call setup, larger ones just take longer.
+Sort and blob rows are the whole transfer, and Network Bandwidth is same-zone.
 
 One TCP flow gets the VM's bandwidth on GCP but 5 Gbit/s (600 MiB/s) on AWS
 outside a placement group, and 3 MiB / RTT across regions (\*). Blob Storage

@@ -185,4 +185,47 @@ fn cpu_serialize_benchmark(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, cpu_serialize_benchmark);
+// The same formats on 1 to 4096 events at a time: per-call setup against batch size. The README's
+// latency is the smallest batch that gets the full throughput.
+fn cpu_serialize_batch_benchmark(c: &mut Criterion) {
+    let events = serialization_corpus().payload.events;
+    let mut group = c.benchmark_group("cpu_serialize_batch");
+    group.warm_up_time(std::time::Duration::from_millis(500));
+    group.measurement_time(std::time::Duration::from_secs(1));
+    group.sample_size(20);
+    for n in [1, 4, 16, 64, 256, 1024, 4096] {
+        let payload = BenchPayload {
+            events: events[..n].to_vec(),
+        };
+        let protobuf = payload.encode_to_vec();
+        let json = serde_json::to_vec(&payload).unwrap();
+        let mut buffer = Vec::with_capacity(json.len());
+
+        group.throughput(Throughput::Bytes(protobuf.len() as u64));
+        group.bench_function(BenchmarkId::new("protobuf/serialize", protobuf.len()), |b| {
+            b.iter(|| {
+                buffer.clear();
+                payload.encode(&mut buffer).unwrap();
+                black_box(buffer.len())
+            })
+        });
+        group.bench_function(BenchmarkId::new("protobuf/deserialize", protobuf.len()), |b| {
+            b.iter(|| black_box(BenchPayload::decode(protobuf.as_slice()).unwrap()))
+        });
+
+        group.throughput(Throughput::Bytes(json.len() as u64));
+        group.bench_function(BenchmarkId::new("json/serialize", json.len()), |b| {
+            b.iter(|| {
+                buffer.clear();
+                serde_json::to_writer(&mut buffer, &payload).unwrap();
+                black_box(buffer.len())
+            })
+        });
+        group.bench_function(BenchmarkId::new("json/deserialize", json.len()), |b| {
+            b.iter(|| black_box(serde_json::from_slice::<BenchPayload>(&json).unwrap()))
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, cpu_serialize_benchmark, cpu_serialize_batch_benchmark);

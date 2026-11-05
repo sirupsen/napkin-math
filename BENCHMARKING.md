@@ -51,6 +51,9 @@ debug build.
 | `cache_read`, `cache_read_latency` | The `memory_sequential_read` SIMD loop, and the pointer chase, over 16 KiB, 256 KiB and 8 MiB | L1/L2/L3 Cache Read |
 | `cpu_encrypt` | ring AES-256-GCM and ChaCha20-Poly1305 seal and open on 16 KiB | CPU Encrypt / Decrypt |
 | `cpu_hash`, `cpu_hash_1mib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and 1 MiB buffers | CPU Hash rows |
+| `cpu_batch` | xxh3, SHA-256 and AES-256-GCM at 64 B to 1 MiB per call | Latency of the CPU Hash and Encrypt rows |
+| `cpu_serialize_batch` | Protobuf and JSON at 1 to 4096 events per call | Latency of the CPU Serialize and Deserialize rows |
+| `memory_sequential_read_latency`, `memory_write_latency`, `memory_latency_all_cores` | Pointer chases through consecutive or shuffled lines; the write ones with an atomic add | Latency of the Memory rows |
 | `cpu_bitpack` | `bitpacking`'s BitPacker4x packing and unpacking 256 MiB of 12-bit integers | CPU Encode / Decode Bitpacked Integers |
 | `cpu_serialize` | Protobuf (prost), JSON (serde_json, to structs and to a dynamic `Value`) and postcard on a 1 MiB batch of events | CPU Serialize, CPU Deserialize |
 | `cpu_sort` | `sort_unstable` on random `u64`, 1 MiB to 1 GiB | CPU Sort |
@@ -97,6 +100,54 @@ speed. TCP connect and the TLS handshake each add one network round trip on
 top. Bitpacking unpacks a 128-value block at a time into a buffer that stays in
 L1, the way a reader consumes a column; FastLanes decoding whole columns into
 memory runs at 10-17 GiB/s (below).
+
+On November 5, 2026, the same three VMs filled in the latency of the rows that
+only had throughput, one access at a time on 1 GiB with huge pages:
+
+| | C4 | m8i | m8g | README |
+| --- | --- | --- | --- | --- |
+| Sequential read, 1 thread / 48 threads | 9.3 / 21.6 ns | 3.0 / 16.5 | 2.4 / 7.7 | 5 / 20 ns |
+| Random read, 48 threads (1 thread above) | 118 ns | 151 | 117 | 150 ns |
+| Sequential write, 1 thread / 48 threads | 11 / 49 ns | 5.1 / 37 | 15 / 23 | 10 / 30 ns |
+| Random write, 1 thread / 48 threads | 135 / 163 ns | 143 / 175 | 125 / 131 | 150 / 150 ns |
+| Atomic add on a line it already owns | 4.6 ns | 4.7 | 5.9 | |
+
+The reads are a dependent pointer chase through consecutive or shuffled lines;
+sequential ones hit lines the prefetchers already fetched. The writes are the
+same chase with `fetch_add` (`memory_write_latency`, `memory_latency_all_cores`),
+because a thread never waits for a plain store. A store followed by a fence
+doesn't measure it either: 8 random bytes plus `lock or` / `dmb ish` took 10-15
+ns on all three, a tenth of a miss, so the core keeps going while it fetches the
+line.
+
+From the other socket of a two-socket m8g.48xlarge (`numactl --cpunodebind=0
+--membind=1`, 96 threads), against local: random read 264 / 114 ns and 96 threads
+288 / 121; sequential read 4.7 / 2.1 ns and 96 threads 96 / 15; random write
+274 / 125 ns; sequential write 27 / 15 ns; random 64 B read with independent
+loads, one thread, 4 KiB pages 1.2 / 3.1 GiB/s. 96 threads at 96 ns per line is
+the 60 GiB/s the link carries.
+
+Batch size against throughput, in `cpu_batch`, `cpu_serialize_batch` and
+`cpu_compress --chunks`, GiB/s on C4 / m8i / m8g. The README uses the smallest
+batch at 90% of the peak on every CPU, and the latency is the time per call:
+
+| | 64 B | 1 KiB | 4 KiB | 16 KiB | 1 MiB | README |
+| --- | --- | --- | --- | --- | --- | --- |
+| xxh3 | 21 / 22 / 11 | 53 / 51 / 20 | 63 / 65 / 20 | 66 / 67 / 20 | 67 / 70 / 20 | 4 KiB: 60 / 59 / 190 ns |
+| SHA-256 | 0.72 / 0.71 / 0.70 | 1.6 / 1.6 / 1.35 | 1.7 / 1.7 / 1.4 | 1.8 / 1.7 / 1.4 | 1.8 / 1.75 / 1.4 | 1 KiB: 584 / 593 / 707 ns |
+| AES-256-GCM encrypt | 1.0 / 1.0 / 0.8 | 6.6 / 6.5 / 3.2 | 8.8 / 8.7 / 3.7 | 9.7 / 9.5 / 4.1 | 10 / 9.8 / 4.3 | 16 KiB: 1.6 / 1.6 / 3.7 us |
+
+Serializing one event (122 B of Protobuf, 265 B of JSON) already gets the full
+speed: 50-230 ns to serialize and 250-590 ns to deserialize. On Silesia split
+into chunks, with a reused zstd context, lz4 is flat down to 1 KiB (570 MiB/s and
+2.6 GiB/s) and costs ratio instead (1.53x at 1 KiB, 2.09x at 1 MiB). zstd -1
+needs 64 KiB (400-500 MiB/s and 1.1-1.4 GiB/s, against 180 MiB/s and 470 MiB/s at
+1 KiB): 64 KiB takes 100-160 us to compress and 21-57 us to decompress. Bitpacking
+works on its fixed 128-value block, so its latency is the block's 512 B at the
+speed above: ~50 and ~10 ns. These rows are calculated, not timed: Parquet is
+Arrow's default 1 MiB page at the measured speed, Sort is 1 GiB / 340 MiB/s, and
+the 1 GiB blob read is 1 GiB / 100 MiB/s. GPU memory and NVLink have no latency:
+those rows are NVIDIA's specs.
 
 The README collapses `memory_sequential_read`'s scalar and SIMD variants into one
 single-thread row and one threaded row for memorability. `memory_random` issues
@@ -492,6 +543,7 @@ misses the database's cache waits for its disk.
 ```bash
 cargo bench --bench cpu_compress -- silesia.tar dickens ...
 NAPKIN_COMPRESSION_CODECS="lz4_flex,zstd -3" cargo bench --bench cpu_compress -- file
+cargo bench --bench cpu_compress -- --chunks silesia.tar   # lz4 and zstd -1, 1 KiB to 4 MiB per call
 ```
 
 `benches/cpu_compress.rs` reports the ratio and single-threaded
