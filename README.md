@@ -195,7 +195,6 @@ Approximate numbers that should be consistent between Cloud providers.
 | ├ Internet Egress ††          | 1 GB   | \$0.1      | \$0.1             |                 |
 | CDN Egress                    | 1 GB   | \$0.08     | \$0.06            |                 |
 | CDN Fill ¶                    | 1 GB   | \$0.01     | \$0.01            |                 |
-| Warehouse Query               | 1 GB   | \$0.005    | \$0.005           |                 |
 | Logs/Traces ♣                 | 1 GB   | \$0.5      | \$0.5             |                 |
 | Metrics (series)              | 1000   | \$20       | \$20              |                 |
 | KMS Keys                      | 1      | \$1        | \$1               |                 |
@@ -244,36 +243,41 @@ each it does ~7 reads/s per TB:
 | HDD                | 1    | 4            |           |          | 7000     | 0.2            | \$100          | \$70   | \$20  | 48         |
 | GPU (B200)         | 1    | 14           | 7         | 100      |          | 2              | \$450          | \$350  | \$250 | 200        |
 
-Reading 1 TiB costs the VM time it takes at the row's throughput (48 vCPU + 192
-GB is \$1,900/month, \$0.0007/s; the 1-thread memory row pays for one vCPU; the
-GPU row is a B200 at 7 TiB/s), plus the transfer and request fees above:
+Reading 1 TiB costs the compute's time at the row's throughput (1 TiB / throughput x
+the shape's \$ / month / 2.6M seconds, from the tables above), plus the transfer and
+request fees above. The compute is 48 vCPU of General for network, 48 vCPU of General, SSD
+for local SSDs, one vCPU of General for the 1-thread memory row, 2 vCPU of HDD for one 14
+TB drive, and a B200 for the GPU row. Local disks pay their rent in those shapes. Network
+disks use just enough General to reach them, at ~40 MB/s per vCPU, plus the rent on the
+disk while it reads: 1 TiB of SSD or 2 TB of HDD, without provisioned IOPS:
 
-| What                                                | \$ / TiB read |
-| --------------------------------------------------- | ------------- |
-| Memory Sequential Read, 1 thread                    | \$0.0004      |
-| GPU Memory Sequential Read (B200)                   | \$0.0005      |
-| Memory Sequential Read, all cores                   | \$0.004       |
-| Memory Random Read (64 B), all cores                | \$0.004       |
-| SSD Sequential Read (8 KiB)                         | \$0.2         |
-| SSD Random Read (8 KiB)                             | \$0.2         |
-| Network Same-Zone (32 KiB)                          | \$0.3         |
-| Blob Storage, Regional Read (8 MiB)                 | \$0.3         |
-| Network Disk, Zonal Sequential Read (8 KiB)         | \$0.8         |
-| Network Disk, Regional Sequential Read (8 KiB)      | \$0.8         |
-| Network Disk, Zonal Random Read (8 KiB)             | \$0.8         |
-| Network Disk, Regional Random Read (8 KiB)          | \$0.8         |
-| Blob Storage, Zonal Read (8 MiB)§                   | \$0.9         |
-| Blob Storage, Zonal Read (128 KiB)§                 | \$2           |
-| Network Disk, Zonal, HDD Sequential Read (8 KiB)    | \$3           |
-| Network Disk, Regional, HDD Sequential Read (8 KiB) | \$3           |
-| Network Disk, Zonal, HDD Random Read (256 KiB)      | \$3           |
-| Network Disk, Regional, HDD Random Read (256 KiB)   | \$3           |
-| Blob Storage, Regional Read (128 KiB)               | \$4           |
-| HDD Sequential Read (8 KiB)                         | \$4           |
-| HDD Random Read (256 KiB)                           | \$7           |
-| Network Cross-Zone (64 KiB)                         | \$10          |
-| Network Cross-Region                                | \$20          |
-| Network Internet Egress                             | \$100         |
+| What                                                | \$ / TiB read | 1-year   | Spot     |
+| --------------------------------------------------- | ------------- | -------- | -------- |
+| Memory Sequential Read, 1 thread                    | \$0.0005      | \$0.0004 | \$0.0002 |
+| GPU Memory Sequential Read (B200)                   | \$0.0005      | \$0.0004 | \$0.0003 |
+| Memory Sequential Read, all cores                   | \$0.004       | \$0.003  | \$0.001  |
+| Memory Random Read (64 B), all cores                | \$0.004       | \$0.003  | \$0.001  |
+| SSD Sequential Read (8 KiB)                         | \$0.2         | \$0.1    | \$0.06   |
+| SSD Random Read (8 KiB)                             | \$0.2         | \$0.1    | \$0.06   |
+| Network Same-Zone (32 KiB)                          | \$0.2         | \$0.2    | \$0.09   |
+| Blob Storage, Regional Read (8 MiB)                 | \$0.3         | \$0.2    | \$0.1    |
+| HDD Sequential Read (8 KiB)                         | \$0.4         | \$0.3    | \$0.08   |
+| Network Disk, Zonal Sequential Read (8 KiB)         | \$0.5         | \$0.4    | \$0.2    |
+| Network Disk, Regional Sequential Read (8 KiB)      | \$0.5         | \$0.4    | \$0.2    |
+| Network Disk, Zonal Random Read (8 KiB)             | \$0.5         | \$0.4    | \$0.2    |
+| Network Disk, Regional Random Read (8 KiB)          | \$0.5         | \$0.4    | \$0.2    |
+| Network Disk, Zonal, HDD Sequential Read (8 KiB)    | \$0.5         | \$0.4    | \$0.3    |
+| Network Disk, Zonal, HDD Random Read (256 KiB)      | \$0.5         | \$0.4    | \$0.3    |
+| Network Disk, Regional, HDD Sequential Read (8 KiB) | \$0.7         | \$0.6    | \$0.4    |
+| Network Disk, Regional, HDD Random Read (256 KiB)   | \$0.7         | \$0.6    | \$0.4    |
+| HDD Random Read (256 KiB)                           | \$0.8         | \$0.6    | \$0.2    |
+| Blob Storage, Zonal Read (8 MiB)§                   | \$0.9         | \$0.8    | \$0.7    |
+| Blob Storage, Zonal Read (128 KiB)§                 | \$2           | \$2      | \$2      |
+| Blob Storage, Regional Read (128 KiB)               | \$4           | \$4      | \$3      |
+| Warehouse Query                                     | \$5           | \$5      | \$5      |
+| Network Cross-Zone (64 KiB)                         | \$10          | \$10     | \$10     |
+| Network Cross-Region                                | \$20          | \$20     | \$20     |
+| Network Internet Egress                             | \$100         | \$100    | \$100    |
 
 § Zonal GETs cost 4x less, but every byte read costs \$0.6/TiB, so zonal is
 cheaper below ~500 KiB per request and regional above.
