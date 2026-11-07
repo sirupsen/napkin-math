@@ -175,39 +175,38 @@ Approximate numbers that should be consistent between Cloud providers.
 | GPU (B200)                           | 1       | \$10000    | \$8000            | \$5000          |
 | Memory                               | 1 GB    | \$2.5      | \$2               | \$1             |
 | Storage                              |         |            |                   |                 |
-| ├ Warehouse Storage                  | 1 GB    | \$0.02     | \$0.02            |                 |
-| ├ Blob Storage, Regional             | 1 GB    | \$0.02     | \$0.02            |                 |
-| ├ Blob Storage, Zonal                | 1 GB    | \$0.1      | \$0.1             |                 |
-| ├ Network Disk, Zonal, HDD           | 1 GB    | \$0.04     | \$0.04            |                 |
+| ├ Warehouse Storage                  | 1 GB    | \$0.02     |                   |                 |
+| ├ Blob Storage, Regional             | 1 GB    | \$0.02     |                   |                 |
+| ├ Blob Storage, Zonal                | 1 GB    | \$0.1      |                   |                 |
+| ├ Network Disk, Zonal, HDD           | 1 GB    | \$0.04     |                   |                 |
 | ├ SSD                                | 1 GB    | \$0.15     | \$0.1             | \$0.04          |
-| ├ SSD, storage-optimized             | 1 GB    | \$0.05     | \$0.05            |                 |
-| ├ HDD                                | 1 GB    | \$0.01     | \$0.01            | \$0.003         |
-| ├ Network Disk, Regional, HDD        | 1 GB    | \$0.08     | \$0.08            |                 |
-| ├ Network Disk, Zonal                | 1 GB    | \$0.1      | \$0.1             |                 |
-| ├ Network Disk, Regional             | 1 GB    | \$0.2      | \$0.2             |                 |
-| ├ Network Disk, Zonal IOPS‖          | 1 IOPS  | \$0.005    | \$0.005           |                 |
-| ├ Network Disk, Regional IOPS‖       | 1 IOPS  | \$0.01     | \$0.01            |                 |
-| ├ Network Disk, Zonal Throughput‖    | 1 MiB/s | \$0.04     | \$0.04            |                 |
-| ├ Network Disk, Regional Throughput‖ | 1 MiB/s | \$0.08     | \$0.08            |                 |
+| ├ SSD, storage-optimized             | 1 GB    | \$0.05     |                   |                 |
+| ├ HDD                                | 1 GB    | \$0.01     |                   | \$0.003         |
+| ├ Network Disk, Regional, HDD        | 1 GB    | \$0.08     |                   |                 |
+| ├ Network Disk, Zonal                | 1 GB    | \$0.1      |                   |                 |
+| ├ Network Disk, Regional             | 1 GB    | \$0.2      |                   |                 |
+| ├ Network Disk, Zonal IOPS‖          | 1 IOPS  | \$0.005    |                   |                 |
+| ├ Network Disk, Regional IOPS‖       | 1 IOPS  | \$0.01     |                   |                 |
+| ├ Network Disk, Zonal Throughput‖    | 1 MiB/s | \$0.04     |                   |                 |
+| ├ Network Disk, Regional Throughput‖ | 1 MiB/s | \$0.08     |                   |                 |
 | Network                              |         |            |                   |                 |
-| ├ Same-Zone                          | 1 GB    | \$0        | \$0               |                 |
-| ├ Blob Storage, Same-Region          | 1 GB    | \$0        | \$0               |                 |
-| ├ Ingress                            | 1 GB    | \$0        | \$0               |                 |
-| ├ L4 Load Balancer                   | 1 GB    | \$0.005    | \$0.005           |                 |
-| ├ Cross-Zone                         | 1 GB    | \$0.01     | \$0.01            |                 |
-| ├ Cross-Region                       | 1 GB    | \$0.02     | \$0.02            |                 |
-| ├ Internet Egress ††                 | 1 GB    | \$0.1      | \$0.1             |                 |
+| ├ Same-Zone                          | 1 GB    | \$0        |                   |                 |
+| ├ Blob Storage, Same-Region          | 1 GB    | \$0        |                   |                 |
+| ├ Ingress                            | 1 GB    | \$0        |                   |                 |
+| ├ L4 Load Balancer                   | 1 GB    | \$0.005    |                   |                 |
+| ├ Cross-Zone                         | 1 GB    | \$0.01     |                   |                 |
+| ├ Cross-Region                       | 1 GB    | \$0.02     |                   |                 |
+| ├ Internet Egress ††                 | 1 GB    | \$0.1      |                   |                 |
 | CDN Egress                           | 1 GB    | \$0.08     | \$0.06            |                 |
-| CDN Fill ¶                           | 1 GB    | \$0.01     | \$0.01            |                 |
-| Logs/Traces ♣                        | 1 GB    | \$0.5      | \$0.5             |                 |
-| Metrics (series)                     | 1000    | \$20       | \$20              |                 |
-| KMS Keys                             | 1       | \$1        | \$1               |                 |
+| CDN Fill ¶                           | 1 GB    | \$0.01     |                   |                 |
+| Logs/Traces ♣                        | 1 GB    | \$0.5      |                   |                 |
+| Metrics (series)                     | 1000    | \$20       |                   |                 |
+| KMS Keys                             | 1       | \$1        |                   |                 |
 
 ‖ Provisioned on SSD network disks, above the first 3,000 IOPS and ~125 MiB/s, which are
 free. Network HDDs get theirs with their size.
 
-A 1-year price equal to the monthly one means there's no commitment to buy, at list
-price. CDN Egress is CloudFront's Security Savings Bundle.
+CDN Egress for 1 year is CloudFront's Security Savings Bundle.
 
 †† This refers to network leaving your cloud provider, e.g. sending data to S3
 from GCP or egress network for sending HTML from AWS to a client.
