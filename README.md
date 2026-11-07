@@ -169,35 +169,42 @@ latencies: [cloudping](https://www.cloudping.co/).
 
 Approximate numbers that should be consistent between Cloud providers.
 
-| What                          | Amount | \$ / Month | 1-year \$ / Month | Spot \$ / Month |
-| ----------------------------- | ------ | ---------- | ----------------- | --------------- |
-| CPU                           | 1 vCPU | \$30       | \$20              | \$10            |
-| GPU (B200)                    | 1      | \$10000    | \$8000            | \$5000          |
-| Memory                        | 1 GB   | \$2.5      | \$2               | \$1             |
-| Storage                       |        |            |                   |                 |
-| ├ Warehouse Storage           | 1 GB   | \$0.02     | \$0.02            |                 |
-| ├ Blob Storage, Regional      | 1 GB   | \$0.02     | \$0.02            |                 |
-| ├ Blob Storage, Zonal         | 1 GB   | \$0.1      | \$0.1             |                 |
-| ├ Network Disk, Zonal, HDD    | 1 GB   | \$0.04     | \$0.04            |                 |
-| ├ SSD                         | 1 GB   | \$0.15     | \$0.1             | \$0.04          |
-| ├ SSD, storage-optimized      | 1 GB   | \$0.05     | \$0.05            |                 |
-| ├ HDD                         | 1 GB   | \$0.01     | \$0.01            | \$0.003         |
-| ├ Network Disk, Regional, HDD | 1 GB   | \$0.08     | \$0.08            |                 |
-| ├ Network Disk, Zonal         | 1 GB   | \$0.1      | \$0.1             |                 |
-| ├ Network Disk, Regional      | 1 GB   | \$0.2      | \$0.2             |                 |
-| Network                       |        |            |                   |                 |
-| ├ Same-Zone                   | 1 GB   | \$0        | \$0               |                 |
-| ├ Blob Storage, Same-Region   | 1 GB   | \$0        | \$0               |                 |
-| ├ Ingress                     | 1 GB   | \$0        | \$0               |                 |
-| ├ L4 Load Balancer            | 1 GB   | \$0.005    | \$0.005           |                 |
-| ├ Cross-Zone                  | 1 GB   | \$0.01     | \$0.01            |                 |
-| ├ Cross-Region                | 1 GB   | \$0.02     | \$0.02            |                 |
-| ├ Internet Egress ††          | 1 GB   | \$0.1      | \$0.1             |                 |
-| CDN Egress                    | 1 GB   | \$0.08     | \$0.06            |                 |
-| CDN Fill ¶                    | 1 GB   | \$0.01     | \$0.01            |                 |
-| Logs/Traces ♣                 | 1 GB   | \$0.5      | \$0.5             |                 |
-| Metrics (series)              | 1000   | \$20       | \$20              |                 |
-| KMS Keys                      | 1      | \$1        | \$1               |                 |
+| What                                 | Amount  | \$ / Month | 1-year \$ / Month | Spot \$ / Month |
+| ------------------------------------ | ------- | ---------- | ----------------- | --------------- |
+| CPU                                  | 1 vCPU  | \$30       | \$20              | \$10            |
+| GPU (B200)                           | 1       | \$10000    | \$8000            | \$5000          |
+| Memory                               | 1 GB    | \$2.5      | \$2               | \$1             |
+| Storage                              |         |            |                   |                 |
+| ├ Warehouse Storage                  | 1 GB    | \$0.02     | \$0.02            |                 |
+| ├ Blob Storage, Regional             | 1 GB    | \$0.02     | \$0.02            |                 |
+| ├ Blob Storage, Zonal                | 1 GB    | \$0.1      | \$0.1             |                 |
+| ├ Network Disk, Zonal, HDD           | 1 GB    | \$0.04     | \$0.04            |                 |
+| ├ SSD                                | 1 GB    | \$0.15     | \$0.1             | \$0.04          |
+| ├ SSD, storage-optimized             | 1 GB    | \$0.05     | \$0.05            |                 |
+| ├ HDD                                | 1 GB    | \$0.01     | \$0.01            | \$0.003         |
+| ├ Network Disk, Regional, HDD        | 1 GB    | \$0.08     | \$0.08            |                 |
+| ├ Network Disk, Zonal                | 1 GB    | \$0.1      | \$0.1             |                 |
+| ├ Network Disk, Regional             | 1 GB    | \$0.2      | \$0.2             |                 |
+| ├ Network Disk, Zonal IOPS‖          | 1 IOPS  | \$0.005    | \$0.005           |                 |
+| ├ Network Disk, Regional IOPS‖       | 1 IOPS  | \$0.01     | \$0.01            |                 |
+| ├ Network Disk, Zonal Throughput‖    | 1 MiB/s | \$0.04     | \$0.04            |                 |
+| ├ Network Disk, Regional Throughput‖ | 1 MiB/s | \$0.08     | \$0.08            |                 |
+| Network                              |         |            |                   |                 |
+| ├ Same-Zone                          | 1 GB    | \$0        | \$0               |                 |
+| ├ Blob Storage, Same-Region          | 1 GB    | \$0        | \$0               |                 |
+| ├ Ingress                            | 1 GB    | \$0        | \$0               |                 |
+| ├ L4 Load Balancer                   | 1 GB    | \$0.005    | \$0.005           |                 |
+| ├ Cross-Zone                         | 1 GB    | \$0.01     | \$0.01            |                 |
+| ├ Cross-Region                       | 1 GB    | \$0.02     | \$0.02            |                 |
+| ├ Internet Egress ††                 | 1 GB    | \$0.1      | \$0.1             |                 |
+| CDN Egress                           | 1 GB    | \$0.08     | \$0.06            |                 |
+| CDN Fill ¶                           | 1 GB    | \$0.01     | \$0.01            |                 |
+| Logs/Traces ♣                        | 1 GB    | \$0.5      | \$0.5             |                 |
+| Metrics (series)                     | 1000    | \$20       | \$20              |                 |
+| KMS Keys                             | 1       | \$1        | \$1               |                 |
+
+‖ Provisioned on SSD network disks, above the first 3,000 IOPS and ~125 MiB/s, which are
+free. Network HDDs get theirs with their size.
 
 A 1-year price equal to the monthly one means there's no commitment to buy, at list
 price. CDN Egress is CloudFront's Security Savings Bundle.
@@ -248,8 +255,9 @@ the shape's \$ / month / 2.6M seconds, from the tables above), plus the transfer
 request fees above. The compute is 48 vCPU of General for network, 48 vCPU of General, SSD
 for local SSDs, one vCPU of General for the 1-thread memory row, 2 vCPU of HDD for one 14
 TB drive, and a B200 for the GPU row. Local disks pay their rent in those shapes. Network
-disks use just enough General to reach them, at ~40 MB/s per vCPU, plus the rent on the
-disk while it reads: 1 TiB of SSD or 2 TB of HDD, without provisioned IOPS:
+disks use just enough General to reach them, at ~40 MB/s per vCPU, plus the rent while it
+reads: 1 TiB of SSD with 16k IOPS and 1000 MiB/s, or 2 TB of HDD. Blob rent while reading
+rounds to nothing:
 
 | What                                                | \$ / TiB read | 1-year   | Spot     |
 | --------------------------------------------------- | ------------- | -------- | -------- |
@@ -263,11 +271,11 @@ disk while it reads: 1 TiB of SSD or 2 TB of HDD, without provisioned IOPS:
 | Blob Storage, Regional Read (8 MiB)                 | \$0.3         | \$0.2    | \$0.1    |
 | HDD Sequential Read (8 KiB)                         | \$0.4         | \$0.3    | \$0.08   |
 | Network Disk, Zonal Sequential Read (8 KiB)         | \$0.5         | \$0.4    | \$0.2    |
-| Network Disk, Regional Sequential Read (8 KiB)      | \$0.5         | \$0.4    | \$0.2    |
 | Network Disk, Zonal Random Read (8 KiB)             | \$0.5         | \$0.4    | \$0.2    |
-| Network Disk, Regional Random Read (8 KiB)          | \$0.5         | \$0.4    | \$0.2    |
 | Network Disk, Zonal, HDD Sequential Read (8 KiB)    | \$0.5         | \$0.4    | \$0.3    |
 | Network Disk, Zonal, HDD Random Read (256 KiB)      | \$0.5         | \$0.4    | \$0.3    |
+| Network Disk, Regional Sequential Read (8 KiB)      | \$0.6         | \$0.5    | \$0.3    |
+| Network Disk, Regional Random Read (8 KiB)          | \$0.6         | \$0.5    | \$0.3    |
 | Network Disk, Regional, HDD Sequential Read (8 KiB) | \$0.7         | \$0.6    | \$0.4    |
 | Network Disk, Regional, HDD Random Read (256 KiB)   | \$0.7         | \$0.6    | \$0.4    |
 | HDD Random Read (256 KiB)                           | \$0.8         | \$0.6    | \$0.2    |
