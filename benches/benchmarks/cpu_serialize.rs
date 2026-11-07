@@ -193,7 +193,7 @@ fn cpu_serialize_batch_benchmark(c: &mut Criterion) {
     group.warm_up_time(std::time::Duration::from_millis(500));
     group.measurement_time(std::time::Duration::from_secs(1));
     group.sample_size(20);
-    for n in [1, 4, 16, 64, 256, 1024, 4096] {
+    for n in [1, 2, 4, 16, 64, 256, 1024, 4096] {
         let payload = BenchPayload {
             events: events[..n].to_vec(),
         };

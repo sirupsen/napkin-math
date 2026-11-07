@@ -129,34 +129,33 @@ From the other socket of a two-socket m8g.48xlarge (`numactl --cpunodebind=0
 loads, one thread, 4 KiB pages 1.2 / 3.1 GiB/s. 96 threads at 96 ns per line is
 the 60 GiB/s the link carries.
 
-Every README row is one latency and one throughput. The size in parentheses is
-the largest whose latency is within ~15% of the smallest on every machine and
-rounds to the same number, and throughput is the fastest at any size. A looser first
-try (within 1.5x, on the average across machines) called 64 KiB flat on SSDs, where
-Graviton takes 2.2x as long and writes round to 50 us instead of 30. Time per call on C4 /
-m8i / m8g, from `cpu_batch`, `cpu_sort_small`, `cpu_serialize_batch`,
-`cpu_compress --chunks` and `compression_ratio parquet_pages`, with the peak
-throughput across sizes:
+Every README row is one latency and one throughput. The size in parentheses is a
+natural unit, a cache line or a block, that's as fast as anything smaller, and
+throughput is the fastest at any size. Two earlier tries let a threshold pick the
+size (within 1.5x of the smallest, then within 15% on every machine), and it picked
+things like 16 B for xxh3 and 64 KiB for SSD writes, which is mostly a slow fixed cost
+hiding the transfer. Time per call on C4 / m8i / m8g, from `cpu_batch`,
+`cpu_sort_small`, `cpu_serialize_batch`, `cpu_compress --chunks` and
+`compression_ratio parquet_pages`, with the peak throughput across sizes:
 
 | | Size: latency, per CPU | Next size up | Peak | README |
 | --- | --- | --- | --- | --- |
-| xxh3 | 16 B: 1.5 / 1.5 / 2.4 ns | 32 B: 1.9 / 1.8 / 2.9 ns | 68 / 70 / 20 GiB/s | 2 ns, 50 GiB/s |
-| SHA-256 | 32 B: 57 / 58 / 63 ns | 64 B: 82 / 84 / 84 ns (a second block) | 1.8 / 1.75 / 1.43 GiB/s | 50 ns, 2 GiB/s |
+| xxh3 | 64 B: 2.8 / 2.8 / 5.4 ns (scalar; AVX-512 starts above 240 B) | 128 B: 5 / 5 / 10 ns | 68 / 70 / 20 GiB/s | 5 ns, 50 GiB/s |
+| SHA-256 | 64 B: 82 / 84 / 84 ns (two blocks; one holds 55 B) | 128 B: 114 / 116 / 127 ns | 1.8 / 1.75 / 1.43 GiB/s | 100 ns, 2 GiB/s |
 | AES-256-GCM encrypt | 64 B: 58 / 60 / 77 ns | 128 B: 68 / 70 / 90 ns | 10 / 9.8 / 4.3 GiB/s | 50 ns, 10 GiB/s |
 | AES-256-GCM decrypt | 64 B: 65 / 67 / 91 ns | 128 B: 68 / 70 / 104 ns | 9.9 / 9.7 / 4.1 GiB/s | |
-| lz4 compress / decompress | 1 KiB: 1.8 / 0.33 us | | 600 MiB/s / 3 GiB/s | |
-| zstd -1 compress / decompress | 1 KiB: 5.1-6.0 / 1.7-1.8 us | | 500 MiB/s / 1.5 GiB/s | 3 / 1 us, 500 MiB/s / 2 GiB/s |
+| lz4 compress / decompress | 4 KiB: 7 / 1.5 us | | 600 MiB/s / 3 GiB/s | |
+| zstd -1 compress / decompress | 4 KiB: 13-15 / 5-5.5 us | | 500 MiB/s / 1.5 GiB/s | 10 / 3 us, 500 MiB/s / 2 GiB/s |
 | Parquet encode, taxi / hits | 4 KiB page: 56-75 / 48-70 us | 16 KiB: 192-263 / 156-243 us | 0.17-0.44 GiB/s | 50 us, 300 MiB/s |
 | Parquet decode, taxi / hits | 4 KiB page: 13-14 / 9-10 us | 16 KiB: 40-45 / 25-29 us | 1.6-2.2 GiB/s | 10 us, 2 GiB/s |
-| Sort `u64` | 1 KiB: 504 / 534 / 561 ns | 4 KiB: 2.7 / 2.8 / 3.2 us | see below | 500 ns, 300 MiB/s |
+| Sort `u64` | 4 KiB: 2.7 / 2.8 / 3.2 us | 16 KiB: 13 / 14 / 16 us | see below | 3 us, 300 MiB/s |
 
-One event is the smallest thing to serialize (122 B of Protobuf, 265 B of JSON):
-50-230 ns to serialize and 250-590 ns to deserialize, and also the fastest,
-1.1-2.3 GiB/s and ~500 MiB/s. Compression, Parquet and sorting have no flat part:
-latency grows with the input from the start, so those sizes are a judgment call,
-the smallest worth doing (lz4 reaches 1.2x and zstd -1 1.6x at 1 KiB, and zstd
-expands 64 B). Sort is the one row where throughput isn't the peak: 4 integers
-sort at 7-13 GiB/s, 1 KiB at 2 GiB/s, 1 MiB at 600 MiB/s and 1 GiB at 340 MiB/s,
+Serializing 256 B: 97-209 ns for two Protobuf events (242 B) and 171-228 ns for one JSON
+event (265 B), and deserializing 414-503 and 519-586 ns. The peaks are 1.1-2.3 GiB/s and ~500 MiB/s.
+Compression, Parquet and sorting have no flat part, since latency grows with the input
+from the start, so those rows use 4 KiB (lz4 reaches 1.7x and zstd -1 2.3x there).
+Sort is the one row where throughput isn't the peak: 4 integers
+sort at 7-13 GiB/s, 4 KiB at 1.3 GiB/s, 1 MiB at 600 MiB/s and 1 GiB at 340 MiB/s,
 and the peak would make a big sort look 30x too fast. Bitpacking works on its
 fixed block of 128 `u32`s, 512 B before packing (192 B at 12 bits), so its latency is
 that block at the speed above.
@@ -193,12 +192,23 @@ Hyperdisk HA reads as fast as Hyperdisk. Reads of never-written blocks skip the 
 up to 256 KiB even sequentially, and wrote in 1.2-1.9 ms; the README's network HDD
 rows are pd-standard. HDD durable writes reach 69 MiB/s with 1 MiB commits.
 
-Network round trips against size (`network --sizes`, p50, 1 B / 1 KiB / 4 KiB / 16 KiB
-/ 64 KiB / 256 KiB / 1 MiB each way): GCP C4 same zone 64 / 68 / 73 / 71 / 119 / 173 /
-646 us, AWS m8i same AZ 109 / 110 / 118 / 107 / 357 / 471 / 1818 us, GCP cross-zone
-433 / 327 / 431 / 419 / 490 / 618 / 1116 us, and GCP `us-east4` -> `us-central1` 23.5 /
-23.5 / 23.4 / 24.6 / 27.5 / 25.0 / 27.3 ms. Cross-region throughput with 32 connections is measured
-only `us-central1` -> `us-east4` (10.7 Gbit/s); the farther rows are 32 x 3 MiB / RTT.
+Network round trips against size (`network --sizes`, November 7, p50, the size each way;
+1 B / 4 KiB / 8 KiB / 16 KiB / 32 KiB / 64 KiB / 128 KiB / 256 KiB / 1 MiB / 4 MiB):
+
+| Pair | Round trip | 32 connections |
+| --- | --- | --- |
+| GCP C4, same zone | 45 / 66 / 53 / 72 / 74 / 127 / 142 / 166 / 547 / 2097 us | 3.8 GiB/s |
+| AWS m8i, same AZ | 93 / 104 / 117 / 130 / 129 / 268 / 334 / 480 / 1775 / 10757 us | 2.6 (8 connections) |
+| GCP C4, cross-zone | 521 / 430 / 375 / 355 / 445 / 422 / 548 / 596 / 985 / 2552 us | 3.8 |
+| AWS m8i, cross-AZ | 509 / 497 / 733 / 703 / 616 / 905 / 853 / 949 / 1977 / 10606 us | 2.6 (8 connections) |
+| GCP `us-east4` -> `us-central1` | 30 / 26 / 26.5 / 31 / 28 / 33 / 28 / 32 / 30 / 79 ms | 3.5 |
+| GCP `us-east4` -> `europe-west1` | 93 / 87 / 88 / 89 / 100 / 97 / 110 / 107 / 101 / 286 ms | 1.1 |
+
+Latency steps up at 64 KiB in the same zone on both clouds, so that row is 32 KiB. Past
+that it's about the round trip plus 2 x size / bandwidth: 1 MiB is 650 us at 3 GiB/s,
+and GCP measured 547. Across regions it stays flat to 1 MiB and then jumps, because
+TCP's window is ~3 MiB. The Singapore pair lost its connection at 4 KiB (230 ms up to
+there), so its 1 MiB and its 500 MiB/s (32 x 3 MiB / RTT) are from the other routes.
 
 The smallest size that reaches each row's throughput (within ~5% of the peak on
 every provider, flat out: `storage --sweep-throughput`, 4 KiB to 16 MiB, and the
@@ -541,11 +551,9 @@ much as 32 writer threads (2.49-2.67; 2.3-2.6 on November 2). One writer alone
 took 54 / 38 / 36 us per commit, 8 KiB 41 / 32 / 18 us. The README row is that
 one thread.
 
-The README's latency is 8 KiB for SSD and zonal disks and 64 KiB for regional disks,
-where the second zone's round trip dominates (8 KiB 1.27 ms, 64 KiB 1.41 ms). Its
-throughput is 64 KiB, which reaches the disk's bandwidth. The zonal pd-standard row's 8
-KiB was not run through `storage_durable_write`: it is the raw write (391 us) plus
-the ~70 us flush above. Until October 26, 2026, these
+The README's latency is 8 KiB for every disk, and its throughput 64 KiB or 1 MiB, which
+reaches the disk's bandwidth. On November 7, one writer at 8 KiB took 337 us on Hyperdisk,
+1.25 ms on Hyperdisk HA, 505 us on zonal pd-standard and 1.12 ms on regional pd-standard. Until October 26, 2026, these
 rows were buffered 8 KiB appends from one writer (300 us, 30 MiB/s on SSD).
 
 ## Network rows
@@ -967,6 +975,23 @@ connection. It used to say 500 MiB/s, which reproduced on neither. With 32-128
 connections, GETs peaked at the hosts' NICs: 2.0 GiB/s on S3, 4.3-4.9 on GCS
 and 3.9 on Azure, and PUTs (multipart, 32 MiB parts) at 1.9, 3.1-3.3 and 2.2
 GiB/s.
+
+## HDD, network disk and S3
+
+`benches/blob_read_sweep.py` reads random ranges one at a time on one warm connection, the
+same shape as `storage --sweep`. On November 7, 2026, p50 from a VM in S3's region (S3's
+first byte stays at ~100 ms at every size):
+
+| Random read | 4 KiB | 64 KiB | 256 KiB | 1 MiB | 4 MiB | 16 MiB | Flat out |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| d3 HDD | 12 ms | 13 | 13.5 | 18 | | | 88 MiB/s, ~200 reads/s |
+| pd-standard, 2 TB | 17-19 ms | 17 | 20 | 31 | | | 245 MiB/s, ~1500 reads/s |
+| EBS st1, 2 TiB | 5.2 ms | 7 | 13 | 13.6 | | | 235 MiB/s |
+| S3, objects from March | 112 ms | 111 | 110 | 117 | 139 | 295 | 2 GiB/s at the NIC |
+
+On S3, rereading one range took 23 ms (the service without the disks), 4 KiB from objects
+written minutes before took 80 ms, and from objects written in March 100-112 ms. p99 was
+~200 ms. These are slower than the March p50s above, and from only 7 objects.
 
 ## GPU rows
 
