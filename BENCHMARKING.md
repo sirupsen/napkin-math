@@ -893,31 +893,35 @@ Xeon 6975P-C, built with `-C target-cpu=native`):
 
 ## Cost rows
 
-The shape prices are AWS us-east-1 Linux list prices on November 4, 2026, per
-vCPU per month (730 h), from `aws pricing get-products` (on-demand),
-`aws savingsplans describe-savings-plans-offering-rates` (1-year Compute
-Savings Plan, no upfront; the newest families have no reserved instances) and
-`aws ec2 describe-spot-price-history` (median of the latest price per zone):
+The shape prices are list prices on November 7, 2026, per vCPU per month (730 h), Linux. AWS's
+are `aws pricing get-products` in us-east-1, `describe-savings-plans-offering-rates` (1-year
+Compute Savings Plan, no upfront) and `describe-spot-price-history` in each of 18 regions
+(median of the latest price per zone, then median across regions). GCP's are in Iowa, from
+[Vantage](https://instances.vantage.sh/gcp/c4-standard-48)'s per-region data for 43 regions, not
+Google's catalog API. The README has one price: on-demand and 1-year are the two clouds' average,
+and spot is the 75th percentile of every region of both, so GCP's 43 regions outweigh AWS's 18. The
+table has each cloud's median spot and its range:
 
-| Shape | Instance | On-demand | 1-year | Spot |
-| --- | --- | --- | --- | --- |
-| CPU | c8i.12xlarge | \$34 | \$25 | \$12 |
-| General | m8i.12xlarge | \$39 | \$28 | \$14 |
-| General, SSD | m8id.12xlarge | \$48 | \$35 | \$13 |
-| Memory | r8i.12xlarge | \$51 | \$37 | \$15 |
-| Memory, SSD | r8id.12xlarge | \$61 | \$44 | \$21 |
-| Memory, High | x8g.12xlarge | \$71 | \$53 | \$38 |
-| Memory, High, SSD | x2idn.32xlarge | \$76 | \$47 | \$22 |
-| Memory, Ultra, SSD | x2iedn.8xlarge | \$152 | \$112 | \$47 |
-| SSD | i8g.12xlarge | \$63 | \$49 | \$17 |
-| SSD, High | i8ge.12xlarge | \$87 | \$68 | \$28 |
-| HDD | d3en.12xlarge (24 x 14 TB, 192 GiB, 75 Gbit/s) | \$96 | \$73 | \$21 |
-| GPU (B200) | p6-b200.48xlarge | \$433 | \$341 | ~\$250 |
+| Shape | AWS | On-demand | 1-year | Spot | GCP | On-demand | 1-year | Spot | README |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CPU | c8i | \$34 | \$25 | \$14 (10-25) | c4-highcpu | \$31 | \$20 | \$12 (5-24) | \$35, \$20, \$15 |
+| General | m8i | \$39 | \$28 | \$15 (9-35) | c4-standard | \$36 | \$23 | \$14 (6-28) | \$40, \$25, \$20 |
+| General, SSD | m8id | \$48 | \$35 | \$18 (11-24) | c4-standard-lssd | \$46 | \$29 | \$18 (8-36) | \$50, \$30, \$25 |
+| Memory | r8i | \$51 | \$37 | \$20 (7-48) | c4-highmem | \$48 | \$30 | \$19 (8-37) | \$50, \$35, \$25 |
+| Memory, SSD | r8id | \$61 | \$44 | \$22 (16-28) | c4-highmem-lssd | \$58 | \$36 | \$23 (9-45) | \$60, \$40, \$30 |
+| Memory, High | x8g | \$71 | \$53 | \$21 (8-37) | m4-megamem (13 GiB) | \$58 | \$34 | \$8 (6-35) | \$70, \$45, \$15 |
+| Memory, High, SSD | x2idn | \$76 | \$47 | \$18 (8-39) | m3-megamem | \$82 | | \$10 (8-38) | \$80, \$45, \$20 |
+| Memory, Ultra, SSD | x2iedn | \$152 | \$112 | \$30 (17-58) | m3-ultramem | \$139 | | \$16 (13-64) | \$150, \$110, \$30 |
+| SSD | i8g | \$63 | \$49 | \$15 (7-26) | z3-highmem-standardlssd (205 GB) | \$91 | \$58 | \$19 (10-54) | \$80, \$50, \$25 |
+| SSD, High | i8ge | \$87 | \$68 | \$21 (9-32) | z3-highmem-highlssd (409 GB) | \$108 | \$68 | \$29 (12-64) | \$100, \$70, \$30 |
+| HDD | d3en.12xlarge (24 x 14 TB, 192 GiB, 75 Gbit/s) | \$96 | \$73 | \$21 (16-26) | none | | | | \$100, \$70, \$25 |
+| GPU (B200) | p6-b200.48xlarge | \$433 | \$341 | \$236 (88-327) | a4-highgpu-8g, no data | | | | \$450, \$350, \$300 |
 
-B200 spot is from us-west-2 and us-east-2 (\$43-86/h per instance; us-east-1
+Spot in a cloud's home region can be far from the median: `m4-megamem` is \$35 in Iowa and \$8 at
+the median. `m3` has no 1-year discount listed, and its local SSD is attached and priced separately. B200 spot is from us-west-2 and us-east-2 (\$43-86/h per instance; us-east-1
 had one zone at \$167/h). The unit rows come from the differences: the SSD in
 `m8id` over `m8i` is \$0.15 / \$0.11 per GB, and memory in `r8i` over `m8i` is
-\$3 / \$2 per GiB. The README's \$ / TiB table is arithmetic on the README's own numbers: for example, HDD Sequential Read is 1 TiB / 200 MiB/s = 5,243 s x (2 vCPU x \$100) / 2.6M s = \$0.4, and Blob Storage, Regional Read (128 KiB) is 8.4M GETs x \$0.4 / 1M + 341 s of a \$1,920 VM = \$3.6. A network disk row pays for just enough VM: `m8i` guarantees ~39 MB/s of EBS per vCPU (156 MB/s on 4 vCPU, 1,875 on 48; it can burst to 1,250 on any size), so 1 TiB takes 28,000 vCPU-seconds, \$0.43 on-demand, whatever the VM's size. Rent is for the read's duration: a zonal SSD disk is 1 TiB x \$0.1 + 13,000 extra IOPS x \$0.005 + 875 extra MiB/s x \$0.04 = \$202 a month, \$0.08 per TiB read at 1 GiB/s, and regional is twice that. gp3's IOPS and throughput prices are from AWS's API, and Hyperdisk Balanced's from Google's pricing page. The regional ones are 2x, which I couldn't confirm for `us-central1`. Blob rent while reading is \$0.003-0.01 per TiB. One d3en drive (`d3en.xlarge`, 12.7 TiB, November 7) read 250 MiB/s sequentially and took 13 ms per random read up to 256 KiB (17 ms at 1 MiB), reaching 139 MiB/s at 4 MiB. Averaged with the d3's drive, that still rounds to the README's 200 and 100 MiB/s. SSD, storage-optimized per GB is the shape's extra cost over Memory, at the same 8 GiB per vCPU: spot is (\$17 - \$15) / 234 GB = \$0.006 on i8g and (\$28 - \$15) / 625 GB = \$0.02 on i8ge, so \$0.01. HDD per GB is that shape's whole price: \$0.014 on-demand, \$0.010 for 1 year and \$0.003 on spot. Graviton (`c8g`, `m8g`, `r8g`) is ~15% cheaper on-demand. GCP's equivalents of
+\$3 / \$2 per GiB. The README's \$ / TiB table is arithmetic on the README's own numbers: for example, HDD Sequential Read is 1 TiB / 200 MiB/s = 5,243 s x (2 vCPU x \$100) / 2.6M s = \$0.4, and Blob Storage, Regional Read (128 KiB) is 8.4M GETs x \$0.4 / 1M + 341 s of a \$1,920 VM = \$3.6. A network disk row pays for just enough VM: `m8i` guarantees ~39 MB/s of EBS per vCPU (156 MB/s on 4 vCPU, 1,875 on 48; it can burst to 1,250 on any size), so 1 TiB takes 28,000 vCPU-seconds, \$0.43 on-demand, whatever the VM's size. Rent is for the read's duration: a zonal SSD disk is 1 TiB x \$0.1 + 13,000 extra IOPS x \$0.005 + 875 extra MiB/s x \$0.04 = \$202 a month, \$0.08 per TiB read at 1 GiB/s, and regional is twice that. gp3's IOPS and throughput prices are from AWS's API, and Hyperdisk Balanced's from Google's pricing page. The regional ones are 2x, which I couldn't confirm for `us-central1`. Blob rent while reading is \$0.003-0.01 per TiB. One d3en drive (`d3en.xlarge`, 12.7 TiB, November 7) read 250 MiB/s sequentially and took 13 ms per random read up to 256 KiB (17 ms at 1 MiB), reaching 139 MiB/s at 4 MiB. Averaged with the d3's drive, that still rounds to the README's 200 and 100 MiB/s. SSD, storage-optimized per GB is the shape's extra cost over Memory, at the same 8 GiB per vCPU. On spot that's \$0-0.01 at p75. HDD per GB is that shape's whole price: \$0.014 on-demand, \$0.010 for 1 year and \$0.004 on spot. Graviton (`c8g`, `m8g`, `r8g`) is ~15% cheaper on-demand. GCP's equivalents of
 the SSD shapes are `c4-standard-*-lssd` (General, SSD), `c4-highmem-*-lssd`
 (Memory, SSD: 8 GiB and ~60 GB per vCPU) and Z3 (SSD, High). Above 8 GiB per
 vCPU, local SSD comes only on `x2gd` / `x2idn` / `x2iedn` (AWS, 16-32 GiB,

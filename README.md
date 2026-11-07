@@ -171,17 +171,17 @@ Approximate numbers that should be consistent between Cloud providers.
 
 | What                                 | Amount  | \$ / Month | 1-year \$ / Month | Spot \$ / Month |
 | ------------------------------------ | ------- | ---------- | ----------------- | --------------- |
-| CPU                                  | 1 vCPU  | \$30       | \$20              | \$10            |
-| GPU (B200)                           | 1       | \$10000    | \$8000            | \$5000          |
+| CPU                                  | 1 vCPU  | \$30       | \$20              | \$15            |
+| GPU (B200)                           | 1       | \$10000    | \$8000            | \$7000          |
 | Memory                               | 1 GB    | \$2.5      | \$2               | \$1             |
 | Storage                              |         |            |                   |                 |
 | ├ Warehouse Storage                  | 1 GB    | \$0.02     |                   |                 |
 | ├ Blob Storage, Regional             | 1 GB    | \$0.02     |                   |                 |
 | ├ Blob Storage, Zonal                | 1 GB    | \$0.1      |                   |                 |
 | ├ Network Disk, Zonal, HDD           | 1 GB    | \$0.04     |                   |                 |
-| ├ SSD                                | 1 GB    | \$0.15     | \$0.1             | \$0.04          |
+| ├ SSD                                | 1 GB    | \$0.15     | \$0.1             | \$0.08          |
 | ├ SSD, storage-optimized             | 1 GB    | \$0.05     |                   | \$0.01          |
-| ├ HDD                                | 1 GB    | \$0.01     |                   | \$0.003         |
+| ├ HDD                                | 1 GB    | \$0.01     |                   | \$0.004         |
 | ├ Network Disk, Regional, HDD        | 1 GB    | \$0.08     |                   |                 |
 | ├ Network Disk, Zonal                | 1 GB    | \$0.1      |                   |                 |
 | ├ Network Disk, Regional             | 1 GB    | \$0.2      |                   |                 |
@@ -227,27 +227,28 @@ operation (fewer, large files is cheaper):
 
 Zonal buckets also charge \$0.003 per GB written and \$0.0006 per GB read.
 
-Instance shapes are the same few ratios on every cloud, here per vCPU at AWS's
-prices (one B200 per 25 vCPU): on-demand, a 1-year Compute Savings Plan with no
-upfront (~25% off), and spot (~70% off; ~45% for Memory, High and B200s). Most
+Instance shapes are the same few ratios on every cloud, here per vCPU averaged over AWS and
+GCP (HDD and B200s are AWS's; GCP has no local HDD) at list price in their cheapest US
+region: on-demand, a 1-year Compute Savings Plan or committed use discount with no upfront,
+and spot, the 75th percentile across every region of both clouds. One B200 comes with 25 vCPU. Most
 cost a vCPU plus its memory and disks at the unit prices above; the largest memory
 shapes and B200s cost more. The HDD shape's drives are 14 TB, so at ~100 random reads/s
 each it does ~7 reads/s per TB:
 
 | Shape              | vCPU | Memory (GiB) | VRAM (GB) | SSD (GB) | HDD (GB) | Network (GB/s) | \$ / mo / vCPU | 1-year | Spot  | Max (vCPU) |
 | ------------------ | ---- | ------------ | --------- | -------- | -------- | -------------- | -------------- | ------ | ----- | ---------- |
-| CPU                | 1    | 2            |           |          |          | 0.07           | \$35           | \$25   | \$10  | 300        |
-| General            | 1    | 4            |           |          |          | 0.07           | \$40           | \$30   | \$15  | 300        |
-| General, SSD       | 1    | 4            |           | 60       |          | 0.07           | \$50           | \$35   | \$15  | 300        |
-| Memory             | 1    | 8            |           |          |          | 0.07           | \$50           | \$35   | \$15  | 300        |
-| Memory, SSD        | 1    | 8            |           | 60       |          | 0.07           | \$60           | \$45   | \$20  | 300        |
-| Memory, High       | 1    | 16           |           |          |          | 0.06           | \$70           | \$50   | \$40  | 200        |
-| Memory, High, SSD  | 1    | 16           |           | 30       |          | 0.1            | \$75           | \$45   | \$20  | 128        |
-| Memory, Ultra, SSD | 1    | 32           |           | 30       |          | 0.1            | \$150          | \$110  | \$50  | 128        |
-| SSD                | 1    | 8            |           | 250      |          | 0.07           | \$65           | \$50   | \$15  | 200        |
-| SSD, High          | 1    | 8            |           | 600      |          | 0.15           | \$95           | \$70   | \$30  | 200        |
-| HDD                | 1    | 4            |           |          | 7000     | 0.2            | \$100          | \$70   | \$20  | 48         |
-| GPU (B200)         | 1    | 14           | 7         | 100      |          | 2              | \$450          | \$350  | \$250 | 200        |
+| CPU                | 1    | 2            |           |          |          | 0.07           | \$35           | \$20   | \$15  | 300        |
+| General            | 1    | 4            |           |          |          | 0.07           | \$40           | \$25   | \$20  | 300        |
+| General, SSD       | 1    | 4            |           | 60       |          | 0.07           | \$50           | \$30   | \$25  | 300        |
+| Memory             | 1    | 8            |           |          |          | 0.07           | \$50           | \$35   | \$25  | 300        |
+| Memory, SSD        | 1    | 8            |           | 60       |          | 0.07           | \$60           | \$40   | \$30  | 300        |
+| Memory, High       | 1    | 16           |           |          |          | 0.06           | \$70           | \$45   | \$15  | 200        |
+| Memory, High, SSD  | 1    | 16           |           | 30       |          | 0.1            | \$80           | \$45   | \$20  | 128        |
+| Memory, Ultra, SSD | 1    | 32           |           | 30       |          | 0.1            | \$150          | \$110  | \$30  | 128        |
+| SSD                | 1    | 8            |           | 250      |          | 0.07           | \$80           | \$50   | \$25  | 200        |
+| SSD, High          | 1    | 8            |           | 600      |          | 0.15           | \$100          | \$70   | \$30  | 200        |
+| HDD                | 1    | 4            |           |          | 7000     | 0.2            | \$100          | \$70   | \$25  | 48         |
+| GPU (B200)         | 1    | 14           | 7         | 100      |          | 2              | \$450          | \$350  | \$300 | 200        |
 
 Reading 1 TiB costs the compute's time at the row's throughput (1 TiB / throughput x
 the shape's \$ / month / 2.6M seconds, from the tables above), plus the transfer and
@@ -260,25 +261,25 @@ rounds to nothing:
 
 | What                                                | \$ / TiB read | 1-year   | Spot     |
 | --------------------------------------------------- | ------------- | -------- | -------- |
-| Memory Sequential Read, 1 thread                    | \$0.0005      | \$0.0004 | \$0.0002 |
-| GPU Memory Sequential Read (B200)                   | \$0.0005      | \$0.0004 | \$0.0003 |
-| Memory Sequential Read, all cores                   | \$0.004       | \$0.003  | \$0.001  |
-| Memory Random Read (64 B), all cores                | \$0.004       | \$0.003  | \$0.001  |
-| SSD Sequential Read (8 KiB)                         | \$0.2         | \$0.1    | \$0.06   |
-| SSD Random Read (8 KiB)                             | \$0.2         | \$0.1    | \$0.06   |
-| Network Same-Zone (32 KiB)                          | \$0.2         | \$0.2    | \$0.09   |
-| Blob Storage, Regional Read (8 MiB)                 | \$0.3         | \$0.2    | \$0.1    |
-| HDD Sequential Read (8 KiB)                         | \$0.4         | \$0.3    | \$0.08   |
-| Network Disk, Zonal Sequential Read (8 KiB)         | \$0.5         | \$0.4    | \$0.2    |
-| Network Disk, Zonal Random Read (8 KiB)             | \$0.5         | \$0.4    | \$0.2    |
+| Memory Sequential Read, 1 thread                    | \$0.0005      | \$0.0003 | \$0.0003 |
+| GPU Memory Sequential Read (B200)                   | \$0.0005      | \$0.0004 | \$0.0004 |
+| Memory Sequential Read, all cores                   | \$0.004       | \$0.002  | \$0.002  |
+| Memory Random Read (64 B), all cores                | \$0.004       | \$0.002  | \$0.002  |
+| SSD Sequential Read (8 KiB)                         | \$0.2         | \$0.1    | \$0.09   |
+| SSD Random Read (8 KiB)                             | \$0.2         | \$0.1    | \$0.09   |
+| Network Same-Zone (32 KiB)                          | \$0.2         | \$0.2    | \$0.1    |
+| Blob Storage, Regional Read (8 MiB)                 | \$0.3         | \$0.2    | \$0.2    |
+| HDD Sequential Read (8 KiB)                         | \$0.4         | \$0.3    | \$0.1    |
+| Network Disk, Zonal Sequential Read (8 KiB)         | \$0.5         | \$0.3    | \$0.3    |
+| Network Disk, Zonal Random Read (8 KiB)             | \$0.5         | \$0.3    | \$0.3    |
 | Network Disk, Zonal, HDD Sequential Read (8 KiB)    | \$0.5         | \$0.4    | \$0.3    |
 | Network Disk, Zonal, HDD Random Read (256 KiB)      | \$0.5         | \$0.4    | \$0.3    |
-| Network Disk, Regional Sequential Read (8 KiB)      | \$0.6         | \$0.5    | \$0.3    |
-| Network Disk, Regional Random Read (8 KiB)          | \$0.6         | \$0.5    | \$0.3    |
-| Network Disk, Regional, HDD Sequential Read (8 KiB) | \$0.7         | \$0.6    | \$0.4    |
-| Network Disk, Regional, HDD Random Read (256 KiB)   | \$0.7         | \$0.6    | \$0.4    |
+| Network Disk, Regional Sequential Read (8 KiB)      | \$0.6         | \$0.4    | \$0.4    |
+| Network Disk, Regional Random Read (8 KiB)          | \$0.6         | \$0.4    | \$0.4    |
+| Network Disk, Regional, HDD Sequential Read (8 KiB) | \$0.7         | \$0.5    | \$0.5    |
+| Network Disk, Regional, HDD Random Read (256 KiB)   | \$0.7         | \$0.5    | \$0.5    |
 | HDD Random Read (256 KiB)                           | \$0.8         | \$0.6    | \$0.2    |
-| Blob Storage, Zonal Read (8 MiB)§                   | \$0.9         | \$0.8    | \$0.7    |
+| Blob Storage, Zonal Read (8 MiB)§                   | \$0.9         | \$0.8    | \$0.8    |
 | Blob Storage, Zonal Read (128 KiB)§                 | \$2           | \$2      | \$2      |
 | Blob Storage, Regional Read (128 KiB)               | \$4           | \$4      | \$3      |
 | Warehouse Query                                     | \$5           | \$5      | \$5      |
