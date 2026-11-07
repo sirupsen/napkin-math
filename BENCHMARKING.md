@@ -158,7 +158,8 @@ the smallest worth doing (lz4 reaches 1.2x and zstd -1 1.6x at 1 KiB, and zstd
 expands 64 B). Sort is the one row where throughput isn't the peak: 4 integers
 sort at 7-13 GiB/s, 1 KiB at 2 GiB/s, 1 MiB at 600 MiB/s and 1 GiB at 340 MiB/s,
 and the peak would make a big sort look 30x too fast. Bitpacking works on its
-fixed 128-value block, so its latency is the block's 512 B at the speed above.
+fixed block of 128 `u32`s, 512 B before packing (192 B at 12 bits), so its latency is
+that block at the speed above.
 
 Random memory against size, on huge pages (`memory_random_block_latency`,
 `memory_random_block`; C4 / m8i / m8g). One read at a time took 111 / 136 / 131 ns

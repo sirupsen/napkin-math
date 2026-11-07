@@ -40,7 +40,7 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | L2 Cache Read (64 B), 1 thread                                           | 5 ns    | 150 GiB/s  |
 | Memory Sequential Read (64 B), other socket, all cores‡                  | 100 ns  | 60 GiB/s   |
 | CPU Hash, not crypto-safe (xxh3, 16 B), 1 thread                         | 2 ns    | 50 GiB/s   |
-| CPU Decode Bitpacked Integers (128 at a time), 1 thread                  | 10 ns   | 50 GiB/s   |
+| CPU Decode Bitpacked Integers (512 B), 1 thread                          | 10 ns   | 50 GiB/s   |
 | GPU ↔ CPU Transfer, PCIe (B200)                                          | 10 μs   | 50 GiB/s   |
 | L3 Cache Read (64 B), 1 thread                                           | 50 ns   | 40 GiB/s   |
 | GPU ↔ GPU Network, RDMA (400 Gbit/s)                                     | 5 μs    | 40 GiB/s   |
@@ -50,7 +50,7 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | Memory Random Read (64 B), 1 thread                                      | 100 ns  | 20 GiB/s   |
 | Memory Sequential Read (64 B), other socket, 1 thread‡                   | 5 ns    | 15 GiB/s   |
 | Memory Random Read (64 B), other socket, 1 thread‡                       | 250 ns  | 15 GiB/s   |
-| CPU Encode Bitpacked Integers (128 at a time), 1 thread                  | 50 ns   | 10 GiB/s   |
+| CPU Encode Bitpacked Integers (512 B), 1 thread                          | 50 ns   | 10 GiB/s   |
 | CPU Encrypt / Decrypt (AES-256-GCM, 64 B), 1 thread                      | 50 ns   | 10 GiB/s   |
 | SSD Sequential Read (8 KiB), 1 thread                                    | 50 μs   | 5 GiB/s    |
 | SSD Random Read (8 KiB), 1 thread                                        | 100 μs  | 5 GiB/s    |
