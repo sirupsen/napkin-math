@@ -101,7 +101,7 @@ pub fn serialization_corpus() -> SerializationCorpus {
                 rng.random_range(1..16)
             ),
             tags,
-            success: event_id % 17 != 0,
+            success: !event_id.is_multiple_of(17),
         });
     }
 

@@ -147,7 +147,7 @@ unsafe fn memory_read_sequential_single_thread_neon(vec: &[Int]) -> u64 {
     let mut acc = [vdupq_n_u64(0); 8];
     let ptr = vec.as_ptr();
     let mut i = 0usize;
-    if vec.len() * std::mem::size_of::<Int>() > 64 << 20 {
+    if std::mem::size_of_val(vec) > 64 << 20 {
         let half = vec.len() / 2;
         let other = ptr.add(half);
         while i + 8 <= half {
@@ -252,7 +252,7 @@ pub(super) fn memory_read_sequential_single_thread_avx2(vec: &[Int]) -> u64 {
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx512f")]
 unsafe fn memory_read_sequential_single_thread_avx512(vec: &[Int]) -> u64 {
-    if vec.len() * std::mem::size_of::<Int>() > 64 << 20 {
+    if std::mem::size_of_val(vec) > 64 << 20 {
         memory_read_avx512::<true>(vec)
     } else {
         memory_read_avx512::<false>(vec)
@@ -298,7 +298,7 @@ fn memory_read_sequential_single_thread_non_vectorized(vec: &[Int]) -> u64 {
     #[cfg(target_arch = "x86_64")]
     {
         unsafe {
-            return memory_read_sequential_single_thread_non_vectorized_x86(vec);
+            memory_read_sequential_single_thread_non_vectorized_x86(vec)
         }
     }
 

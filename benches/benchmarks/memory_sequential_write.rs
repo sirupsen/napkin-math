@@ -37,7 +37,7 @@ fn memset_non_temporal(dst: &mut [u8]) {
         _mm_sfence();
     }
     // Buffers come from page-aligned allocations; the slices below are 4 KiB multiples.
-    assert!(dst.as_ptr() as usize % 64 == 0 && dst.len() % 256 == 0);
+    assert!((dst.as_ptr() as usize).is_multiple_of(64) && dst.len().is_multiple_of(256));
     unsafe {
         if is_x86_feature_detected!("avx512f") {
             avx512(dst.as_mut_ptr(), dst.len())

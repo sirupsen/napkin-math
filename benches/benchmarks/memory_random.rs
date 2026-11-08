@@ -105,9 +105,9 @@ impl PointerChase {
             let j = rng.random_range(0..i);
             order.swap(i, j);
         }
-        for i in 0..len {
+        for (i, &next) in order.iter().enumerate() {
             unsafe {
-                (*ptr.add(i))[0] = order[i];
+                (*ptr.add(i))[0] = next;
             }
         }
 
