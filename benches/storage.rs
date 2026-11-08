@@ -226,6 +226,9 @@ fn run(path: &str, size: u64, t: &Test, secs: u64, once: bool) {
     let uring = cfg!(target_os = "linux") && t.direct;
     // Without io_uring, depth comes from more blocking threads.
     let (threads, depth) = if uring { (t.threads, t.depth) } else { (t.threads * t.depth, 1) };
+    // A buffered sequential read stops at the end of the file: a second pass would read the page
+    // cache the first one filled.
+    let eof = once || (!t.direct && matches!((t.op, t.pattern), (Op::Read, Pattern::Sequential)));
     let start = Instant::now();
     let workers: Vec<_> = (0..threads)
         .map(|i| {
@@ -233,7 +236,7 @@ fn run(path: &str, size: u64, t: &Test, secs: u64, once: bool) {
             let (op, pattern, block) = (t.op, t.pattern, t.block);
             std::thread::spawn(move || {
                 let rng = 0x9e3779b97f4a7c15u64 ^ (i as u64 + 1).wrapping_mul(0xbf58476d1ce4e5b9);
-                let mut cur = Cursor { next, rng, pattern, blocks, once };
+                let mut cur = Cursor { next, rng, pattern, blocks, once: eof };
                 #[cfg(target_os = "linux")]
                 if uring {
                     return uring_worker(&file, op, block, depth, &mut cur, &stop);
@@ -255,7 +258,10 @@ fn run(path: &str, size: u64, t: &Test, secs: u64, once: bool) {
         })
         .collect();
     if !once {
-        std::thread::sleep(Duration::from_secs(secs));
+        let deadline = start + Duration::from_secs(secs);
+        while Instant::now() < deadline && !workers.iter().all(|w| w.is_finished()) {
+            std::thread::sleep(Duration::from_millis(10));
+        }
         stop.store(true, Ordering::Relaxed);
     }
     let mut lat: Vec<u32> = workers
@@ -264,6 +270,10 @@ fn run(path: &str, size: u64, t: &Test, secs: u64, once: bool) {
         .collect();
     let elapsed = start.elapsed().as_secs_f64();
     if once {
+        return;
+    }
+    if lat.is_empty() {
+        println!("{:<22} no requests completed", t.name);
         return;
     }
     lat.sort_unstable();
@@ -277,7 +287,7 @@ fn run(path: &str, size: u64, t: &Test, secs: u64, once: bool) {
         } else {
             format!("{}K", t.block / KIB)
         },
-        format!("{}x{}", t.threads, t.depth),
+        format!("{}x{}", threads, depth),
         ops,
         ops * t.block as f64 / MIB as f64,
         pct(0.5),

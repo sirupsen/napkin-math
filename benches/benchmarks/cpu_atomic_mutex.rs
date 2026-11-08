@@ -62,9 +62,8 @@ fn cpu_atomic_mutex_benchmark(c: &mut Criterion) {
     group.bench_function("mutex lock + unlock", |b| b.iter(|| lock(&mutex)));
 
     if cores.len() >= 2 {
-        // CPUs 0 and 1 are different physical cores on Linux cloud VMs, where
-        // SMT siblings are numbered n/2 apart.
-        let pair = [cores[0], cores[1]];
+        // Two physical cores: SMT siblings share an L1, so the line wouldn't move.
+        let pair = [cores[0], super::other_physical_core(&cores)];
         group.bench_function("atomic increment, contended", |b| {
             b.iter_custom(|iters| contended(counter.clone(), &pair, increment, iters))
         });

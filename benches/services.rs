@@ -30,6 +30,11 @@ impl Conn {
             w,
         }
     }
+    // One write per request: with TCP_NODELAY, write! on the stream sends each formatted piece
+    // as its own syscall and packet, and the server may wake up on half a request.
+    fn send(&mut self, request: &[u8]) {
+        self.w.write_all(request).unwrap();
+    }
     fn line(&mut self) -> String {
         let mut s = String::new();
         if self.r.read_line(&mut s).unwrap() == 0 {
@@ -65,7 +70,7 @@ fn http(c: &mut Conn, _key: u64) {
 
 fn redis(c: &mut Conn, key: u64) {
     let k = format!("k:{}", key);
-    write!(c.w, "*2\r\n$3\r\nGET\r\n${}\r\n{}\r\n", k.len(), k).unwrap();
+    c.send(format!("*2\r\n$3\r\nGET\r\n${}\r\n{}\r\n", k.len(), k).as_bytes());
     let head = c.line();
     assert!(head.starts_with('$'), "{}", head.trim());
     let len: i64 = head[1..].trim().parse().unwrap();
@@ -74,7 +79,7 @@ fn redis(c: &mut Conn, key: u64) {
 }
 
 fn memcached(c: &mut Conn, key: u64) {
-    write!(c.w, "get k:{}\r\n", key).unwrap();
+    c.send(format!("get k:{}\r\n", key).as_bytes());
     let head = c.line();
     assert!(
         head.starts_with("VALUE"),
@@ -138,10 +143,10 @@ fn mysql_read(c: &mut Conn) -> (u8, Vec<u8>) {
 }
 
 fn mysql_write(c: &mut Conn, seq: u8, payload: &[u8]) {
-    let mut p = (payload.len() as u32).to_le_bytes();
-    p[3] = seq;
-    c.w.write_all(&p).unwrap();
-    c.w.write_all(payload).unwrap();
+    let mut packet = (payload.len() as u32).to_le_bytes().to_vec();
+    packet[3] = seq;
+    packet.extend_from_slice(payload);
+    c.send(&packet);
 }
 
 fn mysql_connect(c: &mut Conn) {

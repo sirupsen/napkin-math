@@ -10,101 +10,138 @@ use std::time::{Duration, Instant};
 
 const MIN_TIME: Duration = Duration::from_secs(1);
 
+// Both write into a caller's buffer that is reused across calls, as lzbench does: allocating a
+// fresh output each call would time the page faults of a buffer the size of the file. `out` only
+// ever grows, so after the first call nothing is allocated or zeroed. They return bytes written.
 struct Codec {
     name: &'static str,
-    compress: fn(&[u8]) -> Vec<u8>,
-    decompress: fn(&[u8], usize) -> Vec<u8>,
+    compress: fn(&[u8], &mut Vec<u8>) -> usize,
+    decompress: fn(&[u8], &mut [u8]) -> usize,
 }
 
-fn zstd_compress(level: i32, input: &[u8]) -> Vec<u8> {
-    zstd::bulk::compress(input, level).unwrap()
+fn grow(out: &mut Vec<u8>, len: usize) -> &mut [u8] {
+    if out.len() < len {
+        out.resize(len, 0);
+    }
+    &mut out[..]
 }
 
-fn zstd_decompress(input: &[u8], len: usize) -> Vec<u8> {
-    zstd::bulk::decompress(input, len).unwrap()
+// gzip and brotli have no published bound handy; incompressible input grows by well under 1/8.
+fn stream_bound(len: usize) -> usize {
+    len + len / 8 + 4096
 }
 
-fn gzip_compress(level: u32, input: &[u8]) -> Vec<u8> {
-    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(level));
+fn lz4_compress(input: &[u8], out: &mut Vec<u8>) -> usize {
+    let buf = grow(out, lz4_flex::block::get_maximum_output_size(input.len()));
+    lz4_flex::block::compress_into(input, buf).unwrap()
+}
+
+fn lz4_decompress(input: &[u8], out: &mut [u8]) -> usize {
+    lz4_flex::block::decompress_into(input, out).unwrap()
+}
+
+fn snappy_compress(input: &[u8], out: &mut Vec<u8>) -> usize {
+    let buf = grow(out, snap::raw::max_compress_len(input.len()));
+    snap::raw::Encoder::new().compress(input, buf).unwrap()
+}
+
+fn snappy_decompress(input: &[u8], out: &mut [u8]) -> usize {
+    snap::raw::Decoder::new().decompress(input, out).unwrap()
+}
+
+fn zstd_compress(level: i32, input: &[u8], out: &mut Vec<u8>) -> usize {
+    let buf = grow(out, zstd::zstd_safe::compress_bound(input.len()));
+    zstd::bulk::compress_to_buffer(input, buf, level).unwrap()
+}
+
+fn zstd_decompress(input: &[u8], out: &mut [u8]) -> usize {
+    zstd::bulk::decompress_to_buffer(input, out).unwrap()
+}
+
+fn gzip_compress(level: u32, input: &[u8], out: &mut Vec<u8>) -> usize {
+    let buf = grow(out, stream_bound(input.len()));
+    let mut cursor = std::io::Cursor::new(buf);
+    let mut encoder = flate2::write::GzEncoder::new(&mut cursor, flate2::Compression::new(level));
     encoder.write_all(input).unwrap();
-    encoder.finish().unwrap()
+    encoder.finish().unwrap();
+    cursor.position() as usize
 }
 
-fn gzip_decompress(input: &[u8], len: usize) -> Vec<u8> {
-    let mut out = Vec::with_capacity(len);
-    flate2::read::GzDecoder::new(input)
-        .read_to_end(&mut out)
-        .unwrap();
-    out
+fn gzip_decompress(input: &[u8], out: &mut [u8]) -> usize {
+    read_all(flate2::read::GzDecoder::new(input), out)
 }
 
-fn brotli_compress(quality: u32, input: &[u8]) -> Vec<u8> {
-    let mut out = Vec::new();
+fn brotli_compress(quality: u32, input: &[u8], out: &mut Vec<u8>) -> usize {
+    let buf = grow(out, stream_bound(input.len()));
+    let mut cursor = std::io::Cursor::new(buf);
     {
-        let mut writer = brotli::CompressorWriter::new(&mut out, 1 << 16, quality, 22);
+        let mut writer = brotli::CompressorWriter::new(&mut cursor, 1 << 16, quality, 22);
         writer.write_all(input).unwrap();
     }
-    out
+    cursor.position() as usize
 }
 
-fn brotli_decompress(input: &[u8], len: usize) -> Vec<u8> {
-    let mut out = Vec::with_capacity(len);
-    brotli::Decompressor::new(input, 1 << 16)
-        .read_to_end(&mut out)
-        .unwrap();
-    out
+fn brotli_decompress(input: &[u8], out: &mut [u8]) -> usize {
+    read_all(brotli::Decompressor::new(input, 1 << 16), out)
+}
+
+// Fill `out` (sized to the original length) from a decoder, and check nothing is left over.
+fn read_all(mut reader: impl Read, out: &mut [u8]) -> usize {
+    reader.read_exact(out).unwrap();
+    assert_eq!(reader.read(&mut [0u8; 1]).unwrap(), 0, "decoded more than the original");
+    out.len()
 }
 
 fn codecs() -> Vec<Codec> {
     vec![
         Codec {
             name: "lz4_flex",
-            compress: |input| lz4_flex::block::compress(input),
-            decompress: |input, len| lz4_flex::block::decompress(input, len).unwrap(),
+            compress: lz4_compress,
+            decompress: lz4_decompress,
         },
         Codec {
             name: "snappy",
-            compress: |input| snap::raw::Encoder::new().compress_vec(input).unwrap(),
-            decompress: |input, _| snap::raw::Decoder::new().decompress_vec(input).unwrap(),
+            compress: snappy_compress,
+            decompress: snappy_decompress,
         },
         Codec {
             name: "zstd -1",
-            compress: |input| zstd_compress(1, input),
+            compress: |input, out| zstd_compress(1, input, out),
             decompress: zstd_decompress,
         },
         Codec {
             name: "zstd -3",
-            compress: |input| zstd_compress(3, input),
+            compress: |input, out| zstd_compress(3, input, out),
             decompress: zstd_decompress,
         },
         Codec {
             name: "zstd -9",
-            compress: |input| zstd_compress(9, input),
+            compress: |input, out| zstd_compress(9, input, out),
             decompress: zstd_decompress,
         },
         Codec {
             name: "zstd -19",
-            compress: |input| zstd_compress(19, input),
+            compress: |input, out| zstd_compress(19, input, out),
             decompress: zstd_decompress,
         },
         Codec {
             name: "gzip -1",
-            compress: |input| gzip_compress(1, input),
+            compress: |input, out| gzip_compress(1, input, out),
             decompress: gzip_decompress,
         },
         Codec {
             name: "gzip -6",
-            compress: |input| gzip_compress(6, input),
+            compress: |input, out| gzip_compress(6, input, out),
             decompress: gzip_decompress,
         },
         Codec {
             name: "brotli -5",
-            compress: |input| brotli_compress(5, input),
+            compress: |input, out| brotli_compress(5, input, out),
             decompress: brotli_decompress,
         },
         Codec {
             name: "brotli -11",
-            compress: |input| brotli_compress(11, input),
+            compress: |input, out| brotli_compress(11, input, out),
             decompress: brotli_decompress,
         },
     ]
@@ -154,9 +191,11 @@ fn chunks(path: &str) {
         };
 
         let packed: Vec<Vec<u8>> = parts.iter().map(|p| lz4_flex::block::compress(p)).collect();
+        let mut lz4_out = vec![0u8; lz4_flex::block::get_maximum_output_size(size)];
         let c = best_of(|| {
             for p in &parts {
-                std::hint::black_box(lz4_flex::block::compress(p));
+                let n = lz4_flex::block::compress_into(p, &mut lz4_out).unwrap();
+                std::hint::black_box(n);
             }
         });
         let mut out = vec![0u8; size];
@@ -177,7 +216,7 @@ fn chunks(path: &str) {
             .collect();
         let c = best_of(|| {
             for p in &parts {
-                let n = compressor.compress_to_buffer(*p, &mut packed_out).unwrap();
+                let n = compressor.compress_to_buffer(p, &mut packed_out).unwrap();
                 std::hint::black_box(n);
             }
         });
@@ -227,13 +266,17 @@ fn main() {
                     continue;
                 }
             }
-            let compressed = (codec.compress)(&input);
-            assert_eq!((codec.decompress)(&compressed, input.len()), input);
+            let mut packed = Vec::new();
+            let n = (codec.compress)(&input, &mut packed);
+            let compressed = packed[..n].to_vec();
+            let mut out = vec![0u8; input.len()];
+            assert_eq!((codec.decompress)(&compressed, &mut out), input.len());
+            assert!(out == input, "{} didn't round-trip {}", codec.name, file);
             let compress = best_of(|| {
-                std::hint::black_box((codec.compress)(&input));
+                std::hint::black_box((codec.compress)(&input, &mut packed));
             });
             let decompress = best_of(|| {
-                std::hint::black_box((codec.decompress)(&compressed, input.len()));
+                std::hint::black_box((codec.decompress)(&compressed, &mut out));
             });
             println!(
                 "| {} | {:.0} | {} | {:.2} | {:.0} | {:.0} |",

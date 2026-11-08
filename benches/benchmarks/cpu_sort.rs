@@ -26,10 +26,11 @@ fn cpu_sort_benchmark(c: &mut Criterion) {
         let input: Vec<u64> = (0..elements).map(|_| rng.random()).collect();
 
         group.throughput(Throughput::Bytes(*total_size as u64));
+        // By reference, so freeing the sorted copy (an munmap at 1 GiB) isn't timed.
         group.bench_function(*name, |b| {
-            b.iter_batched(
+            b.iter_batched_ref(
                 || input.clone(),
-                |mut values| {
+                |values| {
                     values.sort_unstable();
                     black_box(values[0])
                 },
