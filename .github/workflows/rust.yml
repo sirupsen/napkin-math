@@ -14,6 +14,6 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      # Every benchmark and tool is a bench target, so plain `cargo check` compiles none of them.
-      - name: Clippy, all benches and tools
+      # Plain `cargo check` compiles neither the benches nor the examples.
+      - name: Clippy, all benches and examples
         run: cargo clippy --all-targets --features encodings -- -D warnings

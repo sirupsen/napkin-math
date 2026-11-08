@@ -7,11 +7,12 @@
 // 8 bytes per f64, the type's width per integer, and the bytes plus a 4-byte
 // offset per string. zstd -3 over the same bytes is printed for reference.
 //
-//   cargo bench --features encodings --bench compression_ratio_columns -- floats taxi.parquet
-//   cargo bench --features encodings --bench compression_ratio_columns -- ints hits_0.parquet
-//   cargo bench --features encodings --bench compression_ratio_columns -- strings hits_0.parquet logs.txt
+//   cargo run --release --features encodings --example compression_ratio -- floats taxi.parquet
+//   cargo run --release --features encodings --example compression_ratio -- ints hits_0.parquet
+//   cargo run --release --features encodings --example compression_ratio -- strings hits_0.parquet logs.txt
 use std::fs::File;
-use std::time::Instant;
+
+use crate::timing::{best_of, gib_s};
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::*;
@@ -20,20 +21,6 @@ use fastlanes::{BitPacking, Delta, FoR, Transpose};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
 const CHUNK: usize = 1024;
-
-fn best_of<F: FnMut()>(runs: usize, mut f: F) -> f64 {
-    (0..runs)
-        .map(|_| {
-            let start = Instant::now();
-            f();
-            start.elapsed().as_secs_f64()
-        })
-        .fold(f64::MAX, f64::min)
-}
-
-fn gib_s(bytes: usize, secs: f64) -> f64 {
-    bytes as f64 / secs / (1 << 30) as f64
-}
 
 fn zstd_size(bytes: &[u8]) -> usize {
     zstd::bulk::compress(bytes, 3).unwrap().len()
@@ -232,8 +219,10 @@ fn float_columns(path: &str) -> Vec<(String, Vec<f64>)> {
         let name = std::path::Path::new(path).file_stem().unwrap();
         let bytes = std::fs::read(path).unwrap();
         let values = bytes
-            .chunks_exact(8)
-            .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|b| f64::from_le_bytes(*b))
             .collect();
         return vec![(name.to_string_lossy().into_owned(), values)];
     }
@@ -250,7 +239,7 @@ fn float_columns(path: &str) -> Vec<(String, Vec<f64>)> {
         .collect()
 }
 
-fn floats(path: &str) {
+pub fn floats(path: &str) {
     let mut totals = Totals::default();
     for (name, values) in float_columns(path) {
         if values.is_empty() {
@@ -300,7 +289,7 @@ fn floats(path: &str) {
         let (kind, encoded, secs) = if alp_bytes <= rd_bytes {
             let mut buf = [0i64; CHUNK];
             let secs = best_of(5, || {
-                for (v, out) in alp.iter().zip(decoded.chunks_exact_mut(CHUNK)) {
+                for (v, out) in alp.iter().zip(decoded.as_chunks_mut::<CHUNK>().0) {
                     alp_decode(v, &mut buf);
                     out.copy_from_slice(unsafe { std::mem::transmute::<&[i64], &[f64]>(&buf[..]) });
                 }
@@ -310,7 +299,7 @@ fn floats(path: &str) {
             let dict = encoder.codes();
             let (mut left, mut right) = ([0u16; CHUNK], [0u64; CHUNK]);
             let secs = best_of(5, || {
-                for (v, out) in rd.iter().zip(decoded.chunks_exact_mut(CHUNK)) {
+                for (v, out) in rd.iter().zip(decoded.as_chunks_mut::<CHUNK>().0) {
                     unsafe {
                         BitPacking::unchecked_unpack(v.left_width, &v.left, &mut left);
                         BitPacking::unchecked_unpack(v.right_width as usize, &v.right, &mut right);
@@ -400,13 +389,13 @@ macro_rules! int_codec {
             let (mut tmp, mut tmp2) = ([0 as $t; CHUNK], [0 as $t; CHUNK]);
             let secs = best_of(5, || {
                 if use_delta {
-                    for (p, out) in delta_packed.iter().zip(decoded.chunks_exact_mut(CHUNK)) {
+                    for (p, out) in delta_packed.iter().zip(decoded.as_chunks_mut::<CHUNK>().0) {
                         unsafe { FoR::unchecked_unfor_pack(p.width, &p.words, p.min, &mut tmp) };
                         Delta::undelta::<$lanes>(&tmp, &p.bases, &mut tmp2);
                         Transpose::untranspose(&tmp2, out.try_into().unwrap());
                     }
                 } else {
-                    for (p, out) in for_packed.iter().zip(decoded.chunks_exact_mut(CHUNK)) {
+                    for (p, out) in for_packed.iter().zip(decoded.as_chunks_mut::<CHUNK>().0) {
                         unsafe { FoR::unchecked_unfor_pack(p.width, &p.words, p.min, out) };
                     }
                 }
@@ -425,7 +414,7 @@ int_codec!(codec_u16, u16, 64);
 int_codec!(codec_u32, u32, 32);
 int_codec!(codec_u64, u64, 16);
 
-fn ints(path: &str) {
+pub fn ints(path: &str) {
     let mut totals = Totals::default();
     for (name, arrays) in parquet_columns(path) {
         // (values widened to u64 with the sign bit flipped, width in bytes)
@@ -528,7 +517,7 @@ fn fsst_column(name: &str, strings: &[&[u8]], totals: &mut Totals) {
     totals.add(naive, encoded, zstd, secs);
 }
 
-fn strings(path: &str) {
+pub fn strings(path: &str) {
     let mut totals = Totals::default();
     if path.ends_with(".parquet") {
         for (name, arrays) in parquet_columns(path) {
@@ -557,25 +546,3 @@ fn strings(path: &str) {
     totals.print(path, "string columns");
 }
 
-fn main() {
-    let args: Vec<String> = std::env::args()
-        .skip(1)
-        .filter(|a| a != "--bench")
-        .collect();
-    let usage = "usage: compression_ratio_columns floats|ints|strings <files...>";
-    // `cargo bench --bench <name>` adds --bench to the arguments; without any
-    // other arguments there is nothing to measure, so skip quietly.
-    if args.is_empty() {
-        eprintln!("{usage} (no arguments, skipping)");
-        return;
-    }
-    let (mode, files) = args.split_first().expect(usage);
-    for f in files {
-        match mode.as_str() {
-            "floats" => floats(f),
-            "ints" => ints(f),
-            "strings" => strings(f),
-            _ => panic!("{usage}"),
-        }
-    }
-}

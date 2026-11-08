@@ -2,10 +2,10 @@
 # Proxy Request and Database Query rows on Ubuntu 24.04: installs nginx,
 # HAProxy, Redis, Memcached, Postgres and MySQL, loads the same 100k keys into
 # each, and times one connection's requests over loopback with
-# `benches/services.rs`. Reconfigures system services, so run it on a
+# `examples/services.rs`. Reconfigures system services, so run it on a
 # throwaway VM.
 #
-#   benches/services.sh          # SECS=10 per target
+#   examples/services.sh          # SECS=10 per target
 set -euo pipefail
 cd "$(dirname "$0")/.."
 SECS=${SECS:-10}
@@ -64,8 +64,8 @@ INSERT INTO bench.kv
   SELECT n, CONCAT('value-', n) FROM s;
 EOF
 
-cargo bench --bench services --no-run 2>&1 | grep -E '^error' -A5 || true
-BIN=$(ls -t target/release/deps/services-* | grep -v '\.d$' | head -1)
+cargo build --release --example services -q
+BIN=target/release/examples/services
 echo "8080 is nginx directly, 8081 nginx proxying to it, 8082 HAProxy proxying to it"
 "$BIN" http=127.0.0.1:8080 http=127.0.0.1:8081 http=127.0.0.1:8082 \
   redis=127.0.0.1:6379 memcached=127.0.0.1:11211 \

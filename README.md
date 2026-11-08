@@ -313,7 +313,7 @@ by 10x_. E.g. on the Silesia corpus, lz4 gets 2x at ~500 MiB/s, zstd -9 3.5x at
 
 Structured data, against its in-memory size (8 bytes per float64, the type's
 width per integer, the bytes plus a 4-byte offset per string), measured on real
-datasets with `compression_ratio` and `compression_ratio_columns`:
+datasets with `compression_ratio`:
 
 | What                       | Encoding                        | Ratio or size               |
 | -------------------------- | ------------------------------- | --------------------------- |

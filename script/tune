@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Run a command on a quieter Linux host, for comparing two runs on the same machine:
+#
+#   cargo bench --no-run && script/tune cargo bench -- 'memory_latency|syscall'
+#
+# Turns turbo off, sets the `performance` governor and disables ASLR, using sudo, and puts
+# everything back on exit. That understates production speed, so don't refresh README numbers
+# with it: those come from plain `cargo bench` on stock cloud VMs. Each step is skipped when the
+# host doesn't expose it (most cloud VMs). Run as your normal user so cargo stays on PATH, and
+# build first: compiling with turbo off is slow.
+# https://easyperf.net/blog/2019/08/02/Perf-measurement-environment-on-Linux
+set -euo pipefail
+[[ $# -gt 0 ]] || { sed -n '2,4p' "$0" >&2; exit 2; }
+[[ "$(uname -s)" == "Linux" ]] || { echo "tune: Linux only" >&2; exit 1; }
+
+# Ask for the password now, and keep sudo's cached login fresh: a full run outlasts its default
+# 15 minutes, and the restore on exit needs sudo too.
+sudo -v
+while sleep 60; do sudo -n true || exit; done &
+keepalive=$!
+
+restore=()
+
+# set_value <file> <value>: write a sysfs/procfs value, remembering the old one for exit.
+set_value() {
+  local file="$1" value="$2" old
+  [[ -e "${file}" ]] || return 0
+  old="$(cat "${file}")"
+  [[ "${old}" == "${value}" ]] && return 0
+  echo "${value}" | sudo tee "${file}" >/dev/null
+  restore+=("${file}=${old}")
+}
+
+cleanup() {
+  local i entry
+  for ((i = ${#restore[@]} - 1; i >= 0; i--)); do
+    entry="${restore[i]}"
+    echo "${entry#*=}" | sudo tee "${entry%%=*}" >/dev/null || echo "could not restore ${entry}" >&2
+  done
+  kill "${keepalive}" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+set_value /sys/devices/system/cpu/intel_pstate/no_turbo 1
+set_value /sys/devices/system/cpu/cpufreq/boost 0
+for governor in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+  set_value "${governor}" performance
+done
+set_value /proc/sys/kernel/randomize_va_space 0
+
+echo "tuned: ${#restore[@]} setting(s) changed, restored on exit" >&2
+"$@"

@@ -8,11 +8,11 @@
 // get two. Elsewhere, and for buffered I/O, each thread does one blocking pread
 // or pwrite at a time, so `threads x depth` threads keep that many in flight.
 //
-//   cargo bench --bench storage -- /mnt/disk/disk.dat                 # a file on a mounted file system
-//   cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1   # an unused raw device
-//   cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1 --size 1800g --no-precondition   # HDD
-//   cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1 --sweep   # one request at a time, 4 KiB to 1 MiB
-//   cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1 --sweep-throughput   # flat out, 4 KiB to 16 MiB
+//   cargo run --release --example storage -- /mnt/disk/disk.dat                 # a file on a mounted file system
+//   cargo run --release --example storage -- /dev/nvme1n1 --destroy /dev/nvme1n1   # an unused raw device
+//   cargo run --release --example storage -- /dev/nvme1n1 --destroy /dev/nvme1n1 --size 1800g --no-precondition   # HDD
+//   cargo run --release --example storage -- /dev/nvme1n1 --destroy /dev/nvme1n1 --sweep   # one request at a time, 4 KiB to 1 MiB
+//   cargo run --release --example storage -- /dev/nvme1n1 --destroy /dev/nvme1n1 --sweep-throughput   # flat out, 4 KiB to 16 MiB
 //
 // The whole range is written first, because reads of never-written blocks can
 // skip the flash; --no-precondition skips that for raw devices (an HDD has no
@@ -134,9 +134,9 @@ fn uring_worker(file: &File, op: Op, block: u64, depth: usize, cur: &mut Cursor,
         };
         e.user_data(slot as u64)
     };
-    for slot in 0..depth {
+    for (slot, start) in started.iter_mut().enumerate().take(depth) {
         let Some(index) = cur.next() else { done = true; break };
-        started[slot] = Instant::now();
+        *start = Instant::now();
         unsafe { ring.submission().push(&entry(slot, index)).unwrap() };
         in_flight += 1;
     }
@@ -256,13 +256,11 @@ fn run(path: &str, size: u64, t: &Test, secs: u64, once: bool) {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().filter(|a| a != "--bench").collect();
+    let args: Vec<String> = std::env::args().collect();
     let usage = "usage: storage <file | /dev/device --destroy /dev/device> [--size 32g] [--secs 15] [--no-precondition] [--only test,...]";
-    // `cargo bench --bench <name>` adds --bench to the arguments; without any
-    // other arguments there is nothing to measure, so skip quietly.
     if args.len() < 2 {
-        eprintln!("{} (no arguments, skipping)", usage);
-        return;
+        eprintln!("{usage}");
+        std::process::exit(2);
     }
     let path = args.get(1).expect(usage).clone();
     let flag = |name: &str| {

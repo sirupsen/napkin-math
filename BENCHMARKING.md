@@ -7,15 +7,15 @@ them. Everything here runs on Linux; the Criterion suite also builds on macOS
 ## Running on a fresh VM
 
 ```bash
-script/bench-vm aws m8g.48xlarge --ttl 60 -- 'cargo bench --bench napkin_math -- memory_'
-script/bench-vm gcp c4-standard-48-lssd --ttl 45 --detach -- 'cargo bench --bench storage -- ...'
+script/bench-vm aws m8g.48xlarge --ttl 60 -- 'cargo bench -- memory_'
+script/bench-vm gcp c4-standard-48-lssd --ttl 45 --detach -- 'cargo run --release --example storage -- ...'
 script/bench-vm list      # bench VMs still alive
 script/bench-vm sweep     # delete any past their deadline
 ```
 
 `script/bench-vm` uploads the working tree to a bucket and boots an Ubuntu 24.04
 VM that installs Rust, restores a `target/` cached for its CPU model and
-`Cargo.lock`, runs the command in the repo with `-C target-cpu=native`, uploads
+`Cargo.lock`, runs the command in the repo, uploads
 the output, and deletes itself (GCP VMs only stop, so the launcher deletes them
 once the output is in). Every VM also has a hard deadline: a shutdown timer
 plus terminate-on-shutdown on AWS, `--max-run-duration` with `DELETE` on GCP.
@@ -26,21 +26,20 @@ the keys.
 ## Criterion suite
 
 ```bash
-./run                                         # all groups
-./run --bench napkin_math -- 'memory_latency|syscall'   # a subset (regex)
-NAPKIN_TUNE=1 ./run                           # quieter host, for comparing two runs
+cargo bench                                   # all groups
+cargo bench -- 'memory_latency|syscall'       # a subset (regex)
+script/tune cargo bench                       # quieter host, for comparing two runs
 make test                                     # every benchmark once, as a smoke test
 ```
 
-`./run` builds first, then runs `cargo bench` with `-C target-cpu=native` added
-to `RUSTFLAGS`. The README numbers come from that on stock cloud VMs, untuned.
-`NAPKIN_TUNE=1` turns turbo off, sets the `performance` governor and disables
-ASLR (with `sudo`, restored on exit), so two runs on one host vary less; it
-understates production speed, so don't refresh README numbers with it. Most
-cloud VMs expose none of these knobs. `NAPKIN_PERF=1` wraps the run in `perf
-stat`; on locked-down cloud images that needs `sudo sysctl -w
-kernel.perf_event_paranoid=-1` first. You won't get the right numbers from a
-debug build.
+`.cargo/config.toml` builds everything with `-C target-cpu=native`, and the
+README numbers come from plain `cargo bench` on stock cloud VMs, untuned. A
+`RUSTFLAGS` environment variable replaces that setting, so add the flag back
+if you set one. `script/tune` turns turbo off, sets the `performance` governor
+and disables ASLR (with `sudo`, restored on exit), so two runs on one host vary
+less; it understates production speed, so don't refresh README numbers with
+it. Most cloud VMs expose none of these knobs. You won't get the right numbers
+from a debug build.
 
 | Group (file in `benches/benchmarks/`) | Measures | README row |
 | ----- | -------- | ---------- |
@@ -360,11 +359,11 @@ socket boundary. An x86 two-socket run needs the 384 vCPU shapes.
 ## SSD, Network Disk and HDD rows
 
 ```bash
-cargo bench --bench storage -- /mnt/nvme/disk.dat                       # a file on a mounted file system
-cargo bench --bench storage -- /dev/nvme1n1 --destroy /dev/nvme1n1      # an unused raw device
+cargo run --release --example storage -- /mnt/nvme/disk.dat                       # a file on a mounted file system
+cargo run --release --example storage -- /dev/nvme1n1 --destroy /dev/nvme1n1      # an unused raw device
 ```
 
-`benches/storage.rs` runs sequential 1 MiB reads and writes at QD32,
+`examples/storage.rs` runs sequential 1 MiB reads and writes at QD32,
 sequential and random 8 KiB reads and writes at QD1, random 8 KiB at QD128, and buffered 8 KiB sequential reads
 and writes, all with `O_DIRECT` except the buffered ones. On Linux the
 `O_DIRECT` tests use io_uring (the only dependency): one thread with its own
@@ -512,10 +511,10 @@ flight (184/s), as the drive serves flushes one at a time.
 ## Durable write rows
 
 ```bash
-cargo bench --bench storage_durable_write -- /mnt/disk/dw.dat --sizes 8k,64k,1m --writers 1,4,32
+cargo run --release --example storage_durable_write -- /mnt/disk/dw.dat --sizes 8k,64k,1m --writers 1,4,32
 ```
 
-`benches/storage_durable_write.rs` has no dependencies. Each writer loops `pwrite` +
+`examples/storage_durable_write.rs` has no dependencies. Each writer loops `pwrite` +
 `fdatasync` over its own 64 MiB slice of a file that was fully written and
 synced first, with `O_DIRECT`, and times the pair. It then does the same while
 appending to a new file. Before and after each run it reads the disk's flush
@@ -559,11 +558,11 @@ rows were buffered 8 KiB appends from one writer (300 us, 30 MiB/s on SSD).
 ## Network rows
 
 ```bash
-cargo bench --bench network -- --server        # on host A, listens on TCP 5900
-cargo bench --bench network -- 10.0.0.12       # on host B, with A's private IP
+cargo run --release --example network -- --server        # on host A, listens on TCP 5900
+cargo run --release --example network -- 10.0.0.12       # on host B, with A's private IP
 ```
 
-`benches/network.rs` has no dependencies. It times 1 B and 32 KiB TCP round trips
+`examples/network.rs` has no dependencies. It times 1 B and 32 KiB TCP round trips
 on one connection with `TCP_NODELAY`, then streams on 1, 8 and 32 connections,
 counting bytes on the receiving side. Single-flow results show per-flow caps
 (5 Gbit/s on AWS outside a cluster placement group); multi-flow results show
@@ -604,11 +603,11 @@ cross-AZ, so treat the AWS round trips as 100-500 us.
 ## Proxy and database rows
 
 ```bash
-benches/services.sh        # on a throwaway Ubuntu 24.04 VM; it reconfigures system services
+examples/services.sh        # on a throwaway Ubuntu 24.04 VM; it reconfigures system services
 ```
 
-`benches/services.sh` installs nginx, HAProxy, Redis, Memcached, Postgres and
-MySQL, loads the same 100k keys into each, and runs `benches/services.rs`: one
+`examples/services.sh` installs nginx, HAProxy, Redis, Memcached, Postgres and
+MySQL, loads the same 100k keys into each, and runs `examples/services.rs`: one
 connection doing one request at a time over loopback, 10 seconds per target, a
 random key each time. Postgres and MySQL run `SELECT v FROM kv WHERE k = ...`
 on a primary key as a plain query, parsed and planned every time. nginx answers
@@ -635,12 +634,12 @@ misses the database's cache waits for its disk.
 ## Compression rows
 
 ```bash
-cargo bench --bench cpu_compress -- silesia.tar dickens ...
-NAPKIN_COMPRESSION_CODECS="lz4_flex,zstd -3" cargo bench --bench cpu_compress -- file
-cargo bench --bench cpu_compress -- --chunks silesia.tar   # lz4 and zstd -1, 64 B to 4 MiB per call
+cargo run --release --example cpu_compress -- silesia.tar dickens ...
+NAPKIN_COMPRESSION_CODECS="lz4_flex,zstd -3" cargo run --release --example cpu_compress -- file
+cargo run --release --example cpu_compress -- --chunks silesia.tar   # lz4 and zstd -1, 64 B to 4 MiB per call
 ```
 
-`benches/cpu_compress.rs` reports the ratio and single-threaded
+`examples/cpu_compress.rs` reports the ratio and single-threaded
 compress/decompress speed of lz4, snappy, zstd (-1, -3, -9, -19), gzip (-1, -6)
 and brotli (-5, -11) for each file, as best of N runs over at least a second.
 The CPU Compress/Decompress rows use the
@@ -669,14 +668,14 @@ both), on the same day:
 | Logs | loghub's full `Apache.log` (5 MiB) / `Linux.log` (2 MiB) | 11.3-28.9x / 6.3-19.6x |
 
 The structured-data tables and the two CPU Decode rows come from
-`benches/compression_ratio.rs`, built with `--features encodings` so the default
+`examples/compression_ratio/main.rs`, built with `--features encodings` so the default
 build doesn't pull in Parquet:
 
 ```bash
-cargo bench --features encodings --bench compression_ratio -- parquet taxi.parquet hits_0.parquet
-cargo bench --features encodings --bench compression_ratio -- cardinality taxi.parquet hits_0.parquet
-cargo bench --features encodings --bench compression_ratio -- postings --tsv --details collection.tsv
-cargo bench --features encodings --bench compression_ratio -- timeseries nab/*.csv
+cargo run --release --features encodings --example compression_ratio -- parquet taxi.parquet hits_0.parquet
+cargo run --release --features encodings --example compression_ratio -- cardinality taxi.parquet hits_0.parquet
+cargo run --release --features encodings --example compression_ratio -- postings --tsv --details collection.tsv
+cargo run --release --features encodings --example compression_ratio -- timeseries nab/*.csv
 ```
 
 On October 24, 2026 (ratios on any machine; speeds single-threaded on an AWS
@@ -693,15 +692,15 @@ November 4 runs on C4, m8i and m8g follow each item):
   and encoded at 0.44 / 0.42 / 0.29 and 0.18 / 0.17 / 0.24 GiB/s: the README's
   2 GiB/s and 300 MiB/s.
 - Search indexes over 53 datasets in four kinds, as index size / text size.
-  `benches/index_datasets.sh` downloads and prepares them (~15 GB of
+  `examples/index_datasets.sh` downloads and prepares them (~15 GB of
   downloads, 40 GB on disk, skipping whatever is already there), and
   `index_sizes` builds every index on every dataset, four datasets at a time
   with each index on its own thread, and prints the two tables below. On an
   18-core M-series Mac the whole run takes about 3.5 minutes:
 
   ```bash
-  benches/index_datasets.sh ~/index-datasets
-  cargo bench --features encodings --bench compression_ratio -- index_sizes ~/index-datasets/manifest.tsv
+  examples/index_datasets.sh ~/index-datasets
+  cargo run --release --features encodings --example compression_ratio -- index_sizes ~/index-datasets/manifest.tsv
   ```
 
   Prose, logs and relational columns are one document per line (MS MARCO's
@@ -842,15 +841,15 @@ RLE-hybrid catches short runs of the common value. Columns whose runs are
 shorter than 8 come in over it (`ClientIP`: 7.0 bits, rule 4.3), because
 Parquet only run-length encodes runs of 8 or more.
 
-The Floats / Integers / Strings rows come from `benches/compression_ratio_columns.rs`
+The Floats / Integers / Strings rows come from `examples/compression_ratio/encodings.rs`
 (same feature), which runs the crates Vortex builds on: spiraldb's `alp`,
 `fastlanes` and `fsst-rs`. Every column is round-tripped and compared bit for
 bit, and decode is timed single-threaded, best of 5, against the decoded size:
 
 ```bash
-cargo bench --features encodings --bench compression_ratio_columns -- floats taxi.parquet gov10.bin ...
-cargo bench --features encodings --bench compression_ratio_columns -- ints taxi.parquet hits_0.parquet
-cargo bench --features encodings --bench compression_ratio_columns -- strings hits_0.parquet passages.txt ...
+cargo run --release --features encodings --example compression_ratio -- floats taxi.parquet gov10.bin ...
+cargo run --release --features encodings --example compression_ratio -- ints taxi.parquet hits_0.parquet
+cargo run --release --features encodings --example compression_ratio -- strings hits_0.parquet passages.txt ...
 ```
 
 On October 25, 2026 (ratios on any machine; speeds on an AWS m8id.12xlarge,
@@ -983,7 +982,7 @@ GiB/s.
 
 ## HDD, network disk and S3
 
-`benches/blob_read_sweep.py` reads random ranges one at a time on one warm connection, the
+`examples/blob_read_sweep.py` reads random ranges one at a time on one warm connection, the
 same shape as `storage --sweep`. On November 7, 2026, p50 from a VM in S3's region (S3's
 first byte stays at ~100 ms at every size):
 

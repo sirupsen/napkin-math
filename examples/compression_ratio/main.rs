@@ -1,19 +1,26 @@
 // Compression ratios for structured data: columnar tables, inverted indexes
 // and time series. Ratios are against the naive in-memory representation
 // (Arrow buffers, 4 bytes per doc ID, 16 bytes per point), except whole
-// inverted and n-gram indexes, which are against their source text.
+// inverted and n-gram indexes, which are against their source text. floats,
+// ints and strings run the lightweight column encodings in encodings.rs.
 //
-//   cargo bench --features encodings --bench compression_ratio -- parquet hits_0.parquet
-//   cargo bench --features encodings --bench compression_ratio -- cardinality hits_0.parquet
-//   cargo bench --features encodings --bench compression_ratio -- postings collection.tsv
-//   cargo bench --features encodings --bench compression_ratio -- postings --paragraphs dickens
-//   cargo bench --features encodings --bench compression_ratio -- postings --files linux/
-//   cargo bench --features encodings --bench compression_ratio -- timeseries nab/*.csv
-//   cargo bench --features encodings --bench compression_ratio -- columns hits_0.parquet out/ Title URL
-//   cargo bench --features encodings --bench compression_ratio -- index_sizes datasets/manifest.tsv
+//   cargo run --release --features encodings --example compression_ratio -- parquet hits_0.parquet
+//   cargo run --release --features encodings --example compression_ratio -- cardinality hits_0.parquet
+//   cargo run --release --features encodings --example compression_ratio -- postings collection.tsv
+//   cargo run --release --features encodings --example compression_ratio -- postings --paragraphs dickens
+//   cargo run --release --features encodings --example compression_ratio -- postings --files linux/
+//   cargo run --release --features encodings --example compression_ratio -- timeseries nab/*.csv
+//   cargo run --release --features encodings --example compression_ratio -- columns hits_0.parquet out/ Title URL
+//   cargo run --release --features encodings --example compression_ratio -- index_sizes datasets/manifest.tsv
+//   cargo run --release --features encodings --example compression_ratio -- floats taxi.parquet
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::fs::File;
 use std::time::Instant;
+
+mod encodings;
+#[path = "../common/timing.rs"]
+mod timing;
+use timing::{best_of, gib_s};
 
 use arrow_array::cast::AsArray;
 use arrow_array::{Array, RecordBatch};
@@ -70,7 +77,7 @@ fn parquet(path: &str) {
                 std::hint::black_box(batch.unwrap());
             }
         });
-        format!("decode {:.2} GiB/s", naive as f64 / secs / (1 << 30) as f64)
+        format!("decode {:.2} GiB/s", gib_s(naive, secs))
     };
     let plain = WriterProperties::builder()
         .set_dictionary_enabled(false)
@@ -92,7 +99,7 @@ fn parquet(path: &str) {
         report(name, naive, file.len());
         println!(
             "    encode {:.2} GiB/s, {}, 1 thread",
-            naive as f64 / secs / (1 << 30) as f64,
+            gib_s(naive, secs),
             decode(&file)
         );
     }
@@ -152,7 +159,7 @@ fn parquet_pages(path: &str) {
                 std::hint::black_box(batch.unwrap());
             }
         });
-        let gib = |secs: f64| naive as f64 / secs / (1 << 30) as f64;
+        let gib = |secs: f64| gib_s(naive, secs);
         println!(
             "| {kib} KiB | {pages} | {:.2} | {:.1} | {:.2} | {:.1} |",
             gib(encode),
@@ -279,15 +286,12 @@ fn bits(max: u32) -> u8 {
 // Packed bytes of `values`, each minus `minus` in full blocks, without the
 // bit widths, and the number of full blocks.
 fn packed_size(values: &[u32], minus: u32) -> (usize, usize) {
-    let mut blocks = values.chunks_exact(BitPacker4x::BLOCK_LEN);
-    let mut size = 0;
-    let mut n = 0;
-    for block in &mut blocks {
-        let max = block.iter().map(|&v| v - minus).max().unwrap();
-        size += BitPacker4x::compressed_block_size(bits(max));
-        n += 1;
-    }
-    (size + blocks.remainder().iter().map(|&v| varint(v)).sum::<usize>(), n)
+    let (blocks, rest) = values.as_chunks::<{ BitPacker4x::BLOCK_LEN }>();
+    let size: usize = blocks
+        .iter()
+        .map(|block| BitPacker4x::compressed_block_size(bits(block.iter().map(|&v| v - minus).max().unwrap())))
+        .sum();
+    (size + rest.iter().map(|&v| varint(v)).sum::<usize>(), blocks.len())
 }
 
 // The skip list for a term with `blocks` full doc ID blocks, `entry` bytes
@@ -298,16 +302,6 @@ fn skip_size(blocks: usize, entry: usize) -> usize {
     } else {
         varint((blocks * entry) as u32) + blocks * entry
     }
-}
-
-fn best_of<F: FnMut()>(runs: usize, mut f: F) -> f64 {
-    (0..runs)
-        .map(|_| {
-            let start = Instant::now();
-            f();
-            start.elapsed().as_secs_f64()
-        })
-        .fold(f64::MAX, f64::min)
 }
 
 #[derive(Default)]
@@ -583,7 +577,7 @@ fn bitpacking_speed(index: &FxHashMap<String, Postings>) -> Vec<String> {
     let mut packed_len = 0;
     for p in index.values() {
         let mut prev = 0;
-        for block in p.docs.chunks_exact(BitPacker4x::BLOCK_LEN) {
+        for block in p.docs.as_chunks::<{ BitPacker4x::BLOCK_LEN }>().0 {
             let bits = packer.num_bits_sorted(prev, block);
             blocks.push((prev, packed_len, bits, block));
             packed_len += BitPacker4x::compressed_block_size(bits);
@@ -612,12 +606,12 @@ fn bitpacking_speed(index: &FxHashMap<String, Postings>) -> Vec<String> {
         format!(
             "encode bitpacked doc IDs, 1 thread: {:.0} M IDs/s, {:.1} GiB/s of u32 input",
             ids as f64 / encode_secs / 1e6,
-            (ids * 4) as f64 / encode_secs / (1 << 30) as f64
+            gib_s(ids * 4, encode_secs)
         ),
         format!(
             "decode bitpacked doc IDs, 1 thread: {:.0} M IDs/s, {:.1} GiB/s of u32 output (checksum {checksum})",
             ids as f64 / secs / 1e6,
-            (ids * 4) as f64 / secs / (1 << 30) as f64
+            gib_s(ids * 4, secs)
         ),
     ]
 }
@@ -712,7 +706,7 @@ fn index_sizes(path: &str, split: Split, details: bool) -> (Vec<String>, Sizes) 
     (out, Sizes { documents: documents.len(), bytes: raw_len, fractions })
 }
 
-// Every dataset in a manifest written by benches/index_datasets.sh, one per
+// Every dataset in a manifest written by examples/index_datasets.sh, one per
 // line as "kind<TAB>name<TAB>lines|tsv|paragraphs|files<TAB>path" (relative to the
 // manifest), on `jobs` threads, largest first. Prints the per-dataset table
 // and the median of each kind as Markdown.
@@ -959,16 +953,11 @@ fn timeseries(paths: &[String]) {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args()
-        .skip(1)
-        .filter(|a| a != "--bench")
-        .collect();
-    let usage = "usage: compression_ratio parquet|parquet_pages|cardinality|postings|timeseries|columns|index_sizes <files...>";
-    // `cargo bench --bench <name>` adds --bench to the arguments; without any
-    // other arguments there is nothing to measure, so skip quietly.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let usage = "usage: compression_ratio parquet|parquet_pages|cardinality|postings|timeseries|columns|index_sizes|floats|ints|strings <files...>";
     if args.is_empty() {
-        eprintln!("{usage} (no arguments, skipping)");
-        return;
+        eprintln!("{usage}");
+        std::process::exit(2);
     }
     let (mode, files) = args.split_first().expect(usage);
     match mode.as_str() {
@@ -988,6 +977,9 @@ fn main() {
             files.iter().for_each(|f| postings(f, split, details))
         }
         "timeseries" => timeseries(files),
+        "floats" => files.iter().for_each(|f| encodings::floats(f)),
+        "ints" => files.iter().for_each(|f| encodings::ints(f)),
+        "strings" => files.iter().for_each(|f| encodings::strings(f)),
         "columns" => columns(files),
         "index_sizes" => {
             let jobs = std::thread::available_parallelism().map_or(4, |n| n.get() / 4).max(1);

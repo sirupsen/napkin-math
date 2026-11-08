@@ -1,8 +1,8 @@
 bench:
-	./run --bench napkin_math
+	cargo bench
 
 test:
-	cargo bench --bench napkin_math -- --test
+	cargo bench -- --test
 
 check:
 	script/check-readme

@@ -2,19 +2,19 @@
 # Downloads and prepares the search index datasets into a directory and
 # writes its manifest.tsv, for:
 #
-#   benches/index_datasets.sh ~/index-datasets
-#   cargo bench --features encodings --bench compression_ratio -- index_sizes ~/index-datasets/manifest.tsv
+#   examples/index_datasets.sh ~/index-datasets
+#   cargo run --release --features encodings --example compression_ratio -- index_sizes ~/index-datasets/manifest.tsv
 #
 # About 15 GB of downloads and 40 GB on disk. Every step skips its output if it
 # already exists, so rerunning only fetches what's missing. Needs curl, git, jq,
-# unzip and a built compression_ratio bench (for Parquet columns).
+# unzip and the compression_ratio example (for Parquet columns).
 set -euo pipefail
 dir="${1:?usage: index_datasets.sh <dir>}"
 mkdir -p "${dir}"/{raw,prose,code,logs,columns}
 dir="$(cd "${dir}" && pwd)"
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cargo build --release --features encodings --bench compression_ratio --manifest-path "${repo}/Cargo.toml" -q
-bench="$(ls -t "${repo}"/target/release/deps/compression_ratio-* | grep -E '/compression_ratio-[0-9a-f]+$' | head -1)"
+cargo build --release --features encodings --example compression_ratio --manifest-path "${repo}/Cargo.toml" -q
+bench="${repo}/target/release/examples/compression_ratio"
 manifest=()
 
 # fetch <url> <file>: download into raw/ unless it's there.

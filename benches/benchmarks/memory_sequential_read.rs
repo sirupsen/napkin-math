@@ -365,7 +365,7 @@ fn memory_sequential_read_benchmark(c: &mut Criterion) {
         want
     );
 
-    // Keep all-core benchmarks on a single hardware thread per core after `./run` disables HT.
+    // Keep all-core benchmarks on one hardware thread per core.
     let core_ids = Arc::new(core_affinity::get_core_ids().unwrap());
     let threaded_non_vectorized = ThreadedMemoryReadBenchmark::new(
         core_ids.clone(),

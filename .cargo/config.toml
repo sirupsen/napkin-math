@@ -1,0 +1,4 @@
+# The README numbers are measured with everything the host CPU has (AVX-512, SVE, AES, ...).
+# A RUSTFLAGS environment variable replaces this rather than adding to it.
+[build]
+rustflags = ["-C", "target-cpu=native"]

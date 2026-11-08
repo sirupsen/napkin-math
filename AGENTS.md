@@ -11,22 +11,22 @@ IPs, bucket names or credentials.
 
 ## Layout
 
-- `benches/napkin_math.rs` registers the Criterion groups in `benches/benchmarks/`.
-- Every other `benches/*.rs` is a standalone tool with `bench = false`: plain `cargo bench` skips it, `cargo bench --bench storage -- <args>` runs it, and without arguments it prints its usage and exits.
-- `benches/cpu_compress.rs` measures compression ratio and speed on real files.
-- `benches/compression_ratio.rs` (`--features encodings`) measures Parquet, posting-list and Gorilla ratios.
-- `benches/index_datasets.sh <dir>` downloads the 53 search-index datasets and writes `<dir>/manifest.tsv`; `compression_ratio -- index_sizes <dir>/manifest.tsv` rebuilds the BENCHMARKING index tables from it in a few minutes.
-- `benches/compression_ratio_columns.rs` (`--features encodings`) measures ALP, FastLanes FOR/delta and FSST per column, with round-trip checks and decode speed.
-- `benches/storage_durable_write.rs` (no dependencies) measures pwrite + fdatasync commits, with flush counts from `/proc/diskstats`.
-- `run` builds, then runs `cargo bench`; with `NAPKIN_TUNE=1` it calls `sudo` itself, so don't wrap it in `sudo`.
-- `benches/storage.rs` (disk rows) and `benches/network.rs` (network rows, `--server` on one host) have no dependencies.
+- `benches/napkin_math.rs` registers the Criterion groups in `benches/benchmarks/`; it is the only bench target, so `cargo bench` runs it.
+- `examples/` holds the standalone tools. Each takes arguments (`cargo run --release --example storage -- <args>`) and prints its usage without them. They share `examples/common/` via `#[path]`.
+- `examples/storage.rs` (disk rows), `storage_durable_write.rs` (pwrite + fdatasync commits, with flush counts from `/proc/diskstats`) and `network.rs` (network rows, `--server` on one host) have no dependencies.
+- `examples/cpu_compress.rs` measures compression ratio and speed on real files.
+- `examples/services.sh` sets up nginx, HAProxy, Redis, Memcached, Postgres and MySQL on a throwaway VM and runs `examples/services.rs` against them.
+- `examples/compression_ratio/` (`--features encodings`) measures Parquet, posting-list and Gorilla ratios, and in `encodings.rs` ALP, FastLanes FOR/delta and FSST per column, with round-trip checks and decode speed.
+- `examples/index_datasets.sh <dir>` downloads the 53 search-index datasets and writes `<dir>/manifest.tsv`; `compression_ratio -- index_sizes <dir>/manifest.tsv` rebuilds the BENCHMARKING index tables from it in a few minutes.
+- `.cargo/config.toml` sets `-C target-cpu=native` for every build. A `RUSTFLAGS` environment variable replaces it.
+- `script/tune <command>` runs a command with turbo off, the `performance` governor and ASLR off. It calls `sudo` itself, so don't wrap it in `sudo`.
 - `newsletter/` is unrelated to the README benchmarks.
 
 ## Running
 
 ```bash
-./run --bench napkin_math                        # everything
-./run --bench napkin_math -- 'syscall|hash'      # a subset (regex)
+cargo bench                                      # everything
+cargo bench -- 'syscall|hash'                    # a subset (regex)
 make test                                        # each benchmark once, smoke test
 make check                                       # README tables + clippy, what CI runs
 ```
@@ -35,8 +35,7 @@ make check                                       # README tables + clippy, what 
   VM needs `build-essential pkg-config` and rustup.
 - Criterion filters are substrings/regexes: `memory_random` also matches
   `memory_random_read_latency`, and `cache_read` matches `cache_read_latency`.
-- `./run` adds `-C target-cpu=native` to `RUSTFLAGS`. `NAPKIN_TUNE=1` (turbo off,
-  `performance` governor, ASLR off) is for A/B runs on one host, not README numbers.
+- `script/tune` is for A/B runs on one host, not README numbers.
 - Check `df -h` before disk benchmarks; `storage` needs 2x the test size.
 - For a fresh VM, use `script/bench-vm` (see BENCHMARKING.md): it deletes the VM
   when done and by a hard deadline. Run `script/bench-vm sweep` at the end of a
@@ -77,7 +76,7 @@ make check                                       # README tables + clippy, what 
   (31 with one): its prefetcher runs a fixed distance ahead per stream. On x86,
   2 MiB huge pages are worth ~10% for one thread's sequential read.
 - nginx closes a keep-alive connection after 1000 requests unless
-  `keepalive_requests` is raised; `benches/services.sh` raises it.
+  `keepalive_requests` is raised; `examples/services.sh` raises it.
 - C4 capacity in `us-central1` ran out on November 4, 2026; `script/bench-vm gcp
   ... --zone us-east4-a` worked. C4 VMs come as Xeon 8581C or 6985P-C
   depending on the zone, so record `lscpu`.

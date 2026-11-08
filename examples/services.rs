@@ -2,8 +2,8 @@
 // one connection, one request at a time. No dependencies; each protocol is the
 // few bytes it takes to ask for one small value.
 //
-//   benches/services.sh                     # Ubuntu: install, configure and measure all of them
-//   cargo bench --bench services -- redis=127.0.0.1:6379 postgres=127.0.0.1:5432 --secs 10
+//   examples/services.sh                     # Ubuntu: install, configure and measure all of them
+//   cargo run --release --example services -- redis=127.0.0.1:6379 postgres=127.0.0.1:5432 --secs 10
 //
 // Targets are kind=host:port, where kind is http, redis, memcached, postgres
 // or mysql. Every request reads a random key of `kv`, a 100k-row table of
@@ -200,10 +200,7 @@ fn mysql(c: &mut Conn, key: u64) {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args()
-        .skip(1)
-        .filter(|a| a != "--bench")
-        .collect();
+    let args: Vec<String> = std::env::args().skip(1).collect();
     let usage = "usage: services kind=host:port ... [--secs 10]   (kind: http redis memcached postgres mysql)";
     let mut secs = 10;
     let mut targets = vec![];
@@ -218,8 +215,8 @@ fn main() {
         i += 1;
     }
     if targets.is_empty() {
-        eprintln!("{} (no arguments, skipping)", usage);
-        return;
+        eprintln!("{usage}");
+        std::process::exit(2);
     }
     let mut x = 0x9e37_79b9_7f4a_7c15u64;
     for (kind, addr) in targets {

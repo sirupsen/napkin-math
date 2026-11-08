@@ -9,9 +9,9 @@
 #
 # The working tree (tracked and untracked, minus ignored files) is uploaded to a bucket. The VM
 # installs Rust, restores a cached target/ for its CPU and Cargo.lock, runs the command in the
-# repo with RUSTFLAGS='-C target-cpu=native', uploads the output and deletes itself. It also
-# deletes itself --ttl minutes after boot whatever happens: on AWS via a shutdown timer and
-# terminate-on-shutdown, on GCP via --max-run-duration with DELETE plus the same timer.
+# repo, uploads the output and deletes itself. It also deletes itself --ttl minutes after boot
+# whatever happens: on AWS via a shutdown timer and terminate-on-shutdown, on GCP via
+# --max-run-duration with DELETE plus the same timer.
 #
 # Account settings live in the gitignored .bench-vm.env at the repo root:
 #   AWS_PROFILE=...  AWS_BUCKET=...  AWS_BUCKET_REGION=...  AWS_INSTANCE_PROFILE=...  AWS_REGIONS="us-west-2 us-east-2"
@@ -64,7 +64,7 @@ if get "cache/$KEY.tar.zst" /tmp/cache.tar.zst; then
   HIT=1
 fi
 chown -R "$U:$U" "$H"
-printf '%s\n' 'source ~/.cargo/env' 'cd ~/repo' "export RUSTFLAGS='-C target-cpu=native'" "$CMD" > /tmp/cmd.sh
+printf '%s\n' 'source ~/.cargo/env' 'cd ~/repo' "$CMD" > /tmp/cmd.sh
 sudo -u "$U" -H bash /tmp/cmd.sh > /tmp/out.log 2>&1
 echo "exit $?" >> /tmp/out.log
 put /tmp/out.log "runs/$RUN/out.log"

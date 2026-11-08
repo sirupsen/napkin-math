@@ -3,12 +3,18 @@
 // builds. Speeds are best-of-N over at least one second, reported against the
 // uncompressed size, like lzbench.
 //
-//   cargo bench --bench cpu_compress -- silesia.tar dickens ...
-//   cargo bench --bench cpu_compress -- --chunks silesia.tar   # lz4 and zstd -1, one call per chunk
+//   cargo run --release --example cpu_compress -- silesia.tar dickens ...
+//   cargo run --release --example cpu_compress -- --chunks silesia.tar   # lz4 and zstd -1, one call per chunk
+#[path = "common/timing.rs"]
+mod timing;
 use std::io::{Read, Write};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use timing::mib_s;
 
-const MIN_TIME: Duration = Duration::from_secs(1);
+// Each speed is the fastest call in at least this long.
+fn best_of(f: impl FnMut()) -> f64 {
+    timing::best_for(Duration::from_secs(1), f)
+}
 
 // Both write into a caller's buffer that is reused across calls, as lzbench does: allocating a
 // fresh output each call would time the page faults of a buffer the size of the file. `out` only
@@ -147,23 +153,6 @@ fn codecs() -> Vec<Codec> {
     ]
 }
 
-fn best_of<F: FnMut()>(mut f: F) -> Duration {
-    let started = Instant::now();
-    let mut best = Duration::MAX;
-    loop {
-        let start = Instant::now();
-        f();
-        best = best.min(start.elapsed());
-        if started.elapsed() >= MIN_TIME {
-            return best;
-        }
-    }
-}
-
-fn mib_per_sec(bytes: usize, elapsed: Duration) -> f64 {
-    bytes as f64 / (1024.0 * 1024.0) / elapsed.as_secs_f64()
-}
-
 // lz4 and zstd -1 on the file split into chunks, one call per chunk, each on its own. zstd reuses
 // its context, as anything calling it in a loop would. A README row's size is the largest that
 // takes about as long as the smallest, and its throughput the fastest at any size.
@@ -176,16 +165,16 @@ fn chunks(path: &str) {
         let sample = if size < 4096 { &input[..input.len().min(16 << 20)] } else { &input[..] };
         let parts: Vec<&[u8]> = sample.chunks_exact(size).collect();
         let total = parts.len() * size;
-        let per_chunk = |d: Duration| d.as_secs_f64() * 1e6 / parts.len() as f64;
-        let row = |codec: &str, compressed: usize, c: Duration, d: Duration| {
+        let per_chunk = |secs: f64| secs * 1e6 / parts.len() as f64;
+        let row = |codec: &str, compressed: usize, c: f64, d: f64| {
             println!(
                 "| {} B | {} | {:.2} | {:.0} | {:.2} | {:.0} | {:.2} |",
                 size,
                 codec,
                 total as f64 / compressed as f64,
-                mib_per_sec(total, c),
+                mib_s(total, c),
                 per_chunk(c),
-                mib_per_sec(total, d),
+                mib_s(total, d),
                 per_chunk(d),
             );
         };
@@ -235,15 +224,10 @@ fn main() {
         .ok()
         .map(|s| s.split(',').map(|c| c.trim().to_string()).collect());
 
-    let paths: Vec<String> = std::env::args()
-        .skip(1)
-        .filter(|a| a != "--bench")
-        .collect();
-    // `cargo bench --bench <name>` adds --bench to the arguments; without any
-    // other arguments there is nothing to measure, so skip quietly.
+    let paths: Vec<String> = std::env::args().skip(1).collect();
     if paths.is_empty() {
-        eprintln!("usage: cpu_compress [--chunks] <files...> (no arguments, skipping)");
-        return;
+        eprintln!("usage: cpu_compress [--chunks] <files...>");
+        std::process::exit(2);
     }
     if paths[0] == "--chunks" {
         for path in &paths[1..] {
@@ -284,8 +268,8 @@ fn main() {
                 input.len() as f64 / (1024.0 * 1024.0),
                 codec.name,
                 input.len() as f64 / compressed.len() as f64,
-                mib_per_sec(input.len(), compress),
-                mib_per_sec(input.len(), decompress),
+                mib_s(input.len(), compress),
+                mib_s(input.len(), decompress),
             );
         }
     }
