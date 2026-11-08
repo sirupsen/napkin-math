@@ -67,6 +67,18 @@ fn legacy_black_box<T>(dummy: T) -> T {
     }
 }
 
+// Sattolo's algorithm: a random permutation that is a single cycle, so a chase that follows it
+// visits every slot before repeating.
+fn sattolo(len: usize, seed: u64) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..len).collect();
+    let mut rng = StdRng::seed_from_u64(seed);
+    for i in (1..len).rev() {
+        let j = rng.random_range(0..i);
+        order.swap(i, j);
+    }
+    order
+}
+
 // One 64-byte cache line per node. Only the first word is used as the "next"
 // pointer; the rest pads the node out so every hop touches a new line.
 type Node = [usize; 8];
@@ -81,7 +93,19 @@ pub(super) struct PointerChase {
 }
 
 impl PointerChase {
+    /// A random single-cycle chase over `bytes`.
     pub(super) fn new(bytes: usize, huge_pages: bool) -> Self {
+        let chase = Self::mapped(bytes, huge_pages);
+        for (i, next) in sattolo(chase.len, 0xc0ffee).into_iter().enumerate() {
+            unsafe {
+                (*chase.ptr.add(i))[0] = next;
+            }
+        }
+        chase
+    }
+
+    /// The mapping alone, for a caller that lays out its own chase.
+    fn mapped(bytes: usize, huge_pages: bool) -> Self {
         let len = bytes / std::mem::size_of::<Node>();
         let ptr = unsafe {
             let ptr = libc::mmap(
@@ -96,21 +120,6 @@ impl PointerChase {
             advise_huge_pages(ptr, bytes, huge_pages);
             ptr as *mut Node
         };
-
-        // Sattolo's algorithm: a random permutation that is a single cycle, so
-        // the chase visits every line before repeating.
-        let mut order: Vec<usize> = (0..len).collect();
-        let mut rng = StdRng::seed_from_u64(0xc0ffee);
-        for i in (1..len).rev() {
-            let j = rng.random_range(0..i);
-            order.swap(i, j);
-        }
-        for (i, &next) in order.iter().enumerate() {
-            unsafe {
-                (*ptr.add(i))[0] = next;
-            }
-        }
-
         Self { ptr, len, bytes }
     }
 
@@ -319,16 +328,11 @@ fn memory_write_latency_benchmark(c: &mut Criterion) {
 fn memory_random_block_latency_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_random_block_latency");
     for block in [64usize, 128, 256, 512, 1 << 10, 4 << 10, 16 << 10] {
-        let chase = PointerChase::new(GIB, true);
+        let chase = PointerChase::mapped(GIB, true);
         let words = block / 8;
         let blocks = GIB / block;
         let base = chase.ptr as *mut u64;
-        let mut order: Vec<usize> = (0..blocks).collect();
-        let mut rng = StdRng::seed_from_u64(0xb10c);
-        for i in (1..blocks).rev() {
-            let j = rng.random_range(0..i);
-            order.swap(i, j);
-        }
+        let order = sattolo(blocks, 0xb10c);
         unsafe { ptr::write_bytes(base, 0, GIB / 8) };
         for (i, next) in order.iter().enumerate() {
             unsafe { base.add(i * words).write(*next as u64) };

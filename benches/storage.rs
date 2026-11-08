@@ -18,7 +18,9 @@
 // skip the flash; --no-precondition skips that for raw devices (an HDD has no
 // such shortcut and takes hours to fill). Buffered reads drop the page cache
 // first, which needs root.
-use std::alloc::{alloc_zeroed, Layout};
+#[path = "common/disk.rs"]
+mod disk;
+use disk::{parse_size, Buf, O_DIRECT};
 use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom};
 use std::os::unix::fs::{FileExt, OpenOptionsExt};
@@ -27,38 +29,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-const O_DIRECT: i32 = 0o40000;
-#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-const O_DIRECT: i32 = 0o200000;
-#[cfg(not(target_os = "linux"))]
-const O_DIRECT: i32 = 0;
-
 const KIB: u64 = 1 << 10;
 const MIB: u64 = 1 << 20;
-
-struct Buf(*mut u8, usize);
-unsafe impl Send for Buf {}
-
-impl Buf {
-    fn new(len: usize) -> Buf {
-        let ptr = unsafe { alloc_zeroed(Layout::from_size_align(len, 4096).unwrap()) };
-        // Not all zeroes, so no layer can skip or compress the write.
-        let slice = unsafe { std::slice::from_raw_parts_mut(ptr, len) };
-        for (i, b) in slice.iter_mut().enumerate() {
-            *b = (i * 31 + 7) as u8;
-        }
-        Buf(ptr, len)
-    }
-
-    fn get(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self.0, self.1) }
-    }
-
-    fn get_mut(&mut self) -> &mut [u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.0, self.1) }
-    }
-}
 
 #[derive(Clone, Copy, PartialEq)]
 enum Op {
@@ -80,18 +52,6 @@ struct Test {
     threads: usize,
     depth: usize,
     direct: bool,
-}
-
-fn parse_size(s: &str) -> u64 {
-    let s = s.to_ascii_lowercase();
-    let (num, mult) = match s.chars().last().unwrap() {
-        'k' => (&s[..s.len() - 1], KIB),
-        'm' => (&s[..s.len() - 1], MIB),
-        'g' => (&s[..s.len() - 1], 1 << 30),
-        't' => (&s[..s.len() - 1], 1 << 40),
-        _ => (&s[..], 1),
-    };
-    num.parse::<u64>().unwrap() * mult
 }
 
 fn open(path: &str, direct: bool) -> File {

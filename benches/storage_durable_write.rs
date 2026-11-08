@@ -13,7 +13,9 @@
 // the new file size. On Linux it also reports how many flushes and writes the
 // device saw per commit (from /proc/diskstats), which shows whether fdatasync
 // reached the device at all.
-use std::alloc::{alloc_zeroed, Layout};
+#[path = "common/disk.rs"]
+mod disk;
+use disk::{parse_size, Buf, O_DIRECT};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::os::unix::fs::{FileExt, MetadataExt, OpenOptionsExt};
@@ -22,42 +24,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 const SLICE: u64 = 64 << 20;
-
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-const O_DIRECT: i32 = 0o40000;
-#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-const O_DIRECT: i32 = 0o200000;
-#[cfg(not(target_os = "linux"))]
-const O_DIRECT: i32 = 0;
-
-struct Buf(*mut u8, usize);
-unsafe impl Send for Buf {}
-
-impl Buf {
-    fn new(len: usize) -> Buf {
-        let ptr = unsafe { alloc_zeroed(Layout::from_size_align(len, 4096).unwrap()) };
-        // Not all zeroes, so no layer can skip or compress the write.
-        let slice = unsafe { std::slice::from_raw_parts_mut(ptr, len) };
-        for (i, b) in slice.iter_mut().enumerate() {
-            *b = (i * 31 + 7) as u8;
-        }
-        Buf(ptr, len)
-    }
-
-    fn get(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self.0, self.1) }
-    }
-}
-
-fn parse_size(s: &str) -> usize {
-    let s = s.to_ascii_lowercase();
-    let (num, mult) = match s.chars().last().unwrap() {
-        'k' => (&s[..s.len() - 1], 1 << 10),
-        'm' => (&s[..s.len() - 1], 1 << 20),
-        _ => (&s[..], 1),
-    };
-    num.parse::<usize>().unwrap() * mult
-}
 
 fn human(bytes: usize) -> String {
     if bytes >= 1 << 20 {
@@ -302,7 +268,7 @@ fn main() {
     };
     let sizes: Vec<usize> = flag("--sizes", "8k,64k,1m")
         .split(',')
-        .map(parse_size)
+        .map(|s| parse_size(s) as usize)
         .collect();
     let writers: Vec<usize> = flag("--writers", "1,32")
         .split(',')
