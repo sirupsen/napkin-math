@@ -55,8 +55,8 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | SSD Sequential Read (8 KiB), 1 thread                                   | 50 μs   | 5 GiB/s    |
 | SSD Random Read (8 KiB), 1 thread                                       | 100 μs  | 5 GiB/s    |
 | SSD Random Write (8 KiB), 1 thread                                      | 30 μs   | 3 GiB/s    |
-| SSD Sequential Write (8 KiB), 1 thread                                  | 30 μs   | 3 GiB/s    |
 | SSD Sequential Durable Write (8 KiB), 1 thread†                         | 30 μs   | 3 GiB/s    |
+| SSD Sequential Write (8 KiB), 1 thread                                  | 30 μs   | 3 GiB/s    |
 | Network Same-Zone (32 KiB)                                              | 100 μs  | 3 GiB/s    |
 | Network Cross-Zone (64 KiB)                                             | 500 μs  | 3 GiB/s    |
 | Blob Storage, Zonal Read (128 KiB)                                      | 50 ms   | 3 GiB/s    |
@@ -66,36 +66,36 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | CPU Serialize (JSON, Protobuf, 256 B), 1 thread                         | 200 ns  | 2 GiB/s    |
 | CPU Decompress (lz4, zstd -1, 4 KiB), 1 thread                          | 3 μs    | 2 GiB/s    |
 | CPU Decode Parquet (dictionary + zstd, 4 KiB page), 1 thread            | 10 μs   | 2 GiB/s    |
-| Blob Storage, Zonal Write (128 KiB)                                     | 200 ms  | 2 GiB/s    |
 | Blob Storage, Regional Write (128 KiB)                                  | 200 ms  | 2 GiB/s    |
-| Network Disk, Zonal Sequential Read (8 KiB), 1 thread                   | 500 μs  | 1 GiB/s    |
+| Blob Storage, Zonal Write (128 KiB)                                     | 200 ms  | 2 GiB/s    |
+| Network Disk, Regional Random Read (8 KiB), 1 thread                    | 500 μs  | 1 GiB/s    |
 | Network Disk, Regional Sequential Read (8 KiB), 1 thread                | 500 μs  | 1 GiB/s    |
 | Network Disk, Zonal Random Read (8 KiB), 1 thread                       | 500 μs  | 1 GiB/s    |
-| Network Disk, Regional Random Read (8 KiB), 1 thread                    | 500 μs  | 1 GiB/s    |
-| Network Disk, Zonal Sequential Write (8 KiB), 1 thread                  | 500 μs  | 1 GiB/s    |
-| Network Disk, Zonal Sequential Durable Write (8 KiB), 1 thread†         | 500 μs  | 1 GiB/s    |
 | Network Disk, Zonal Random Write (8 KiB), 1 thread                      | 500 μs  | 1 GiB/s    |
-| Network Disk, Regional Sequential Write (8 KiB), 1 thread               | 1 ms    | 1 GiB/s    |
+| Network Disk, Zonal Sequential Durable Write (8 KiB), 1 thread†         | 500 μs  | 1 GiB/s    |
+| Network Disk, Zonal Sequential Read (8 KiB), 1 thread                   | 500 μs  | 1 GiB/s    |
+| Network Disk, Zonal Sequential Write (8 KiB), 1 thread                  | 500 μs  | 1 GiB/s    |
 | Network Disk, Regional Random Write (8 KiB), 1 thread                   | 1 ms    | 1 GiB/s    |
 | Network Disk, Regional Sequential Durable Write (8 KiB), 1 thread†      | 1 ms    | 1 GiB/s    |
+| Network Disk, Regional Sequential Write (8 KiB), 1 thread               | 1 ms    | 1 GiB/s    |
 | Network Cross-Region, Cross-Atlantic (1 MiB)\*                          | 100 ms  | 1 GiB/s    |
 | CPU Deserialize (JSON, Protobuf, 256 B), 1 thread                       | 500 ns  | 500 MiB/s  |
 | CPU Compress (lz4, zstd -1, 4 KiB), 1 thread                            | 10 μs   | 500 MiB/s  |
 | Network Cross-Region, US ↔ Singapore (1 MiB)\*                          | 200 ms  | 500 MiB/s  |
 | CPU Sort (64-bit integers, 4 KiB), 1 thread                             | 3 μs    | 300 MiB/s  |
 | CPU Encode Parquet (dictionary + zstd, 4 KiB page), 1 thread            | 50 μs   | 300 MiB/s  |
-| Network Disk, Zonal, HDD Sequential Read (8 KiB), 1 thread              | 500 μs  | 250 MiB/s  |
 | Network Disk, Regional, HDD Sequential Read (8 KiB), 1 thread           | 500 μs  | 250 MiB/s  |
-| Network Disk, Zonal, HDD Sequential Write (8 KiB), 1 thread             | 500 μs  | 250 MiB/s  |
 | Network Disk, Zonal, HDD Random Write (8 KiB), 1 thread                 | 500 μs  | 250 MiB/s  |
-| Network Disk, Zonal, HDD Random Read (256 KiB), 1 thread                | 20 ms   | 250 MiB/s  |
+| Network Disk, Zonal, HDD Sequential Read (8 KiB), 1 thread              | 500 μs  | 250 MiB/s  |
+| Network Disk, Zonal, HDD Sequential Write (8 KiB), 1 thread             | 500 μs  | 250 MiB/s  |
 | Network Disk, Regional, HDD Random Read (256 KiB), 1 thread             | 20 ms   | 250 MiB/s  |
+| Network Disk, Zonal, HDD Random Read (256 KiB), 1 thread                | 20 ms   | 250 MiB/s  |
 | HDD Sequential Write (8 KiB), 1 thread                                  | 50 μs   | 200 MiB/s  |
 | HDD Sequential Read (8 KiB), 1 thread                                   | 100 μs  | 200 MiB/s  |
 | Network Disk, Zonal, HDD Sequential Durable Write (8 KiB), 1 thread†    | 500 μs  | 200 MiB/s  |
+| Network Disk, Regional, HDD Random Write (8 KiB), 1 thread              | 1 ms    | 200 MiB/s  |
 | Network Disk, Regional, HDD Sequential Durable Write (8 KiB), 1 thread† | 1 ms    | 200 MiB/s  |
 | Network Disk, Regional, HDD Sequential Write (8 KiB), 1 thread          | 1 ms    | 200 MiB/s  |
-| Network Disk, Regional, HDD Random Write (8 KiB), 1 thread              | 1 ms    | 200 MiB/s  |
 | HDD Random Write (256 KiB), 1 thread                                    | 5 ms    | 100 MiB/s  |
 | HDD Random Read (256 KiB), 1 thread                                     | 10 ms   | 100 MiB/s  |
 | Blob Storage, Regional Read (128 KiB), 1 connection                     | 100 ms  | 100 MiB/s  |
@@ -108,14 +108,14 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | CPU Context Switch                                                      | 1 μs    |            |
 | CPU Cross-core Wake-up                                                  | 2 μs    |            |
 | CPU TCP Connect (+1 RTT)                                                | 10 μs   |            |
-| Proxy Request (HAProxy, Nginx) (+1 RTT)                                 | 20 μs   |            |
 | Cache Get (Memcached, Redis) (+1 RTT)                                   | 20 μs   |            |
+| Proxy Request (HAProxy, Nginx) (+1 RTT)                                 | 20 μs   |            |
 | CPU Thread Spawn                                                        | 30 μs   |            |
 | Database Query, primary key (MySQL, Postgres) (+1 RTT)                  | 30 μs   |            |
-| CPU TLS 1.3 Handshake (+1 RTT)                                          | 300 μs  |            |
 | CPU Process Spawn                                                       | 300 μs  |            |
-| Blob Storage, Zonal Conditional Write (128 KiB)                         | 100 ms  |            |
+| CPU TLS 1.3 Handshake (+1 RTT)                                          | 300 μs  |            |
 | Blob Storage, Regional Conditional Write (128 KiB)                      | 100 ms  |            |
+| Blob Storage, Zonal Conditional Write (128 KiB)                         | 100 ms  |            |
 | Blob Storage, Zonal List (1000 keys)                                    | 100 ms  |            |
 | Blob Storage, Regional List (1000 keys)                                 | 150 ms  |            |
 

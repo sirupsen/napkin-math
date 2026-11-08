@@ -88,7 +88,7 @@ make test                                        # each benchmark once, smoke te
   magnitude honest.
 - Row names are `[Device] [Access pattern] [Operation]`, with `, Zonal` /
   `, Regional` after the device where both exist. Rows sort by throughput, then
-  by latency, lowest first.
+  by latency, lowest first, then by name.
 - Throughput is the most you can get (many requests in flight).
 - Keep prose terse and unhedged. Methodology goes in BENCHMARKING.md, not the README.
 - Show README changes for review before pushing.
