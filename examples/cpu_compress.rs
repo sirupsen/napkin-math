@@ -4,7 +4,7 @@
 // uncompressed size, like lzbench.
 //
 //   cargo run --release --example cpu_compress -- silesia.tar dickens ...
-//   cargo run --release --example cpu_compress -- --chunks silesia.tar   # lz4 and zstd -1, one call per chunk
+//   cargo run --release --example cpu_compress -- --chunks silesia.tar   # lz4 (both) and zstd -1, one call per chunk
 #[path = "common/timing.rs"]
 mod timing;
 use std::io::{Read, Write};
@@ -44,6 +44,17 @@ fn lz4_compress(input: &[u8], out: &mut Vec<u8>) -> usize {
 
 fn lz4_decompress(input: &[u8], out: &mut [u8]) -> usize {
     lz4_flex::block::decompress_into(input, out).unwrap()
+}
+
+// The C reference library, which is what lzbench and most "lz4" numbers measure.
+fn lz4c_compress(input: &[u8], out: &mut Vec<u8>) -> usize {
+    let buf = grow(out, lz4::block::compress_bound(input.len()).unwrap());
+    lz4::block::compress_to_buffer(input, None, false, buf).unwrap()
+}
+
+fn lz4c_decompress(input: &[u8], out: &mut [u8]) -> usize {
+    let len = out.len() as i32;
+    lz4::block::decompress_to_buffer(input, Some(len), out).unwrap()
 }
 
 fn snappy_compress(input: &[u8], out: &mut Vec<u8>) -> usize {
@@ -106,6 +117,11 @@ fn codecs() -> Vec<Codec> {
             decompress: lz4_decompress,
         },
         Codec {
+            name: "lz4",
+            compress: lz4c_compress,
+            decompress: lz4c_decompress,
+        },
+        Codec {
             name: "snappy",
             compress: snappy_compress,
             decompress: snappy_decompress,
@@ -153,7 +169,7 @@ fn codecs() -> Vec<Codec> {
     ]
 }
 
-// lz4 and zstd -1 on the file split into chunks, one call per chunk, each on its own. zstd reuses
+// lz4_flex, C lz4 and zstd -1 on the file split into chunks, one call per chunk, each on its own. zstd reuses
 // its context, as anything calling it in a loop would. A README row's size is the largest that
 // takes about as long as the smallest, and its throughput the fastest at any size.
 fn chunks(path: &str) {
@@ -179,22 +195,29 @@ fn chunks(path: &str) {
             );
         };
 
-        let packed: Vec<Vec<u8>> = parts.iter().map(|p| lz4_flex::block::compress(p)).collect();
-        let mut lz4_out = vec![0u8; lz4_flex::block::get_maximum_output_size(size)];
-        let c = best_of(|| {
-            for p in &parts {
-                let n = lz4_flex::block::compress_into(p, &mut lz4_out).unwrap();
-                std::hint::black_box(n);
-            }
-        });
         let mut out = vec![0u8; size];
-        let d = best_of(|| {
-            for p in &packed {
-                let n = lz4_flex::block::decompress_into(p, &mut out).unwrap();
-                std::hint::black_box((n, out.as_ptr()));
-            }
-        });
-        row("lz4_flex", packed.iter().map(Vec::len).sum(), c, d);
+        for codec in codecs().into_iter().filter(|c| c.name.starts_with("lz4")) {
+            let mut scratch = Vec::new();
+            let packed: Vec<Vec<u8>> = parts
+                .iter()
+                .map(|p| {
+                    let n = (codec.compress)(p, &mut scratch);
+                    scratch[..n].to_vec()
+                })
+                .collect();
+            let c = best_of(|| {
+                for p in &parts {
+                    std::hint::black_box((codec.compress)(p, &mut scratch));
+                }
+            });
+            let d = best_of(|| {
+                for p in &packed {
+                    let n = (codec.decompress)(p, &mut out);
+                    std::hint::black_box((n, out.as_ptr()));
+                }
+            });
+            row(codec.name, packed.iter().map(Vec::len).sum(), c, d);
+        }
 
         let mut compressor = zstd::bulk::Compressor::new(1).unwrap();
         let mut decompressor = zstd::bulk::Decompressor::new().unwrap();

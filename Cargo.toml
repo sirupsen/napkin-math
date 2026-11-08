@@ -35,7 +35,9 @@ crc32fast = "1"
 criterion = "0.8"
 flate2 = "1"
 libc = "0.2"
-lz4_flex = "0.14"
+lz4 = "1"
+# The default safe-encode/safe-decode features add bounds checks the C library doesn't have.
+lz4_flex = { version = "0.14", default-features = false, features = ["std"] }
 postcard = { version = "1", features = ["alloc"] }
 prost = "0.14"
 rand = "0.10"

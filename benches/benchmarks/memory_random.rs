@@ -146,7 +146,7 @@ impl PointerChase {
     // Every line points at the next one, so the prefetchers run ahead of the
     // chase: the latency of one sequential read, one at a time.
     pub(super) fn sequential(bytes: usize, huge_pages: bool) -> Self {
-        let chase = Self::new(bytes, huge_pages);
+        let chase = Self::mapped(bytes, huge_pages);
         for i in 0..chase.len {
             unsafe {
                 (*chase.ptr.add(i))[0] = (i + 1) % chase.len;
@@ -205,21 +205,26 @@ pub(super) fn chase_group(c: &mut Criterion, group_name: &str, shapes: &[(&str, 
     group.finish();
 }
 
+// The single-thread chases cover 16 GiB, like the shared buffer below. At 1 GiB, a third or more
+// of the hops hit the 300-500 MB L3 of current x86 VMs, which made one thread 15-23 ns faster
+// than all cores there (Graviton4, with a 36 MB L3, didn't move).
+const CHASE_BYTES: usize = 16 * GIB;
+
 fn memory_random_read_latency_benchmark(c: &mut Criterion) {
     chase_group(
         c,
         "memory_random_read_latency",
         &[
-            ("1 GiB, huge pages", GIB, true),
-            ("1 GiB, 4 KiB pages", GIB, false),
+            ("16 GiB, huge pages", CHASE_BYTES, true),
+            ("16 GiB, 4 KiB pages", CHASE_BYTES, false),
         ],
     );
 }
 
 fn memory_sequential_read_latency_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_sequential_read_latency");
-    for (name, huge_pages) in [("1 GiB, huge pages", true), ("1 GiB, 4 KiB pages", false)] {
-        let chase = PointerChase::sequential(GIB, huge_pages);
+    for (name, huge_pages) in [("16 GiB, huge pages", true), ("16 GiB, 4 KiB pages", false)] {
+        let chase = PointerChase::sequential(CHASE_BYTES, huge_pages);
         let mut idx = chase.chase(0, chase.len as u64);
         group.bench_function(name, |b| {
             b.iter_custom(|iters| {
@@ -302,8 +307,8 @@ fn memory_write_latency_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_write_latency");
     let chases = [
         ("same line", PointerChase::new(4096, true), 1),
-        ("sequential", PointerChase::sequential(GIB, true), 0),
-        ("random", PointerChase::new(GIB, true), 0),
+        ("sequential", PointerChase::sequential(CHASE_BYTES, true), 0),
+        ("random", PointerChase::new(CHASE_BYTES, true), 0),
     ];
     for (name, chase, self_loop) in chases.iter() {
         if *self_loop == 1 {
@@ -328,12 +333,12 @@ fn memory_write_latency_benchmark(c: &mut Criterion) {
 fn memory_random_block_latency_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_random_block_latency");
     for block in [64usize, 128, 256, 512, 1 << 10, 4 << 10, 16 << 10] {
-        let chase = PointerChase::mapped(GIB, true);
+        let chase = PointerChase::mapped(CHASE_BYTES, true);
         let words = block / 8;
-        let blocks = GIB / block;
+        let blocks = CHASE_BYTES / block;
         let base = chase.ptr as *mut u64;
         let order = sattolo(blocks, 0xb10c);
-        unsafe { ptr::write_bytes(base, 0, GIB / 8) };
+        unsafe { ptr::write_bytes(base, 0, CHASE_BYTES / 8) };
         for (i, next) in order.iter().enumerate() {
             unsafe { base.add(i * words).write(*next as u64) };
         }

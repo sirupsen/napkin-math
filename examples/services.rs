@@ -8,10 +8,15 @@
 // Targets are kind=host:port, where kind is http, redis, memcached, postgres
 // or mysql. Every request reads a random key of `kv`, a 100k-row table of
 // (k int primary key, v text) in database `bench` as user `bench` with no
-// password (the keys are k:0..k:99999 in Redis and Memcached). A proxy's cost
-// is an http target through the proxy minus the same target directly.
+// password (the keys are k:0..k:99999 in Redis and Memcached).
+//
+// Every request includes a loopback round trip, and a network adds its own,
+// so each target also prints `net`: its mean minus that of an echo server in
+// this process, which answers 16 B for 16 B. A proxy's cost is an http target
+// through the proxy minus the same target directly, minus one more echo for
+// the proxy's hop to its backend.
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpStream;
+use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant};
 
 const KEYS: u64 = 100_000;
@@ -47,6 +52,28 @@ impl Conn {
         self.r.read_exact(&mut b).unwrap();
         b
     }
+}
+
+// Sends 16 B and waits for them back, from `echo_server`.
+fn echo(c: &mut Conn, _key: u64) {
+    c.send(&[0x5a; 16]);
+    c.bytes(16);
+}
+
+fn echo_server() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    std::thread::spawn(move || {
+        for conn in listener.incoming().flatten() {
+            std::thread::spawn(move || {
+                let mut conn = conn;
+                conn.set_nodelay(true).unwrap();
+                let mut buf = [0u8; 16];
+                while conn.read_exact(&mut buf).is_ok() && conn.write_all(&buf).is_ok() {}
+            });
+        }
+    });
+    addr
 }
 
 // HTTP/1.1 GET with keep-alive; the body is read by Content-Length.
@@ -219,9 +246,12 @@ fn main() {
         std::process::exit(2);
     }
     let mut x = 0x9e37_79b9_7f4a_7c15u64;
-    for (kind, addr) in targets {
+    let echo_addr = echo_server();
+    let mut loopback = 0.0;
+    for (kind, addr) in std::iter::once(("echo", echo_addr.as_str())).chain(targets) {
         let mut c = Conn::open(addr);
         let request: fn(&mut Conn, u64) = match kind {
+            "echo" => echo,
             "http" => http,
             "redis" => redis,
             "memcached" => memcached,
@@ -252,12 +282,16 @@ fn main() {
         let mean = lat.iter().sum::<Duration>() / lat.len() as u32;
         lat.sort();
         let us = |d: Duration| d.as_secs_f64() * 1e6;
+        if kind == "echo" {
+            loopback = us(mean);
+        }
         println!(
-            "{:<10} {:<21} requests/s={:>7.0}  mean={:>7.1}us  p50={:>7.1}us  p99={:>7.1}us",
+            "{:<10} {:<21} requests/s={:>7.0}  mean={:>7.1}us  net={:>7.1}us  p50={:>7.1}us  p99={:>7.1}us",
             kind,
             addr,
             1.0 / mean.as_secs_f64(),
             us(mean),
+            us(mean) - loopback,
             us(lat[lat.len() / 2]),
             us(lat[lat.len() * 99 / 100])
         );
