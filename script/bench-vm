@@ -118,7 +118,8 @@ launch() {
   else
     gcloud auth print-access-token >/dev/null 2>&1 || die "gcloud credentials expired: gcloud auth login"
   fi
-  RUN=$(date -u +%Y%m%d-%H%M%S)-$(echo "$TYPE" | tr . -)
+  # The random suffix keeps two launches of one shape in the same second apart.
+  RUN=$(date -u +%Y%m%d-%H%M%S)-$(echo "$TYPE" | tr . -)-$(printf %04x $((RANDOM)))
   STORE=$(store)
   EXPIRES=$(( $(now) + TTL * 60 + 600 ))
   upload_source "$STORE/runs/$RUN/src.tgz"
