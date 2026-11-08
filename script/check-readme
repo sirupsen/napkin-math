@@ -1,0 +1,315 @@
+#!/usr/bin/env python3
+"""Check README.md's tables against the rules in AGENTS.md.
+
+    script/check-readme            # exit 1 if anything is off
+    script/check-readme --verbose  # also print every derived $ / TiB cell
+    script/check-readme other.md   # check another copy
+
+Checks:
+  - the latency table sorts by throughput (highest first, blank last), then
+    latency (blank first), then name;
+  - numbers are rounded for memorability: one significant digit, or 1.5 / 2.5,
+    in the latency and $ / TiB tables; at most two significant digits in prices;
+  - every footnote marker used in a table is defined below it, and every
+    definition is used;
+  - every $ / TiB read cell matches what the shape, unit and latency tables
+    imply, within rounding (see DERIVATIONS).
+"""
+
+import math
+import re
+import sys
+from pathlib import Path
+
+README = Path(__file__).resolve().parent.parent / "README.md"
+GB_PER_TIB = 2**40 / 1e9
+SECONDS_PER_MONTH = 2.628e6
+# Network disks get just enough General vCPUs to reach their throughput (EBS
+# baseline on m8i is ~39 MB/s per vCPU).
+NETDISK_MB_PER_VCPU = 40
+# Rent while reading: 1 TiB of SSD network disk with 16k IOPS and 1000 MiB/s
+# provisioned (3,000 IOPS and 125 MiB/s are free), or 2 TB of network HDD.
+NETDISK_SSD_GB, NETDISK_SSD_IOPS, NETDISK_SSD_MIBPS = GB_PER_TIB, 16000, 1000
+NETDISK_FREE_IOPS, NETDISK_FREE_MIBPS = 3000, 125
+NETDISK_HDD_GB = 2000
+# A derived cell may be this far from the shown one before it counts as wrong:
+# one-significant-digit rounding alone can be off by up to ~1.4x (1.5 -> 1, 3.5 -> 5).
+TOLERANCE = 1.5
+
+KIB, MIB, GIB, TIB = 2**10, 2**20, 2**30, 2**40
+TIME_UNITS = {"ns": 1e-9, "μs": 1e-6, "us": 1e-6, "ms": 1e-3, "s": 1.0}
+RATE_UNITS = {"B/s": 1, "KiB/s": KIB, "MiB/s": MIB, "GiB/s": GIB, "TiB/s": TIB}
+SIZE_UNITS = {"B": 1, "KiB": KIB, "MiB": MIB, "GiB": GIB}
+FOOTNOTES = ["††", "†", "‡", "‖", "¶", "♣", "§", r"\*"]
+
+# How each $ / TiB read row is derived. Keys are row names in that table.
+#   throughput: a row of the latency table, whose Throughput is used
+#   compute:    ("shape", shape row, vCPUs) or ("netdisk", "Zonal"|"Regional", "SSD"|"HDD")
+#   requests:   request size in bytes for blob GETs ("Regional" or "Zonal" pricing)
+#   transfer:   a row of the unit table charged per GB moved
+# Rows missing here are reported, so a new row gets a derivation or an entry in SKIP.
+GENERAL, GENERAL_SSD = "General", "General, SSD"
+DERIVATIONS = {
+    "Memory Sequential Read, 1 thread": dict(
+        throughput="Memory Sequential Read (64 B), 1 thread", compute=("shape", GENERAL, 1)),
+    "GPU Memory Sequential Read (B200)": dict(
+        throughput="GPU Memory Sequential Read (B200)", compute=("shape", "GPU (B200)", "B200")),
+    "Memory Sequential Read, all cores": dict(
+        throughput="Memory Sequential Read (64 B), all cores", compute=("shape", GENERAL, 48)),
+    "Memory Random Read (64 B), all cores": dict(
+        throughput="Memory Random Read (64 B), all cores", compute=("shape", GENERAL, 48)),
+    "SSD Sequential Read (8 KiB)": dict(
+        throughput="SSD Sequential Read (8 KiB), 1 thread", compute=("shape", GENERAL_SSD, 48)),
+    "SSD Random Read (8 KiB)": dict(
+        throughput="SSD Random Read (8 KiB), 1 thread", compute=("shape", GENERAL_SSD, 48)),
+    "Network Same-Zone (32 KiB)": dict(
+        throughput="Network Same-Zone (32 KiB)", compute=("shape", GENERAL, 48), transfer="Same-Zone"),
+    "Network Cross-Zone (64 KiB)": dict(
+        throughput="Network Cross-Zone (64 KiB)", compute=("shape", GENERAL, 48), transfer="Cross-Zone"),
+    "Network Cross-Region": dict(
+        throughput="Network Cross-Region, Same-Continent (1 MiB)\\*", compute=("shape", GENERAL, 48),
+        transfer="Cross-Region"),
+    "Network Internet Egress": dict(
+        throughput="Network Same-Zone (32 KiB)", compute=("shape", GENERAL, 48),
+        transfer="Internet Egress ††"),
+    "Blob Storage, Regional Read (8 MiB)": dict(
+        throughput="Blob Storage, Regional Read (128 KiB)", compute=("shape", GENERAL, 48),
+        requests=("Regional", 8 * MIB)),
+    "Blob Storage, Regional Read (128 KiB)": dict(
+        throughput="Blob Storage, Regional Read (128 KiB)", compute=("shape", GENERAL, 48),
+        requests=("Regional", 128 * KIB)),
+    "Blob Storage, Zonal Read (8 MiB)§": dict(
+        throughput="Blob Storage, Zonal Read (128 KiB)", compute=("shape", GENERAL, 48),
+        requests=("Zonal", 8 * MIB)),
+    "Blob Storage, Zonal Read (128 KiB)§": dict(
+        throughput="Blob Storage, Zonal Read (128 KiB)", compute=("shape", GENERAL, 48),
+        requests=("Zonal", 128 * KIB)),
+    "HDD Sequential Read (8 KiB)": dict(
+        throughput="HDD Sequential Read (8 KiB), 1 thread", compute=("shape", "HDD", 2)),
+    "HDD Random Read (256 KiB)": dict(
+        throughput="HDD Random Read (256 KiB), 1 thread", compute=("shape", "HDD", 2)),
+}
+for scope in ("Zonal", "Regional"):
+    for pattern in ("Sequential Read (8 KiB)", "Random Read (8 KiB)"):
+        DERIVATIONS[f"Network Disk, {scope} {pattern}"] = dict(
+            throughput=f"Network Disk, {scope} {pattern}, 1 thread", compute=("netdisk", scope, "SSD"))
+    for pattern in ("Sequential Read (8 KiB)", "Random Read (256 KiB)"):
+        DERIVATIONS[f"Network Disk, {scope}, HDD {pattern}"] = dict(
+            throughput=f"Network Disk, {scope}, HDD {pattern}, 1 thread", compute=("netdisk", scope, "HDD"))
+# Prices in their own right, not derived from the other tables.
+SKIP = {"Warehouse Query"}
+
+errors = []
+
+
+def error(msg):
+    errors.append(msg)
+
+
+def tables(lines):
+    """Yield (header cells, [(line number, cells)]) for each Markdown table."""
+    i = 0
+    while i < len(lines):
+        if lines[i].lstrip().startswith("|") and i + 1 < len(lines) and re.match(r"^\s*\|[\s:|-]+\|\s*$", lines[i + 1]):
+            header = cells(lines[i])
+            rows = []
+            i += 2
+            while i < len(lines) and lines[i].lstrip().startswith("|"):
+                rows.append((i + 1, cells(lines[i])))
+                i += 1
+            yield header, rows
+        else:
+            i += 1
+
+
+def cells(line):
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
+def find_table(all_tables, first, second):
+    for header, rows in all_tables:
+        if header[0] == first and len(header) > 1 and header[1] == second:
+            return header, rows
+    sys.exit(f"README.md: no table with columns '{first} | {second}'")
+
+
+def quantity(text, units):
+    text = text.strip()
+    if not text:
+        return None
+    m = re.fullmatch(r"([0-9.]+)\s*(\S+)", text)
+    if not m or m.group(2) not in units:
+        raise ValueError(f"can't parse '{text}'")
+    return float(m.group(1)) * units[m.group(2)]
+
+
+def dollars(text):
+    text = text.replace("\\$", "").replace("$", "").strip()
+    return float(text) if text else None
+
+
+def mantissa(x):
+    return round(x / 10 ** math.floor(math.log10(x)), 6)
+
+
+def memorable(x):
+    return x == 0 or mantissa(x) in {1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9}
+
+
+def two_digits(x):
+    return x == 0 or abs(mantissa(x) * 10 - round(mantissa(x) * 10)) < 1e-6
+
+
+def check_latency_table(rows):
+    def key(row):
+        _, (name, lat, tp) = row
+        lat, tp = quantity(lat, TIME_UNITS), quantity(tp, RATE_UNITS)
+        return (tp is None, -(tp or 0), lat is not None, lat or 0, name)
+
+    for lineno, (name, lat, tp) in rows:
+        for text, units in ((lat, TIME_UNITS), (tp, RATE_UNITS)):
+            value = quantity(text, units)
+            if value is not None and not memorable(float(text.split()[0])):
+                error(f"README.md:{lineno}: '{text}' in '{name}' isn't rounded for memorability")
+    expected = sorted(rows, key=key)
+    for (lineno, row), (_, want) in zip(rows, expected):
+        if row != want:
+            error(f"README.md:{lineno}: latency table out of order: '{row[0]}' here, expected '{want[0]}' "
+                  "(throughput, then latency, then name)")
+            break
+
+
+def check_prices(header, rows, rule, label):
+    for lineno, row in rows:
+        for col, text in zip(header, row):
+            if "$" not in col and "1-year" not in col and "Spot" not in col:
+                continue
+            value = dollars(text)
+            if value is not None and not rule(value):
+                error(f"README.md:{lineno}: '{text}' ({col}, '{row[0]}') isn't rounded for memorability ({label})")
+
+
+def check_footnotes(lines, all_tables):
+    used = set()
+    for _, rows in all_tables:
+        for lineno, row in rows:
+            for c in row:
+                for mark in FOOTNOTES:
+                    if mark in c:
+                        used.add(mark)
+                        c = c.replace(mark, "")
+    defined = set()
+    for line in lines:
+        for mark in FOOTNOTES:
+            if line.startswith(mark + " "):
+                defined.add(mark)
+                break
+    for mark in sorted(used - defined):
+        error(f"README.md: footnote {mark} is used in a table but never defined")
+    for mark in sorted(defined - used):
+        error(f"README.md: footnote {mark} is defined but no table uses it")
+
+
+def check_per_tib(text, latency, units, shapes, blob_requests, per_tib, verbose):
+    zonal_gb_read = re.search(r"Zonal buckets also charge \\?\$[0-9.]+ per GB written and \\?\$([0-9.]+) per GB read", text)
+    zonal_gb_read = float(zonal_gb_read.group(1)) if zonal_gb_read else None
+    unit = {name.replace("├", "").strip(): row for name, row in units.items()}
+
+    def shape_cost(name, vcpus, column):
+        shape = shapes[name]
+        if vcpus == "B200":
+            vcpus = re.search(r"One B200 comes with (\d+) vCPU", text)
+            vcpus = int(vcpus.group(1))
+        return vcpus * shape[column]
+
+    columns = ["$ / mo / vCPU", "1-year", "Spot"]
+    for lineno, (name, *shown) in per_tib:
+        if name in SKIP:
+            continue
+        spec = DERIVATIONS.get(name)
+        if spec is None:
+            error(f"README.md:{lineno}: no derivation for '{name}' in script/check-readme; add one or SKIP it")
+            continue
+        if spec["throughput"] not in latency:
+            error(f"README.md:{lineno}: '{name}' derives from latency row '{spec['throughput']}', which doesn't exist")
+            continue
+        tp = latency[spec["throughput"]]
+        seconds = TIB / tp
+        derived = []
+        for column in columns:
+            kind = spec["compute"][0]
+            if kind == "shape":
+                monthly = shape_cost(spec["compute"][1], spec["compute"][2], column)
+            else:
+                _, scope, media = spec["compute"]
+                vcpus = tp / 1e6 / NETDISK_MB_PER_VCPU
+                monthly = vcpus * shapes[GENERAL][column]
+                # Network disks have no 1-year or spot price, so rent is on-demand.
+                prefix = f"Network Disk, {scope}"
+                if media == "SSD":
+                    monthly += NETDISK_SSD_GB * unit[prefix]["$ / Month"]
+                    monthly += (NETDISK_SSD_IOPS - NETDISK_FREE_IOPS) * unit[prefix + " IOPS‖"]["$ / Month"]
+                    monthly += (NETDISK_SSD_MIBPS - NETDISK_FREE_MIBPS) * unit[prefix + " Throughput‖"]["$ / Month"]
+                else:
+                    monthly += NETDISK_HDD_GB * unit[prefix + ", HDD"]["$ / Month"]
+            cost = seconds * monthly / SECONDS_PER_MONTH
+            if "transfer" in spec:
+                cost += GB_PER_TIB * unit[spec["transfer"]]["$ / Month"]
+            if "requests" in spec:
+                scope, size = spec["requests"]
+                cost += TIB / size / 1e6 * blob_requests["Reads"][scope]
+                if scope == "Zonal":
+                    if zonal_gb_read is None:
+                        error("README.md: can't find the zonal per-GB read charge in the prose")
+                    else:
+                        cost += GB_PER_TIB * zonal_gb_read
+            derived.append(cost)
+        for column, want, text_shown in zip(["$ / TiB read", "1-year", "Spot"], derived, shown):
+            got = dollars(text_shown)
+            ratio = got / want if want else float("inf")
+            ok = 1 / TOLERANCE <= ratio <= TOLERANCE
+            if verbose:
+                print(f"{'  ' if ok else '! '}{name:<52} {column:<13} shown {got:<8g} derived {want:.3g}")
+            if not ok:
+                error(f"README.md:{lineno}: '{name}' {column} is {text_shown}, but the other tables give "
+                      f"${want:.2g} ({ratio:.2f}x)")
+
+
+def main():
+    args = sys.argv[1:]
+    verbose = "--verbose" in args
+    paths = [a for a in args if not a.startswith("--")]
+    text = Path(paths[0] if paths else README).read_text()
+    lines = text.split("\n")
+    all_tables = list(tables(lines))
+
+    _, latency_rows = find_table(all_tables, "Operation", "Latency")
+    check_latency_table(latency_rows)
+    latency = {row[0]: quantity(row[2], RATE_UNITS) for _, row in latency_rows}
+
+    unit_header, unit_rows = find_table(all_tables, "What", "Amount")
+    shape_header, shape_rows = find_table(all_tables, "Shape", "vCPU")
+    tib_header, tib_rows = find_table(all_tables, "What", "\\$ / TiB read")
+    blob_header, blob_rows = find_table(all_tables, "", "Regional, 1M")
+    check_prices(unit_header, unit_rows, two_digits, "at most two significant digits")
+    check_prices(shape_header, shape_rows, two_digits, "at most two significant digits")
+    check_prices(tib_header, tib_rows, memorable, "one significant digit, or 1.5 / 2.5")
+    check_footnotes(lines, all_tables)
+
+    clean = lambda h: [c.replace("\\$", "$") for c in h]
+    units = {row[0]: {c: dollars(v) for c, v in zip(clean(unit_header)[2:], row[2:])} for _, row in unit_rows}
+    shape_cols = clean(shape_header)
+    shapes = {row[0]: {c: dollars(row[shape_cols.index(c)]) for c in ["$ / mo / vCPU", "1-year", "Spot"]}
+              for _, row in shape_rows}
+    blob_requests = {row[0]: {"Regional": dollars(row[1]), "Zonal": dollars(row[2])} for _, row in blob_rows}
+    check_per_tib(text, latency, units, shapes, blob_requests, tib_rows, verbose)
+
+    for e in errors:
+        print(e, file=sys.stderr)
+    if errors:
+        sys.exit(1)
+    print(f"README.md: {len(latency_rows)} latency rows, {len(tib_rows)} $ / TiB rows, all consistent")
+
+
+if __name__ == "__main__":
+    main()

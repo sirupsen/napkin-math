@@ -28,6 +28,7 @@ IPs, bucket names or credentials.
 ./run --bench napkin_math                        # everything
 ./run --bench napkin_math -- 'syscall|hash'      # a subset (regex)
 make test                                        # each benchmark once, smoke test
+make check                                       # README tables + clippy, what CI runs
 ```
 
 - Benchmark on a current-generation cloud VM, not a laptop. A minimal Ubuntu
@@ -91,4 +92,7 @@ make test                                        # each benchmark once, smoke te
   by latency, lowest first, then by name.
 - Throughput is the most you can get (many requests in flight).
 - Keep prose terse and unhedged. Methodology goes in BENCHMARKING.md, not the README.
+- `script/check-readme` checks the table order, the rounding, the footnotes and
+  that every $ / TiB cell follows from the other tables. A new $ / TiB row
+  needs an entry in its `DERIVATIONS`.
 - Show README changes for review before pushing.

@@ -1,4 +1,4 @@
-name: Rust CI
+name: CI
 
 on: [push, pull_request]
 
@@ -7,10 +7,13 @@ jobs:
     name: Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - name: README tables
+        run: script/check-readme
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-      - uses: actions-rs/cargo@v1
-        with:
-          command: check
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      # Every benchmark and tool is a bench target, so plain `cargo check` compiles none of them.
+      - name: Clippy, all benches and tools
+        run: cargo clippy --all-targets --features encodings -- -D warnings
