@@ -2,9 +2,9 @@ use crc32fast::Hasher as Crc32Hasher;
 use criterion::*;
 use std::hint::black_box;
 
-use super::MIB;
+use super::GIB;
 use rand::rngs::StdRng;
-use rand::{RngExt, SeedableRng};
+use rand::{Rng, SeedableRng};
 use sha2::{Digest, Sha256};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
@@ -14,6 +14,9 @@ use xxhash_rust::xxh3::xxh3_64;
 // so otherwise the compiler may hash once and hoist the result out of the loop.
 fn hash_group(c: &mut Criterion, name: &str, bytes: &[u8]) {
     let mut group = c.benchmark_group(name);
+    if bytes.len() >= GIB {
+        group.sample_size(10);
+    }
     group.throughput(Throughput::Bytes(bytes.len() as u64));
     group.bench_function("sha256", |b| {
         b.iter(|| black_box(Sha256::digest(black_box(bytes))))
@@ -41,12 +44,15 @@ fn hash_group(c: &mut Criterion, name: &str, bytes: &[u8]) {
 
 fn cpu_hash_benchmark(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0xfeed_face);
-    let bytes: Vec<u8> = (0..MIB).map(|_| rng.random()).collect();
+    let mut bytes = vec![0u8; GIB];
+    rng.fill_bytes(&mut bytes);
 
     // The README rows are per 64-byte call, where per-call setup dominates.
     hash_group(c, "cpu_hash", &bytes[..64]);
-    // Bulk throughput over a buffer that still fits in L2/L3.
-    hash_group(c, "cpu_hash_1mib", &bytes);
+    // Bulk throughput from DRAM: 1 GiB is far past any cache, so the fast hashes are capped by one
+    // thread's memory read speed. A 1 MiB buffer stays in L2 and let xxh3 report 68 GiB/s;
+    // `cpu_batch` covers in-cache sizes.
+    hash_group(c, "cpu_hash_1gib", &bytes);
 }
 
 criterion_group!(benches, cpu_hash_benchmark);

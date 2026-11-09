@@ -46,10 +46,10 @@ from a debug build.
 | `memory_sequential_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD, and 1 thread on huge pages | Memory Sequential Read |
 | `memory_sequential_write` | memset and memcpy of 1 GiB on 1 thread, memset of 16 GiB on all cores, and on x86 the same memsets with non-temporal stores | Memory Sequential Write |
 | `memory_random` | One pass of independent random 64 B reads/writes over 1 GiB (1 thread), and random lines of a shared 16 GiB buffer from 1 thread and all cores, with and without huge pages | Memory Random Read/Write, throughput |
-| `memory_random_read_latency` (in `memory_random.rs`) | Dependent pointer chase over 1 GiB, with and without huge pages | Memory Random Read, latency |
+| `memory_random_read_latency` (in `memory_random.rs`) | Dependent pointer chase over 16 GiB, with and without huge pages | Memory Random Read, latency |
 | `cache_read`, `cache_read_latency` | The `memory_sequential_read` SIMD loop, and the pointer chase, over 16 KiB, 256 KiB and 8 MiB | L1/L2/L3 Cache Read |
 | `cpu_encrypt` | ring AES-256-GCM and ChaCha20-Poly1305 seal and open on 16 KiB | CPU Encrypt / Decrypt |
-| `cpu_hash`, `cpu_hash_1mib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and 1 MiB buffers | CPU Hash rows |
+| `cpu_hash`, `cpu_hash_1gib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and a 1 GiB buffer (from DRAM) | CPU Hash rows |
 | `cpu_batch` | xxh3, SHA-256 and AES-256-GCM at 8 B to 1 MiB per call | Latency of the CPU Hash and Encrypt rows |
 | `cpu_serialize_batch` | Protobuf and JSON at 1 to 4096 events per call | Latency of the CPU Serialize and Deserialize rows |
 | `memory_random_block`, `memory_random_block_latency` | Random reads and writes from 64 B to 1 MiB, one at a time and flat out | Throughput of the Memory Random rows |
@@ -76,11 +76,11 @@ noted:
 | Memory write, 1 thread / 48 threads (non-temporal on x86) | 28.1 / 100 GiB/s | 22.0 / 150 | 59.0 / 321 | 30 / 200 |
 | Random 64 B read / write, 1 thread, 16 GiB | 2.9 / 2.2 GiB/s | 2.5 / 3.7 | 1.9 / 1.7 | 3 / 3 |
 | Random 64 B read / write, 48 threads, 16 GiB | 56 / 39 GiB/s | 43 / 65 | 137 / 128 | 100 / 100 |
-| Random read latency, 1 GiB, huge pages / 4 KiB pages | 102 / 129 ns | 128 / 175 | 116 / 154 | 100 |
+| Random read latency, 16 GiB, huge pages / 4 KiB pages | 115 / 153 ns | 144 / 197 | 128 / 239 | 150 |
 | AES-256-GCM encrypt / decrypt | 9.7 / 9.9 GiB/s | 9.5 / 9.7 | 4.1 / 4.1 | 10 |
-| xxh3, 64 B / 1 MiB | 2.8 ns / 68 GiB/s | 2.7 / 69 | 5.4 / 20 | 5 ns / 50 GiB/s |
+| xxh3, 64 B / 1 GiB | 2.8 ns / 18.9 GiB/s | 2.7 / 18.7 | 5.4 / 19.0 | 5 ns / 20 GiB/s |
 | crc32 / siphash, 64 B | 27 / 18 ns | 29 / 17 | 21 / 23 | |
-| sha256, 64 B / 1 MiB | 84 ns / 1.8 GiB/s | 85 / 1.75 | 80 / 1.43 | 100 ns / 2 GiB/s |
+| sha256, 64 B / 1 GiB | 84 ns / 1.64 GiB/s | 85 / 1.61 | 80 / 1.43 | 100 ns / 2 GiB/s |
 | BitPacker4x pack / unpack, 12 bits | 9.6 / 61 GiB/s | 14.5 / 56 | 18.9 / 47 | 10 / 50 |
 | Protobuf serialize / deserialize | 1.08 GiB/s / 414 MiB/s | 1.09 / 406 | 1.17 / 295 | 1 GiB/s / 500 MiB/s |
 | JSON serialize / deserialize (to `Value`) | 1.18 GiB/s / 464 (226) MiB/s | 1.16 / 444 (214) | 0.99 / 377 (201) | |
@@ -102,16 +102,22 @@ top. Bitpacking unpacks a 128-value block at a time into a buffer that stays in
 L1, the way a reader consumes a column; FastLanes decoding whole columns into
 memory runs at 10-17 GiB/s (below).
 
-On November 5, 2026, the same three VMs filled in the latency of the rows that
-only had throughput, one access at a time on 1 GiB with huge pages:
+The latency of the other memory rows, one access at a time with huge pages, on
+November 9, 2026: one thread chases through 16 GiB, and with 48 threads each
+chases its own 512 MiB.
 
 | | C4 | m8i | m8g | README |
 | --- | --- | --- | --- | --- |
-| Sequential read, 1 thread / 48 threads | 9.3 / 21.6 ns | 3.0 / 16.5 | 2.4 / 7.7 | 5 / 20 ns |
-| Random read, 48 threads (1 thread above) | 118 ns | 151 | 117 | 150 ns |
-| Sequential write, 1 thread / 48 threads | 11 / 49 ns | 5.1 / 37 | 15 / 23 | 10 / 30 ns |
-| Random write, 1 thread / 48 threads | 135 / 163 ns | 143 / 175 | 125 / 131 | 150 / 150 ns |
+| Sequential read, 1 thread / 48 threads | 7.9 / 21.0 ns | 3.6 / 16.3 | 2.2 / 7.7 | 5 / 20 ns |
+| Random read, 48 threads (1 thread above) | 118 ns | 151 | 120 | 150 ns |
+| Sequential write, 1 thread / 48 threads | 9.9 / 49 ns | 5.2 / 37 | 15 / 23 | 10 / 30 ns |
+| Random write, 1 thread / 48 threads | 145 / 163 ns | 153 / 175 | 133 / 134 | 150 / 150 ns |
 | Atomic add on a line it already owns | 4.6 ns | 4.7 | 5.9 | |
+
+Until November 9 the one-thread chases covered 1 GiB, and a third or more of
+their hops hit the 300-500 MB L3 of the x86 VMs: one thread read in 102 / 128 /
+116 ns, 15-23 ns faster than 48 threads on x86, and the README said 100 ns.
+At 16 GiB one thread and 48 threads agree.
 
 The reads are a dependent pointer chase through consecutive or shuffled lines;
 sequential ones hit lines the prefetchers already fetched. The writes are the
@@ -139,12 +145,12 @@ hiding the transfer. Time per call on C4 / m8i / m8g, from `cpu_batch`,
 
 | | Size: latency, per CPU | Next size up | Peak | README |
 | --- | --- | --- | --- | --- |
-| xxh3 | 64 B: 2.8 / 2.8 / 5.4 ns (scalar; AVX-512 starts above 240 B) | 128 B: 5 / 5 / 10 ns | 68 / 70 / 20 GiB/s | 5 ns, 50 GiB/s |
+| xxh3 | 64 B: 2.8 / 2.8 / 5.4 ns (scalar; AVX-512 starts above 240 B) | 128 B: 5 / 5 / 10 ns | 68 / 70 / 20 GiB/s in cache, 19 from memory | 5 ns, 20 GiB/s |
 | SHA-256 | 64 B: 82 / 84 / 84 ns (two blocks; one holds 55 B) | 128 B: 114 / 116 / 127 ns | 1.8 / 1.75 / 1.43 GiB/s | 100 ns, 2 GiB/s |
 | AES-256-GCM encrypt | 64 B: 58 / 60 / 77 ns | 128 B: 68 / 70 / 90 ns | 10 / 9.8 / 4.3 GiB/s | 50 ns, 10 GiB/s |
 | AES-256-GCM decrypt | 64 B: 65 / 67 / 91 ns | 128 B: 68 / 70 / 104 ns | 9.9 / 9.7 / 4.1 GiB/s | |
-| lz4 compress / decompress | 4 KiB: 7 / 1.5 us | | 600 MiB/s / 3 GiB/s | |
-| zstd -1 compress / decompress | 4 KiB: 13-15 / 5-5.5 us | | 500 MiB/s / 1.5 GiB/s | 10 / 3 us, 500 MiB/s / 2 GiB/s |
+| lz4 compress / decompress | 4 KiB: 6 / 1.1 us | | 650 MiB/s / 4 GiB/s | |
+| zstd -1 compress / decompress | 4 KiB: 13-15 / 5-5.5 us | | 500 MiB/s / 1.2-1.5 GiB/s | 10 / 3 us, 500 MiB/s / 2 GiB/s |
 | Parquet encode, taxi / hits | 4 KiB page: 56-75 / 48-70 us | 16 KiB: 192-263 / 156-243 us | 0.17-0.44 GiB/s | 50 us, 300 MiB/s |
 | Parquet decode, taxi / hits | 4 KiB page: 13-14 / 9-10 us | 16 KiB: 40-45 / 25-29 us | 1.6-2.2 GiB/s | 10 us, 2 GiB/s |
 | Sort `u64` | 4 KiB: 2.7 / 2.8 / 3.2 us | 16 KiB: 13 / 14 / 16 us | see below | 3 us, 300 MiB/s |
@@ -160,9 +166,9 @@ fixed block of 128 `u32`s, 512 B before packing (192 B at 12 bits), so its laten
 that block at the speed above.
 
 Random memory against size, on huge pages (`memory_random_block_latency`,
-`memory_random_block`; C4 / m8i / m8g). One read at a time took 111 / 136 / 131 ns
-at 64 B, 125 / 155 / 135 at 128 B, 161 / 174 / 148 at 256 B and 281 / 223 / 174 at
-1 KiB. The README's row is one 64 B cache line, though 128 B costs only ~10% more. Throughput at 64 B and 1 MiB: 1 thread 4.2 -> 16.8 / 3.9 -> 17.1 / 3.9 ->
+`memory_random_block`; C4 / m8i / m8g). One read at a time over 16 GiB took 121 /
+151 / 134 ns at 64 B, 141 / 170 / 141 at 128 B, 179 / 179 / 152 at 256 B and 278 /
+241 / 185 at 1 KiB. The README's row is one 64 B cache line, though 128 B costs only ~10% more. Throughput at 64 B and 1 MiB: 1 thread 4.2 -> 16.8 / 3.9 -> 17.1 / 3.9 ->
 30.8 GiB/s reading, 6.8 -> 17 / 8.7 -> 15.2 / 3.7 -> 62.6 writing; 48 threads 80 ->
 136 / 69 -> 187 / 161 -> 347 reading and 54 -> 102 / 84 -> 148 / 165 -> 339 writing.
 From the other socket of an m8g.48xlarge, 1 MiB: one thread 15.8 GiB/s reading, 96
@@ -206,8 +212,8 @@ Network round trips against size (`network --sizes`, November 7, p50, the size e
 Latency steps up at 64 KiB in the same zone on both clouds, so that row is 32 KiB. Past
 that it's about the round trip plus 2 x size / bandwidth: 1 MiB is 650 us at 3 GiB/s,
 and GCP measured 547. Across regions it stays flat to 1 MiB and then jumps, because
-TCP's window is ~3 MiB. The Singapore pair lost its connection at 4 KiB (230 ms up to
-there), so its 1 MiB and its 500 MiB/s (32 x 3 MiB / RTT) are from the other routes.
+TCP's window is ~3 MiB with default buffers. The Singapore pair lost its connection at
+4 KiB (230 ms up to there), so its 1 MiB is from the other routes.
 
 The smallest size that reaches each row's throughput (within ~5% of the peak on
 every provider, flat out: `storage --sweep-throughput`, 4 KiB to 16 MiB, and the
@@ -227,10 +233,10 @@ sweeps above), which the README's table doesn't show:
 | HDD Random Read / Write | 100 / 100 MiB/s | 4 / 1 MiB |
 | Memory Random Read / Write | 20 / 30 GiB/s, 200 / 200 all cores | 64 KiB |
 | Memory Sequential, other socket | 15 GiB/s | any |
-| xxh3 / SHA-256 | 50 / 2 GiB/s | 4 KiB |
+| xxh3 / SHA-256 | 20 / 2 GiB/s | 1 GiB, from memory (in cache xxh3 reaches 68 GiB/s at 4 KiB) |
 | AES-256-GCM | 10 GiB/s | 16 KiB |
 | lz4 / zstd -1 compress | 500 MiB/s | 1 / 64 KiB |
-| lz4 / zstd -1 decompress | 2 GiB/s | 64 B / 256 KiB |
+| lz4 / zstd -1 decompress | 2 GiB/s | 256 / 256 KiB |
 | Serialize, Deserialize | 2 GiB/s, 500 MiB/s | 1 event |
 | Parquet encode / decode | 300 MiB/s, 2 GiB/s | 64 KiB page |
 | Sort | 300 MiB/s | 1 GiB (the size, not the peak) |
@@ -593,6 +599,21 @@ within the US here and 55 ms `us-west1` -> `us-east4` by ping on October 23
 to Singapore (200 ms; Tokyo is closer). More flows add up: 32 flows from
 `us-central1` to `us-east4` reached 10.7 Gbit/s.
 
+The 3 MiB is Linux's default buffer limit (`tcp_rmem` / `tcp_wmem` max 6 / 4
+MiB), not the network. On November 9, 2026, with `net.core.rmem_max`,
+`net.core.wmem_max` and the `tcp_rmem` / `tcp_wmem` maxima raised to 256 MiB on
+both ends, c4-standard-48 VMs streamed to `us-central1` for 20 s per test:
+
+| From | Round trip | 1 flow | 8 flows | 32 flows | 128 flows |
+| --- | --- | --- | --- | --- | --- |
+| `us-east4` | 23.7 ms | 2.94 GiB/s | 3.32 | 3.72 | 3.74 |
+| `europe-west1` | 103 ms | 0.59 GiB/s | 2.02 | 3.11 | 3.49 |
+| `asia-southeast1` | 219 ms | 0.27 GiB/s | 2.16 | 3.17 | 3.26 |
+
+One flow then moves ~60-70 MiB per round trip, 20x the default, and 32 flows fill
+the VM's ~30 Gbit/s at every distance: the README's cross-region rows are all 3
+GiB/s, up from 3 GiB/s, 1 GiB/s and 500 MiB/s with default buffers.
+
 `network` was checked against `netperf` TCP_RR and `iperf3` on every pair above.
 Streams matched iperf3 within ~5%, except the GCP cross-zone single flow
 (25.5 vs 19.3 Gbit/s), which moves around from run to run. Round trips matched netperf within ~5% on GCP and the WAN pairs; on AWS
@@ -612,24 +633,31 @@ connection doing one request at a time over loopback, 10 seconds per target, a
 random key each time. Postgres and MySQL run `SELECT v FROM kv WHERE k = ...`
 on a primary key as a plain query, parsed and planned every time. nginx answers
 on its own, and nginx and HAProxy each proxy to it over a kept-alive upstream
-connection. On November 4, 2026, mean round trip in us:
+connection. The tool first times an in-process echo server answering 16 B for
+16 B on the same kind of connection, and reports each target's mean both whole
+and net of that loopback round trip. On November 9, 2026, mean / net in us:
 
 | | C4, Xeon 8581C | m8i, Xeon 6975P-C | m8g, Graviton4 |
 | --- | --- | --- | --- |
-| nginx | 19 | 32 | 12 |
-| nginx, through nginx | 41 | 67 | 26 |
-| nginx, through HAProxy | 43 | 68 | 27 |
-| Redis GET | 18 | 31 | 20 |
-| Memcached get | 15 | 33 | 14 |
-| Postgres, primary key | 29 | 42 | 29 |
-| MySQL, primary key | 28 | 44 | 40 |
+| loopback echo | 8.3 | 9.2 | 9.4 |
+| nginx | 19.1 / 10.8 | 30.4 / 21.2 | 11.7 / 2.3 |
+| nginx, through nginx | 40.1 / 31.7 | 68.0 / 58.8 | 25.7 / 16.3 |
+| nginx, through HAProxy | 42.1 / 33.8 | 69.8 / 60.7 | 31.9 / 22.5 |
+| Redis GET | 19.3 / 11.0 | 32.2 / 23.0 | 11.7 / 2.2 |
+| Memcached get | 17.7 / 9.3 | 31.2 / 22.0 | 11.0 / 1.5 |
+| Postgres, primary key | 27.8 / 19.5 | 42.4 / 33.2 | 29.6 / 20.2 |
+| MySQL, primary key | 26.3 / 18.0 | 44.5 / 35.3 | 34.7 / 25.2 |
 
-A proxy adds 15-35 us (24 on average), a primary-key query takes 30-45 us and
-a cache get 15-35 us, each including a loopback round trip of 12-32 us. Over a
-network, add the round trips: the client's to the server, and the proxy's to
-its backend. The README rows used to be guesses (50 us per proxy, 500 us per
-query). A query that reads many rows, sorts or joins costs more, and one that
-misses the database's cache waits for its disk.
+The README rows are net of the loopback round trip, so you add the network's
+own. A cache get is 2-23 us (12 on average, the README's 10), a primary-key
+query 18-35 (25, the README's 30), and a proxy 5-30 (17, the README's 20): its
+through-proxy time minus nginx alone, minus one more echo for the proxy's own
+hop to nginx. On m8g the loopback round trip is nearly all of a cache get.
+Before November 9 the rows included the loopback round trip, which counted
+one round trip twice once you added the network's. The README rows used to be
+guesses (50 us per proxy, 500 us per query). A query that reads many rows,
+sorts or joins costs more, and one that misses the database's cache waits for
+its disk.
 
 ## Compression rows
 
@@ -644,16 +672,26 @@ compress/decompress speed of lz4, snappy, zstd (-1, -3, -9, -19), gzip (-1, -6)
 and brotli (-5, -11) for each file, as best of N runs over at least a second.
 The CPU Compress/Decompress rows use the
 [Silesia corpus](https://sun.aei.polsl.pl/~sdeor/index.php?page=silesia). On
-November 4, 2026, compress / decompress in MiB/s, on C4 (Xeon 8581C), m8i and
+November 9, 2026, compress / decompress in MiB/s, on C4 (Xeon 8581C), m8i and
 m8g:
 
 | Silesia | Ratio | C4 | m8i | m8g |
 | --- | --- | --- | --- | --- |
-| lz4 | 2.10 | 531 / 1518 | 519 / 1574 | 528 / 1631 |
-| snappy | 2.07 | 566 / 1080 | 566 / 1105 | 564 / 1105 |
-| zstd -1 | 2.90 | 480 / 995 | 474 / 1026 | 440 / 919 |
-| zstd -9 | 3.59 | 71 / 940 | 68 / 943 | 50 / 830 |
-| zstd -19 | 4.01 | 4 / 866 | 3 / 858 | 2 / 697 |
+| lz4 (liblz4) | 2.10 | 647 / 3564 | 634 / 3724 | 666 / 3727 |
+| lz4_flex | 2.10 | 661 / 2917 | 650 / 3066 | 635 / 3124 |
+| snappy | 2.07 | 625 / 1605 | 623 / 1598 | 623 / 1540 |
+| zstd -1 | 2.90 | 507 / 1439 | 500 / 1459 | 460 / 1215 |
+| zstd -9 | 3.59 | 74 / 1314 | 70 / 1327 | 60 / 1109 |
+| zstd -19 | 4.01 | 4 / 1147 | 3 / 1132 | 3 / 980 |
+
+`lz4` is the C library through the `lz4` crate's block API, and `lz4_flex` is the
+pure-Rust crate with its `safe-encode` / `safe-decode` features off. Until November
+9, `lz4_flex` ran with its default bounds checks and decompressed at half the
+speed (1518 / 1574 / 1631 MiB/s); C lz4 is still ~20% faster. The README's lz4
+numbers are liblz4's. snappy and zstd decompressed 10-45% faster than on November 4
+with the same crates and machine types; the timing loop was shared between the
+tools on November 8, and that or the VMs drawn may be why. Their compression
+speeds moved under 15%.
 
 The ratio table, lz4 to zstd -19 (brotli -11 in parentheses where it beats
 both), on the same day:

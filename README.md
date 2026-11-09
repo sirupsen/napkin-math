@@ -39,7 +39,6 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | Memory Random Write (64 B), all cores                                   | 150 ns  | 200 GiB/s  |
 | L2 Cache Read (64 B), 1 thread                                          | 5 ns    | 150 GiB/s  |
 | Memory Sequential Read (64 B), other socket, all cores‡                 | 100 ns  | 60 GiB/s   |
-| CPU Hash, not crypto-safe (xxh3, 64 B), 1 thread                        | 5 ns    | 50 GiB/s   |
 | CPU Decode Bitpacked Integers (512 B), 1 thread                         | 10 ns   | 50 GiB/s   |
 | GPU ↔ CPU Transfer, PCIe (B200)                                         | 10 μs   | 50 GiB/s   |
 | L3 Cache Read (64 B), 1 thread                                          | 50 ns   | 40 GiB/s   |
@@ -47,7 +46,8 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | Memory Sequential Read (64 B), 1 thread                                 | 5 ns    | 30 GiB/s   |
 | Memory Sequential Write (64 B), 1 thread                                | 10 ns   | 30 GiB/s   |
 | Memory Random Write (64 B), 1 thread                                    | 150 ns  | 30 GiB/s   |
-| Memory Random Read (64 B), 1 thread                                     | 100 ns  | 20 GiB/s   |
+| CPU Hash, not crypto-safe (xxh3, 64 B), 1 thread                        | 5 ns    | 20 GiB/s   |
+| Memory Random Read (64 B), 1 thread                                     | 150 ns  | 20 GiB/s   |
 | Memory Sequential Read (64 B), other socket, 1 thread‡                  | 5 ns    | 15 GiB/s   |
 | Memory Random Read (64 B), other socket, 1 thread‡                      | 250 ns  | 15 GiB/s   |
 | CPU Encode Bitpacked Integers (512 B), 1 thread                         | 50 ns   | 10 GiB/s   |
@@ -62,6 +62,8 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | Blob Storage, Zonal Read (128 KiB)                                      | 50 ms   | 3 GiB/s    |
 | Network Cross-Region, Same-Continent (1 MiB)\*                          | 50 ms   | 3 GiB/s    |
 | Blob Storage, Regional Read (128 KiB)                                   | 100 ms  | 3 GiB/s    |
+| Network Cross-Region, Cross-Atlantic (1 MiB)\*                          | 100 ms  | 3 GiB/s    |
+| Network Cross-Region, US ↔ Singapore (1 MiB)\*                          | 200 ms  | 3 GiB/s    |
 | CPU Hash, crypto-safe (SHA-256, 64 B), 1 thread                         | 100 ns  | 2 GiB/s    |
 | CPU Serialize (JSON, Protobuf, 256 B), 1 thread                         | 200 ns  | 2 GiB/s    |
 | CPU Decompress (lz4, zstd -1, 4 KiB), 1 thread                          | 3 μs    | 2 GiB/s    |
@@ -78,10 +80,8 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | Network Disk, Regional Random Write (8 KiB), 1 thread                   | 1 ms    | 1 GiB/s    |
 | Network Disk, Regional Sequential Durable Write (8 KiB), 1 thread†      | 1 ms    | 1 GiB/s    |
 | Network Disk, Regional Sequential Write (8 KiB), 1 thread               | 1 ms    | 1 GiB/s    |
-| Network Cross-Region, Cross-Atlantic (1 MiB)\*                          | 100 ms  | 1 GiB/s    |
 | CPU Deserialize (JSON, Protobuf, 256 B), 1 thread                       | 500 ns  | 500 MiB/s  |
 | CPU Compress (lz4, zstd -1, 4 KiB), 1 thread                            | 10 μs   | 500 MiB/s  |
-| Network Cross-Region, US ↔ Singapore (1 MiB)\*                          | 200 ms  | 500 MiB/s  |
 | CPU Sort (64-bit integers, 4 KiB), 1 thread                             | 3 μs    | 300 MiB/s  |
 | CPU Encode Parquet (dictionary + zstd, 4 KiB page), 1 thread            | 50 μs   | 300 MiB/s  |
 | Network Disk, Regional, HDD Sequential Read (8 KiB), 1 thread           | 500 μs  | 250 MiB/s  |
@@ -108,7 +108,7 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | CPU Context Switch                                                      | 1 μs    |            |
 | CPU Cross-core Wake-up                                                  | 2 μs    |            |
 | CPU TCP Connect (+1 RTT)                                                | 10 μs   |            |
-| Cache Get (Memcached, Redis) (+1 RTT)                                   | 20 μs   |            |
+| Cache Get (Memcached, Redis) (+1 RTT)                                   | 10 μs   |            |
 | Proxy Request (HAProxy, Nginx) (+1 RTT)                                 | 20 μs   |            |
 | CPU Thread Spawn                                                        | 30 μs   |            |
 | Database Query, primary key (MySQL, Postgres) (+1 RTT)                  | 30 μs   |            |
@@ -132,8 +132,11 @@ thread that first touches a page. Intel's largest VMs also split one socket
 into a NUMA node per die; another die costs 1.2x the latency and 0.7x one
 thread's bandwidth, but all cores lose only ~10%.
 
-\* One TCP connection moves ~3 MiB per round trip, so 3 MiB / RTT: 30 MiB/s
-at 100 ms. Throughput here is with 32 connections.
+\* With Linux's default TCP buffers, one connection moves ~3 MiB per round trip:
+30 MiB/s at 100 ms. Raise `net.core.rmem_max`, `net.core.wmem_max` and the
+maxima in `net.ipv4.tcp_rmem` / `tcp_wmem` to 256 MiB on both ends and it moves
+~60 MiB: 600 MiB/s at 100 ms. Throughput here is with raised buffers and 32
+connections, which fill the VM's ~30 Gbit/s at any distance.
 
 Every row is one latency and one throughput. The latency is one request at a
 time, each waiting for the last, at the size in parentheses: a natural unit, a
@@ -147,19 +150,20 @@ to a second zone, which adds ~1 ms to every write.
 
 Sort is the exception to max throughput: it
 runs at 1.3 GiB/s on 4 KiB and 300 MiB/s on 1 GiB, and 300 MiB/s is the number you
-need for anything big. CPU and memory rows marked 1 thread scale with cores until
+need for anything big. Hashing is the other: xxh3 does 70 GiB/s on data already in
+cache, but 20 GiB/s on 1 GiB, one thread's memory read speed. CPU and memory rows marked 1 thread scale with cores until
 memory bandwidth runs out (on x86 a vCPU is half a core). x86 memory writes need
 non-temporal stores to get there; on one thread, a plain memset first reads every
 line it overwrites and gets half. Memory latency uses 2 MiB huge pages; 4 KiB
-pages add ~30%. Sequential reads take 5 ns because the prefetchers got there
+pages add ~50%. Sequential reads take 5 ns because the prefetchers got there
 first, and the all-cores rows are with every core doing the same. A write only
 waits if something makes it: a plain store retires into the store buffer in ~1
 ns, so the write latency is an atomic add, which has to own the line first. The
-+1 RTT rows are measured over loopback, so add the network's round trip; a proxy
-also adds one to its backend.
++1 RTT rows leave out the round trip, so add the network's; a proxy also adds
+one to its backend.
 
 One TCP flow gets the VM's bandwidth on GCP but 5 Gbit/s (600 MiB/s) on AWS
-outside a placement group, and 3 MiB / RTT across regions (\*). Blob Storage
+outside a placement group, and 3 MiB / RTT across regions with default buffers (\*). Blob Storage
 latency is p99 from the same region; Zonal is S3 Express One Zone and GCS Rapid.
 Conditional writes are compare-and-swap on one object, one at a time; regional
 GCS also allows only ~1 write per second to the same object. Region-to-region
