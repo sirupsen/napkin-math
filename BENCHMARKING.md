@@ -55,7 +55,7 @@ from a debug build.
 | `memory_random_block`, `memory_random_block_latency` | Random reads and writes from 64 B to 1 MiB, one at a time and flat out | Throughput of the Memory Random rows |
 | `cpu_sort_small` | Sorting `u64`s, 32 B to 256 KiB | Latency of CPU Sort |
 | `memory_sequential_read_latency`, `memory_write_latency`, `memory_latency_all_cores` | Pointer chases through consecutive or shuffled lines; the write ones with an atomic add | Latency of the Memory rows |
-| `cpu_bitpack` | `bitpacking`'s BitPacker4x packing and unpacking 256 MiB of 12-bit integers | CPU Encode / Decode Bitpacked Integers |
+| `cpu_bitpack`, `cpu_bitpack_all_cores` | `bitpacking`'s BitPacker4x packing and unpacking 256 MiB of 12-bit integers on 1 thread, and unpacking 16 GiB on all cores | CPU Encode / Decode Bitpacked Integers |
 | `cpu_serialize` | Protobuf (prost), JSON (serde_json, to structs and to a dynamic `Value`) and postcard on a 1 MiB batch of events | CPU Serialize, CPU Deserialize |
 | `cpu_sort` | `sort_unstable` on random `u64`, 1 MiB to 1 GiB | CPU Sort |
 | `cpu_atomic_mutex` | Atomic increment and `Mutex` lock + unlock, alone and with a second core on the same line | CPU Atomic Increment, CPU Mutex Lock + Unlock |
@@ -82,6 +82,7 @@ noted:
 | crc32 / siphash, 64 B | 27 / 18 ns | 29 / 17 | 21 / 23 | |
 | sha256, 64 B / 1 GiB | 84 ns / 1.64 GiB/s | 85 / 1.61 | 80 / 1.43 | 100 ns / 2 GiB/s |
 | BitPacker4x pack / unpack, 12 bits | 9.6 / 61 GiB/s | 14.5 / 56 | 18.9 / 47 | 10 / 50 |
+| BitPacker4x unpack, 12 bits, 48 threads | 410 GiB/s | 446 | 900 | 500 |
 | Protobuf serialize / deserialize | 1.08 GiB/s / 414 MiB/s | 1.09 / 406 | 1.17 / 295 | 1 GiB/s / 500 MiB/s |
 | JSON serialize / deserialize (to `Value`) | 1.18 GiB/s / 464 (226) MiB/s | 1.16 / 444 (214) | 0.99 / 377 (201) | |
 | Sort `u64`, 1 MiB / 64 MiB / 1 GiB | 634 / 474 / 339 MiB/s | 615 / 451 / 341 | 560 / 401 / 349 | 300 (1 GiB) |
@@ -100,7 +101,15 @@ into a dynamic JSON `Value`): allocating the objects, not the format, sets the
 speed. TCP connect and the TLS handshake each add one network round trip on
 top. Bitpacking unpacks a 128-value block at a time into a buffer that stays in
 L1, the way a reader consumes a column; FastLanes decoding whole columns into
-memory runs at 10-17 GiB/s (below).
+memory runs at 10-17 GiB/s (below). Throughput counts the decoded `u32`s, so it
+beats memory: at 12 bits a thread reads 12/32 of that, ~20 GiB/s of packed
+input. On 48 threads (November 9, 16 GiB decoded) that is 154 / 167 / 338 GiB/s
+of packed input against 189 / 206 / 309 GiB/s for the plain all-core read on
+the same runs: 80% of memory bandwidth on the x86 VMs, where 48 vCPUs are 24
+cores, and all of it on Graviton4. Comparing the packed bits without unpacking
+them could gain at most ~20% from memory on x86 and nothing on Graviton4; it
+pays off on data in cache. The latency is one 128-value block per thread with
+every core decoding: 58 / 54 / 27 ns.
 
 The latency of the other memory rows, one access at a time with huge pages, on
 November 9, 2026: one thread chases through 16 GiB, and with 48 threads each

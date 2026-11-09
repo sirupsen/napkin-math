@@ -32,6 +32,7 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | ----------------------------------------------------------------------- | ------- | ---------- |
 | GPU Memory Sequential Read (B200)                                       |         | 7 TiB/s    |
 | GPU ↔ GPU Transfer, NVLink (B200)                                       |         | 800 GiB/s  |
+| CPU Decode Bitpacked Integers (512 B), all cores                        | 50 ns   | 500 GiB/s  |
 | L1 Cache Read (64 B), 1 thread                                          | 2 ns    | 200 GiB/s  |
 | Memory Sequential Read (64 B), all cores                                | 20 ns   | 200 GiB/s  |
 | Memory Sequential Write (64 B), all cores                               | 30 ns   | 200 GiB/s  |
