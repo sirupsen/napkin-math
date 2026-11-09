@@ -1,7 +1,7 @@
 use criterion::*;
 use std::hint::black_box;
 
-use super::{GIB, MIB};
+use super::{selected, GIB, MIB};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
@@ -22,6 +22,9 @@ fn cpu_sort_benchmark(c: &mut Criterion) {
     ];
 
     for (name, total_size) in sizes.iter() {
+        if !selected(&format!("cpu_sort/{name}")) {
+            continue;
+        }
         let elements = total_size / std::mem::size_of::<u64>();
         let input: Vec<u64> = (0..elements).map(|_| rng.random()).collect();
 

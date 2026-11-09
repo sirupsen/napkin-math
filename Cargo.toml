@@ -41,6 +41,7 @@ lz4_flex = { version = "0.14", default-features = false, features = ["std"] }
 postcard = { version = "1", features = ["alloc"] }
 prost = "0.14"
 rand = "0.10"
+regex = "1"
 rcgen = "0.14"
 ring = "0.17"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }

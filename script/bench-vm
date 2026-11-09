@@ -8,7 +8,7 @@
 #   script/bench-vm sweep               # delete bench VMs past their deadline, and stopped GCP ones
 #
 # The working tree (tracked and untracked, minus ignored files) is uploaded to a bucket. The VM
-# installs Rust, restores a cached target/ for its CPU and Cargo.lock, runs the command in the
+# installs Rust, restores the cached target/ for its CPU, runs the command in the
 # repo, uploads the output and deletes itself. It also deletes itself --ttl minutes after boot
 # whatever happens: on AWS via a shutdown timer and terminate-on-shutdown, on GCP via
 # --max-run-duration with DELETE plus the same timer.
@@ -34,6 +34,7 @@ boot_script() {
 __VARS__
 shutdown -h +"$TTL"
 exec > /var/log/bench-vm.log 2>&1
+PS4='+ $(date -u +%T) '
 set -x
 put() {
   if [ "$CLOUD" = aws ]; then aws s3 cp --quiet "$1" "$STORE/$2"; else gcloud storage cp -q "$1" "$STORE/$2"; fi
@@ -57,19 +58,21 @@ apt-get install -y -q build-essential pkg-config libssl-dev numactl zstd
 [ "$CLOUD" = aws ] && { command -v aws || snap install aws-cli --classic; }
 sudo -u "$U" -H bash -c 'curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal'
 mkdir -p "$H/repo" && get "runs/$RUN/src.tgz" /tmp/src.tgz && tar xzf /tmp/src.tgz -C "$H/repo"
-# target/ built with target-cpu=native is only valid for this CPU model and these dependencies.
-KEY=$( (uname -m; grep -m1 -E 'model name|CPU part' /proc/cpuinfo; lscpu | grep -i 'model name'; cat "$H/repo/Cargo.lock") | sha256sum | cut -c1-16)
-if get "cache/$KEY.tar.zst" /tmp/cache.tar.zst; then
+# target/ built with target-cpu=native is only valid for this CPU model. It isn't keyed on
+# Cargo.lock: cargo rebuilds whatever a dependency change touches, and the run uploads the result.
+KEY=$( (uname -m; grep -m1 -E 'model name|CPU part' /proc/cpuinfo; lscpu | grep -i 'model name') | sha256sum | cut -c1-16)
+if get "cache/cpu-$KEY.tar.zst" /tmp/cache.tar.zst; then
   tar --zstd -xf /tmp/cache.tar.zst -C "$H"
-  HIT=1
 fi
+touch /tmp/restored
 chown -R "$U:$U" "$H"
 printf '%s\n' 'source ~/.cargo/env' 'cd ~/repo' "$CMD" > /tmp/cmd.sh
 sudo -u "$U" -H bash /tmp/cmd.sh > /tmp/out.log 2>&1
 echo "exit $?" >> /tmp/out.log
 put /tmp/out.log "runs/$RUN/out.log"
-if [ -z "${HIT:-}" ]; then
-  tar --zstd -cf /tmp/cache.tar.zst -C "$H" .cargo/registry repo/target && put /tmp/cache.tar.zst "cache/$KEY.tar.zst"
+# Upload only if cargo built something (criterion's own output in target/criterion doesn't count).
+if [ -n "$(find "$H/repo/target" -path "$H/repo/target/criterion" -prune -o -newer /tmp/restored -name '*.d' -print -quit 2>/dev/null)" ]; then
+  tar -I 'zstd -T0' -cf /tmp/cache.tar.zst -C "$H" --exclude=repo/target/criterion .cargo/registry repo/target && put /tmp/cache.tar.zst "cache/cpu-$KEY.tar.zst"
 fi
 EOF
 }

@@ -1,6 +1,6 @@
 use criterion::*;
 
-use super::GIB;
+use super::{any_selected, selected, GIB};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{RngExt, SeedableRng};
@@ -190,6 +190,9 @@ pub(super) unsafe fn advise_huge_pages(_ptr: *mut libc::c_void, _bytes: usize, _
 pub(super) fn chase_group(c: &mut Criterion, group_name: &str, shapes: &[(&str, usize, bool)]) {
     let mut group = c.benchmark_group(group_name);
     for (name, bytes, huge_pages) in shapes.iter() {
+        if !selected(&format!("{group_name}/{name}")) {
+            continue;
+        }
         let chase = PointerChase::new(*bytes, *huge_pages);
         // Touch the whole cycle once so page faults are not measured.
         let mut idx = chase.chase(0, chase.len as u64);
@@ -224,6 +227,9 @@ fn memory_random_read_latency_benchmark(c: &mut Criterion) {
 fn memory_sequential_read_latency_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_sequential_read_latency");
     for (name, huge_pages) in [("16 GiB, huge pages", true), ("16 GiB, 4 KiB pages", false)] {
+        if !selected(&format!("memory_sequential_read_latency/{name}")) {
+            continue;
+        }
         let chase = PointerChase::sequential(CHASE_BYTES, huge_pages);
         let mut idx = chase.chase(0, chase.len as u64);
         group.bench_function(name, |b| {
@@ -250,6 +256,9 @@ fn memory_latency_all_cores_benchmark(c: &mut Criterion) {
         ("random write", false, true),
         ("sequential write", true, true),
     ] {
+        if !selected(&format!("memory_latency_all_cores/{name}")) {
+            continue;
+        }
         let chases: Vec<PointerChase> = std::thread::scope(|s| {
             let handles: Vec<_> = cores
                 .iter()
@@ -305,17 +314,24 @@ fn memory_latency_all_cores_benchmark(c: &mut Criterion) {
 // on the one before it. "same line" is the atomic alone, on a line this core already owns.
 fn memory_write_latency_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_write_latency");
-    let chases = [
-        ("same line", PointerChase::new(4096, true), 1),
-        ("sequential", PointerChase::sequential(CHASE_BYTES, true), 0),
-        ("random", PointerChase::new(CHASE_BYTES, true), 0),
-    ];
-    for (name, chase, self_loop) in chases.iter() {
-        if *self_loop == 1 {
+    for (name, bytes, sequential) in [
+        ("same line", 4096, false),
+        ("sequential", CHASE_BYTES, true),
+        ("random", CHASE_BYTES, false),
+    ] {
+        if !selected(&format!("memory_write_latency/{name}")) {
+            continue;
+        }
+        let chase = if sequential {
+            PointerChase::sequential(bytes, true)
+        } else {
+            PointerChase::new(bytes, true)
+        };
+        if name == "same line" {
             chase.point_at_self();
         }
         let mut idx = chase.chase_write(0, chase.len as u64);
-        group.bench_function(*name, |b| {
+        group.bench_function(name, |b| {
             b.iter_custom(|iters| {
                 let start = Instant::now();
                 idx = chase.chase_write(idx, iters);
@@ -333,6 +349,9 @@ fn memory_write_latency_benchmark(c: &mut Criterion) {
 fn memory_random_block_latency_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_random_block_latency");
     for block in [64usize, 128, 256, 512, 1 << 10, 4 << 10, 16 << 10] {
+        if !selected(&format!("memory_random_block_latency/{block}")) {
+            continue;
+        }
         let chase = PointerChase::mapped(CHASE_BYTES, true);
         let words = block / 8;
         let blocks = CHASE_BYTES / block;
@@ -471,15 +490,22 @@ fn memory_random_threads_benchmark(c: &mut Criterion) {
     let cores = core_affinity::get_core_ids().unwrap();
     let mut group = c.benchmark_group("memory_random");
     group.sample_size(10);
+    let name = |op: &str, n: usize, pages: &str| {
+        format!("{op}, 16 GiB, {n} thread{}{pages}", if n == 1 { "" } else { "s" })
+    };
     for huge_pages in [false, true] {
-        let lines = SharedLines::new(huge_pages, &cores);
         let pages = if huge_pages { ", huge pages" } else { "" };
+        let names = [1, cores.len()]
+            .into_iter()
+            .flat_map(|n| ["read", "write"].map(|op| name(op, n, pages)));
+        if !any_selected("memory_random", names) {
+            continue;
+        }
+        let lines = SharedLines::new(huge_pages, &cores);
         for threads in [&cores[..1], &cores[..]] {
             group.throughput(Throughput::Bytes((threads.len() * ACCESSES_PER_THREAD * 64) as u64));
             for (op, write) in [("read", false), ("write", true)] {
-                let n = threads.len();
-                let name = format!("{op}, 16 GiB, {n} thread{}{pages}", if n == 1 { "" } else { "s" });
-                group.bench_function(name, |b| {
+                group.bench_function(name(op, threads.len(), pages), |b| {
                     b.iter_custom(|iters| (0..iters).map(|_| lines.run(threads, write)).sum())
                 });
             }
@@ -491,10 +517,19 @@ fn memory_random_threads_benchmark(c: &mut Criterion) {
 // Throughput of random reads and writes against their size, on huge pages.
 fn memory_random_block_benchmark(c: &mut Criterion) {
     let cores = core_affinity::get_core_ids().unwrap();
+    const BLOCKS: [usize; 6] = [64, 256, 1 << 10, 4 << 10, 64 << 10, 1 << 20];
+    let names = BLOCKS.iter().flat_map(|block| {
+        [1, cores.len()]
+            .into_iter()
+            .flat_map(move |n| ["read", "write"].map(|op| format!("{op}, {block} B, {n} threads")))
+    });
+    if !any_selected("memory_random_block", names) {
+        return;
+    }
     let lines = SharedLines::new(true, &cores);
     let mut group = c.benchmark_group("memory_random_block");
     group.sample_size(10);
-    for block in [64usize, 256, 1 << 10, 4 << 10, 64 << 10, 1 << 20] {
+    for block in BLOCKS {
         for threads in [&cores[..1], &cores[..]] {
             group.throughput(Throughput::Bytes((threads.len() * ACCESSES_PER_THREAD * 64) as u64));
             for (op, write) in [("read", false), ("write", true)] {

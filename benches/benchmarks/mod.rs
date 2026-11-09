@@ -18,6 +18,43 @@ pub mod memory_random;
 pub mod memory_sequential_read;
 pub mod memory_sequential_write;
 
+/// Whether this run will measure benchmark `id` ("group/name"), given the filter on the command
+/// line (`cargo bench -- <regex>`, or `--exact <name>`). Criterion only checks the filter inside
+/// `bench_function`, after a group has built its data, so benches with gigabytes of setup ask
+/// first: otherwise every filtered run pays for every 16 GiB shuffle in the suite.
+pub fn selected(id: &str) -> bool {
+    static FILTER: std::sync::OnceLock<Option<(String, bool)>> = std::sync::OnceLock::new();
+    let filter = FILTER.get_or_init(|| {
+        // Criterion's options that take a value, so a value isn't mistaken for the filter.
+        const VALUED: &[&str] = &[
+            "--color", "-c", "--save-baseline", "-s", "--baseline", "-b", "--baseline-lenient",
+            "--load-baseline", "--sample-size", "--warm-up-time", "--measurement-time",
+            "--nresamples", "--noise-threshold", "--confidence-level", "--significance-level",
+            "--profile-time", "--plotting-backend", "--output-format", "--format",
+        ];
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        let exact = args.iter().any(|a| a == "--exact");
+        let mut skip = false;
+        args.into_iter()
+            .find(|a| {
+                let take = !skip && !a.starts_with('-');
+                skip = VALUED.contains(&a.as_str());
+                take
+            })
+            .map(|f| (f, exact))
+    });
+    match filter {
+        None => true,
+        Some((f, true)) => id == f,
+        Some((f, false)) => regex::Regex::new(f).map_or(true, |re| re.is_match(id)),
+    }
+}
+
+/// Whether any of `names` in `group` will run.
+pub fn any_selected<S: AsRef<str>>(group: &str, names: impl IntoIterator<Item = S>) -> bool {
+    names.into_iter().any(|n| selected(&format!("{group}/{}", n.as_ref())))
+}
+
 /// The first CPU after `cores[0]` on a different physical core. Clouds number SMT siblings
 /// differently (n/2 apart on GCP and AWS, adjacent on some Hyper-V hosts), so ask the kernel
 /// instead of assuming; outside Linux, fall back to the next CPU.

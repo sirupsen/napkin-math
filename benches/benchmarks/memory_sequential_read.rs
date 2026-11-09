@@ -2,7 +2,7 @@ use criterion::*;
 use std::hint::black_box;
 
 use super::memory_random::advise_huge_pages;
-use super::GIB;
+use super::{any_selected, GIB};
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::{asm, x86_64::*};
@@ -345,6 +345,12 @@ unsafe fn memory_read_sequential_single_thread_non_vectorized_x86(vec: &[Int]) -
 }
 
 fn memory_sequential_read_benchmark(c: &mut Criterion) {
+    let n = core_affinity::get_core_ids().unwrap().len();
+    let one = ["No SIMD", "SIMD", "SIMD, huge pages", "AVX2"].map(|s| format!("1 thread, {s}"));
+    let all = ["No SIMD", "SIMD"].map(|s| format!("{n} threads, {s}"));
+    if !any_selected("memory_sequential_read", one.iter().chain(&all)) {
+        return;
+    }
     let bytes_per_iteration = 8usize;
     let size_bytes = GIB;
     let size_in_elements = size_bytes / bytes_per_iteration;

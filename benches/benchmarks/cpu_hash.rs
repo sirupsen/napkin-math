@@ -2,7 +2,7 @@ use crc32fast::Hasher as Crc32Hasher;
 use criterion::*;
 use std::hint::black_box;
 
-use super::GIB;
+use super::{any_selected, GIB};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use sha2::{Digest, Sha256};
@@ -43,6 +43,10 @@ fn hash_group(c: &mut Criterion, name: &str, bytes: &[u8]) {
 }
 
 fn cpu_hash_benchmark(c: &mut Criterion) {
+    let names = ["sha256", "blake3", "crc32", "siphash", "xxh3"];
+    if !any_selected("cpu_hash", names) && !any_selected("cpu_hash_1gib", names) {
+        return;
+    }
     let mut rng = StdRng::seed_from_u64(0xfeed_face);
     let mut bytes = vec![0u8; GIB];
     rng.fill_bytes(&mut bytes);

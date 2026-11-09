@@ -2,7 +2,7 @@ use criterion::*;
 use std::hint::black_box;
 use std::time::Duration;
 
-use super::GIB;
+use super::{any_selected, GIB};
 
 // Writes that bypass the cache. A regular store first reads the line it
 // overwrites (read for ownership), so an x86 memset moves each byte twice and
@@ -52,6 +52,12 @@ fn memset_non_temporal(dst: &mut [u8]) {
 // per-thread slices don't fit in L3), plus non-temporal memsets on x86. Buffers
 // are touched first so page faults are not measured. Throughput is bytes written.
 fn memory_sequential_write_benchmark(c: &mut Criterion) {
+    let n = core_affinity::get_core_ids().unwrap().len();
+    let one = ["memset", "memcpy", "memset, non-temporal"].map(String::from);
+    let all = ["memset", "memset, non-temporal"].map(|s| format!("{s}, {n} threads"));
+    if !any_selected("memory_sequential_write", one.iter().chain(&all)) {
+        return;
+    }
     let mut dst = vec![1u8; GIB];
     let src = vec![2u8; GIB];
 
