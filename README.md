@@ -25,7 +25,8 @@ Below are numbers rounded for memorization, not faux precision. Last measured
 in October-November 2026, averaged over GCP C4 and AWS m8i (x86) and m8g
 (Graviton4), 48 vCPU each, and their local-SSD variants; network disks on
 Hyperdisk, EBS and pd-standard, HDDs on an AWS d3. Blob storage was measured in
-March 2026, and the GPU rows are NVIDIA's specs. See
+March 2026, and the GPU rows are NVIDIA's specs. Most cells are one run per
+machine, so trust the order of magnitude more than the digit. See
 [BENCHMARKING.md](BENCHMARKING.md) to run them yourself.
 
 | Operation                                                               | Latency | Throughput |
@@ -41,9 +42,9 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | L2 Cache Read (64 B), 1 thread                                          | 5 ns    | 150 GiB/s  |
 | Memory Sequential Read (64 B), other socket, all cores‡                 | 100 ns  | 60 GiB/s   |
 | CPU Decode Bitpacked Integers (512 B), 1 thread                         | 10 ns   | 50 GiB/s   |
+| GPU ↔ GPU Network, RDMA (400 Gbit/s)                                    | 5 μs    | 50 GiB/s   |
 | GPU ↔ CPU Transfer, PCIe (B200)                                         | 10 μs   | 50 GiB/s   |
 | L3 Cache Read (64 B), 1 thread                                          | 50 ns   | 40 GiB/s   |
-| GPU ↔ GPU Network, RDMA (400 Gbit/s)                                    | 5 μs    | 40 GiB/s   |
 | Memory Sequential Read (64 B), 1 thread                                 | 5 ns    | 30 GiB/s   |
 | Memory Sequential Write (64 B), 1 thread                                | 10 ns   | 30 GiB/s   |
 | Memory Random Write (64 B), 1 thread                                    | 150 ns  | 30 GiB/s   |
@@ -66,11 +67,11 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 | Network Cross-Region, Cross-Atlantic (1 MiB)\*                          | 100 ms  | 3 GiB/s    |
 | Network Cross-Region, US ↔ Singapore (1 MiB)\*                          | 200 ms  | 3 GiB/s    |
 | CPU Hash, crypto-safe (SHA-256, 64 B), 1 thread                         | 100 ns  | 2 GiB/s    |
-| CPU Serialize (JSON, Protobuf, 256 B), 1 thread                         | 200 ns  | 2 GiB/s    |
 | CPU Decompress (lz4, zstd -1, 4 KiB), 1 thread                          | 3 μs    | 2 GiB/s    |
 | CPU Decode Parquet (dictionary + zstd, 4 KiB page), 1 thread            | 10 μs   | 2 GiB/s    |
 | Blob Storage, Regional Write (128 KiB)                                  | 200 ms  | 2 GiB/s    |
 | Blob Storage, Zonal Write (128 KiB)                                     | 200 ms  | 2 GiB/s    |
+| CPU Serialize (JSON, Protobuf, 256 B), 1 thread                         | 200 ns  | 1 GiB/s    |
 | Network Disk, Regional Random Read (8 KiB), 1 thread                    | 500 μs  | 1 GiB/s    |
 | Network Disk, Regional Sequential Read (8 KiB), 1 thread                | 500 μs  | 1 GiB/s    |
 | Network Disk, Zonal Random Read (8 KiB), 1 thread                       | 500 μs  | 1 GiB/s    |
@@ -124,7 +125,9 @@ March 2026, and the GPU rows are NVIDIA's specs. See
 with io_uring, and the latency is one at a time. Cloud SSDs and most network
 disks have no write cache to flush (pd-standard and Azure Premium SSD flush in
 30-80 μs), so a durable write costs a write. HDDs flush theirs (~1 ms), which
-32 in flight don't speed up.
+32 in flight don't speed up. Appending instead costs ~150 μs on SSD and 1-4 ms on
+network disks, because the file system journals the new size. A local SSD is
+lost with its VM; a network disk isn't.
 
 ‡ Only the largest shapes span two sockets. Reading the other socket's memory
 costs ~2x the latency, and all cores share the ~60 GiB/s link (Graviton4).
@@ -136,7 +139,7 @@ thread's bandwidth, but all cores lose only ~10%.
 \* With Linux's default TCP buffers, one connection moves ~3 MiB per round trip:
 30 MiB/s at 100 ms. Raise `net.core.rmem_max`, `net.core.wmem_max` and the
 maxima in `net.ipv4.tcp_rmem` / `tcp_wmem` to 256 MiB on both ends and it moves
-~60 MiB: 600 MiB/s at 100 ms. Throughput here is with raised buffers and 32
+30-60 MiB: 300-600 MiB/s at 100 ms. Throughput here is with raised buffers and 32
 connections, which fill the VM's ~30 Gbit/s at any distance.
 
 Every row is one latency and one throughput. The latency is one request at a
@@ -146,17 +149,19 @@ cache line or a block, that's as fast as anything smaller. HDD random I/O uses
 in flight ([BENCHMARKING.md](BENCHMARKING.md) has the smallest size that reaches it), on a 48 vCPU VM and its disks: local NVMe SSDs striped together, EBS
 gp3 at 16k IOPS / 1000 MiB/s and Hyperdisk Balanced at 80k IOPS / 1600 MiB/s, 2 TB
 pd-standard for network HDDs. Large random requests are nearly sequential, so
-random and sequential throughput end up close. Regional disks copy every write
+random and sequential throughput end up close. Small independent ones overlap instead:
+one thread does ~60M random 64 B memory reads a second (4 GiB/s), 10x what 150 ns each
+implies, and all cores ~1.5 billion (100 GiB/s). Regional disks copy every write
 to a second zone, which adds ~1 ms to every write.
 
 Sort is the exception to max throughput: it
 runs at 1.3 GiB/s on 4 KiB and 300 MiB/s on 1 GiB, and 300 MiB/s is the number you
 need for anything big. Hashing is the other: xxh3 does 70 GiB/s on data already in
-cache, but 20 GiB/s on 1 GiB, one thread's memory read speed. CPU and memory rows marked 1 thread scale with cores until
+cache, but 20 GiB/s on 1 GiB from memory. CPU and memory rows marked 1 thread scale with cores until
 memory bandwidth runs out (on x86 a vCPU is half a core). x86 memory writes need
 non-temporal stores to get there; on one thread, a plain memset first reads every
 line it overwrites and gets half. Memory latency uses 2 MiB huge pages; 4 KiB
-pages add ~50%. Sequential reads take 5 ns because the prefetchers got there
+pages add ~50%, and 1 GiB pages save ~10%. Sequential reads take 5 ns because the prefetchers got there
 first, and the all-cores rows are with every core doing the same. A write only
 waits if something makes it: a plain store retires into the store buffer in ~1
 ns, so the write latency is an atomic add, which has to own the line first. The

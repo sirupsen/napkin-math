@@ -14,8 +14,7 @@ script/bench-vm sweep     # delete any past their deadline
 ```
 
 `script/bench-vm` uploads the working tree to a bucket and boots an Ubuntu 24.04
-VM that installs Rust, restores a `target/` cached for its CPU model and
-`Cargo.lock`, runs the command in the repo, uploads
+VM that installs Rust, restores a `target/` cached for its CPU model, runs the command in the repo, uploads
 the output, and deletes itself (GCP VMs only stop, so the launcher deletes them
 once the output is in). Every VM also has a hard deadline: a shutdown timer
 plus terminate-on-shutdown on AWS, `--max-run-duration` with `DELETE` on GCP.
@@ -46,7 +45,7 @@ from a debug build.
 | `memory_sequential_read` | Sequential reads of 1 GiB, 1 thread and all cores, scalar and SIMD, and 1 thread on huge pages | Memory Sequential Read |
 | `memory_sequential_write` | memset and memcpy of 1 GiB on 1 thread, memset of 16 GiB on all cores, and on x86 the same memsets with non-temporal stores | Memory Sequential Write |
 | `memory_random` | One pass of independent random 64 B reads/writes over 1 GiB (1 thread), and random lines of a shared 16 GiB buffer from 1 thread and all cores, with and without huge pages | Memory Random Read/Write, throughput |
-| `memory_random_read_latency` (in `memory_random.rs`) | Dependent pointer chase over 16 GiB, with and without huge pages | Memory Random Read, latency |
+| `memory_random_read_latency` (in `memory_random.rs`) | Dependent pointer chase over 16 GiB on 2 MiB, 4 KiB and (if reserved) 1 GiB pages, and over 1 and 4 GiB | Memory Random Read, latency |
 | `cache_read`, `cache_read_latency` | The `memory_sequential_read` SIMD loop, and the pointer chase, over 16 KiB, 256 KiB and 8 MiB | L1/L2/L3 Cache Read |
 | `cpu_encrypt` | ring AES-256-GCM and ChaCha20-Poly1305 seal and open on 16 KiB | CPU Encrypt / Decrypt |
 | `cpu_hash`, `cpu_hash_1gib` | sha256, blake3, crc32, siphash, xxh3 on 64 B calls and a 1 GiB buffer (from DRAM) | CPU Hash rows |
@@ -123,10 +122,26 @@ chases its own 512 MiB.
 | Random write, 1 thread / 48 threads | 145 / 163 ns | 153 / 175 | 133 / 134 | 150 / 150 ns |
 | Atomic add on a line it already owns | 4.6 ns | 4.7 | 5.9 | |
 
-Until November 9 the one-thread chases covered 1 GiB, and a third or more of
-their hops hit the 300-500 MB L3 of the x86 VMs: one thread read in 102 / 128 /
-116 ns, 15-23 ns faster than 48 threads on x86, and the README said 100 ns.
-At 16 GiB one thread and 48 threads agree.
+Until November 9 the one-thread chases covered 1 GiB and read in 102 / 128 /
+116 ns, and the README said 100 ns. Most of the difference is the TLB, not L3:
+1 GiB is 512 huge pages, which a second-level TLB (~2048 entries) holds, and 16
+GiB is 8192, so most hops also walk the page table. On November 10, 2026, on a
+c4-standard-48 and a c4a-standard-48 (Axion, Neoverse V2 like Graviton4), with
+every buffer confirmed 100% on 2 MiB pages in `/proc/self/smaps`:
+
+| Huge pages unless noted | C4 | C4A |
+| --- | --- | --- |
+| 1 GiB | 98 ns | 117 |
+| 4 GiB | 109 ns | 123 |
+| 16 GiB | 116 ns | 131 |
+| 16 GiB on 1 GiB pages | 105 ns | 115 |
+| 16 GiB on 4 KiB pages | 154 ns | 233 |
+
+On 1 GiB pages, 16 GiB reads as fast as 1 GiB on Axion: there the whole 15 ns
+is page walks. On C4 the walks are 12 ns, and the other 7 are the 1 GiB
+chase's hits in its 300-500 MB L3. The 1 GiB-page row needs
+`echo 16 | sudo tee /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages`
+first, and is skipped without it.
 
 The reads are a dependent pointer chase through consecutive or shuffled lines;
 sequential ones hit lines the prefetchers already fetched. The writes are the
@@ -246,7 +261,7 @@ sweeps above), which the README's table doesn't show:
 | AES-256-GCM | 10 GiB/s | 16 KiB |
 | lz4 / zstd -1 compress | 500 MiB/s | 1 / 64 KiB |
 | lz4 / zstd -1 decompress | 2 GiB/s | 256 / 256 KiB |
-| Serialize, Deserialize | 2 GiB/s, 500 MiB/s | 1 event |
+| Serialize, Deserialize | 1 GiB/s, 500 MiB/s | 1 event (two Protobuf events peak at 1.1-2.3 GiB/s; JSON and 1 MiB batches run at 1-1.4) |
 | Parquet encode / decode | 300 MiB/s, 2 GiB/s | 64 KiB page |
 | Sort | 300 MiB/s | 1 GiB (the size, not the peak) |
 
@@ -484,9 +499,10 @@ new gp3 with the same provisioning; the pd-standard ones below on new disks.) Se
 ~0.9-1.3 ms to every write, the round trip to its
 second zone, and matches the zonal one on reads and throughput. Network disks
 cap random I/O at the provisioned IOPS, reads and writes alike. The README
-averages the clouds and rounds: zonal is Hyperdisk and gp3, and the durable
-rows also count Azure Premium SSD P30 from October 27 (64 KiB, one writer: 1.89
-ms LRS, 2.01 ms ZRS), hence 1 ms zonal and 2 ms regional. Azure's P30s (5000
+averages the clouds and rounds: zonal is Hyperdisk and gp3 (a durable 8 KiB
+write takes 337 us and 1.0 ms, the README's 500 us), and regional is Hyperdisk
+HA (1.25 ms, the README's 1 ms). Azure Premium SSD P30 on October 27 took 1.89
+ms LRS and 2.01 ms ZRS for 64 KiB from one writer. Azure's P30s (5000
 IOPS / 200 MB/s) were slower than either Hyperdisk at every queue depth, and
 ZRS wrote within ~10% of LRS. AWS has no regional block storage: EBS volumes
 live in one zone.
@@ -622,6 +638,26 @@ both ends, c4-standard-48 VMs streamed to `us-central1` for 20 s per test:
 One flow then moves ~60-70 MiB per round trip, 20x the default, and 32 flows fill
 the VM's ~30 Gbit/s at every distance: the README's cross-region rows are all 3
 GiB/s, up from 3 GiB/s, 1 GiB/s and 500 MiB/s with default buffers.
+
+60-70 MiB at all three distances looked like a cap at a quarter of the 256 MiB
+buffer. On November 10, 2026, one flow from `europe-west1` to `us-central1`
+(c4-standard-48, 102-118 ms, two 30 s runs per setting) with the four maxima
+set to each size:
+
+| Buffer maximum | 1 flow | Per round trip |
+| --- | --- | --- |
+| Default (`tcp_rmem` 32 MiB, `tcp_wmem` 4 MiB on kernel 7.0) | 0.26 / 0.25 Gbit/s | 3.4 MiB |
+| 16 MiB | 0.30 / 0.36 | 4-5 MiB |
+| 64 MiB | 1.53 / 1.39 | 20-22 MiB |
+| 256 MiB | 2.64 / 1.89 | 25-35 MiB |
+| 1 GiB | 3.82 / 4.33 | 46-52 MiB |
+
+Up to 64 MiB a flow moves a quarter to a third of the buffer per round trip.
+Past that the buffer stops being the limit: 256 MiB moved 25-35 MiB here
+against 62 on November 9, and 1 GiB only 46-52. Runs differ by up to 2x, so the
+README says 30-60 MiB for 256 MiB buffers. Ubuntu 24.04's 7.0 kernel raised the
+default receive maximum from 6 to 32 MiB; the 4 MiB send maximum still holds a
+flow to ~3 MiB.
 
 `network` was checked against `netperf` TCP_RR and `iperf3` on every pair above.
 Streams matched iperf3 within ~5%, except the GCP cross-zone single flow

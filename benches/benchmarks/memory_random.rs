@@ -96,12 +96,71 @@ impl PointerChase {
     /// A random single-cycle chase over `bytes`.
     pub(super) fn new(bytes: usize, huge_pages: bool) -> Self {
         let chase = Self::mapped(bytes, huge_pages);
-        for (i, next) in sattolo(chase.len, 0xc0ffee).into_iter().enumerate() {
+        chase.shuffle();
+        chase
+    }
+
+    /// The same chase on 1 GiB pages, which the whole buffer's translations fit the TLB with.
+    /// `None` unless that many are reserved:
+    /// `echo 16 | sudo tee /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages`.
+    #[cfg(target_os = "linux")]
+    pub(super) fn new_on_1gib_pages(bytes: usize) -> Option<Self> {
+        let ptr = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                bytes,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_HUGETLB | libc::MAP_HUGE_1GB,
+                -1,
+                0,
+            )
+        };
+        if ptr == libc::MAP_FAILED {
+            return None;
+        }
+        let chase = Self { ptr: ptr as *mut Node, len: bytes / std::mem::size_of::<Node>(), bytes };
+        chase.shuffle();
+        Some(chase)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub(super) fn new_on_1gib_pages(_bytes: usize) -> Option<Self> {
+        None
+    }
+
+    fn shuffle(&self) {
+        for (i, next) in sattolo(self.len, 0xc0ffee).into_iter().enumerate() {
             unsafe {
-                (*chase.ptr.add(i))[0] = next;
+                (*self.ptr.add(i))[0] = next;
             }
         }
-        chase
+    }
+
+    /// The share of the mapping that transparent huge pages back, from /proc/self/smaps.
+    /// `madvise(MADV_HUGEPAGE)` only asks; the kernel may not have 2 MiB pages to give.
+    #[cfg(target_os = "linux")]
+    fn huge_page_share(&self) -> Option<f64> {
+        let (lo, hi) = (self.ptr as usize, self.ptr as usize + self.bytes);
+        let smaps = std::fs::read_to_string("/proc/self/smaps").ok()?;
+        let (mut inside, mut huge_kib) = (false, 0usize);
+        for line in smaps.lines() {
+            let first = line.split_whitespace().next()?;
+            if let Some((start, end)) = first.split_once('-') {
+                if let (Ok(s), Ok(e)) = (usize::from_str_radix(start, 16), usize::from_str_radix(end, 16)) {
+                    inside = s < hi && e > lo;
+                    continue;
+                }
+            }
+            if inside && first == "AnonHugePages:" {
+                huge_kib += line.split_whitespace().nth(1)?.parse::<usize>().ok()?;
+            }
+        }
+        Some((huge_kib * 1024) as f64 / self.bytes as f64)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn huge_page_share(&self) -> Option<f64> {
+        None
     }
 
     /// The mapping alone, for a caller that lays out its own chase.
@@ -196,6 +255,9 @@ pub(super) fn chase_group(c: &mut Criterion, group_name: &str, shapes: &[(&str, 
         let chase = PointerChase::new(*bytes, *huge_pages);
         // Touch the whole cycle once so page faults are not measured.
         let mut idx = chase.chase(0, chase.len as u64);
+        if let (true, Some(share)) = (*huge_pages && *bytes >= 4 << 20, chase.huge_page_share()) {
+            eprintln!("{group_name}/{name}: {:.0}% on 2 MiB pages", share * 100.0);
+        }
         group.bench_function(*name, |b| {
             b.iter_custom(|iters| {
                 let start = Instant::now();
@@ -208,9 +270,9 @@ pub(super) fn chase_group(c: &mut Criterion, group_name: &str, shapes: &[(&str, 
     group.finish();
 }
 
-// The single-thread chases cover 16 GiB, like the shared buffer below. At 1 GiB, a third or more
-// of the hops hit the 300-500 MB L3 of current x86 VMs, which made one thread 15-23 ns faster
-// than all cores there (Graviton4, with a 36 MB L3, didn't move).
+// The single-thread chases cover 16 GiB, like the shared buffer below. 1 GiB reads 12-19 ns
+// faster: its 512 huge pages fit the second-level TLB where 16 GiB's 8192 don't, and on x86 some
+// hops also hit the 300-500 MB L3.
 const CHASE_BYTES: usize = 16 * GIB;
 
 fn memory_random_read_latency_benchmark(c: &mut Criterion) {
@@ -220,8 +282,31 @@ fn memory_random_read_latency_benchmark(c: &mut Criterion) {
         &[
             ("16 GiB, huge pages", CHASE_BYTES, true),
             ("16 GiB, 4 KiB pages", CHASE_BYTES, false),
+            // 2 MiB pages cover 1 GiB with 512 translations and 4 GiB with 2048, about what a
+            // second-level TLB holds; 16 GiB needs 8192.
+            ("1 GiB, huge pages", GIB, true),
+            ("4 GiB, huge pages", 4 * GIB, true),
         ],
     );
+    let name = "16 GiB, 1 GiB pages";
+    if !selected(&format!("memory_random_read_latency/{name}")) {
+        return;
+    }
+    let Some(chase) = PointerChase::new_on_1gib_pages(CHASE_BYTES) else {
+        eprintln!("memory_random_read_latency/{name}: skipped, no 1 GiB pages reserved");
+        return;
+    };
+    let mut group = c.benchmark_group("memory_random_read_latency");
+    let mut idx = chase.chase(0, chase.len as u64);
+    group.bench_function(name, |b| {
+        b.iter_custom(|iters| {
+            let start = Instant::now();
+            idx = chase.chase(idx, iters);
+            start.elapsed()
+        })
+    });
+    black_box(idx);
+    group.finish();
 }
 
 fn memory_sequential_read_latency_benchmark(c: &mut Criterion) {
