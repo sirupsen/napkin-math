@@ -125,21 +125,21 @@ chases its own 512 MiB.
 Until November 9 the one-thread chases covered 1 GiB and read in 102 / 128 /
 116 ns, and the README said 100 ns. Most of the difference is the TLB, not L3:
 1 GiB is 512 huge pages, which a second-level TLB (~2048 entries) holds, and 16
-GiB is 8192, so most hops also walk the page table. On November 10, 2026, on a
-c4-standard-48 and a c4a-standard-48 (Axion, Neoverse V2 like Graviton4), with
+GiB is 8192, so most hops also walk the page table. On November 10, 2026, on
+C4, m8i, m8g and a c4a-standard-48 (Axion, Neoverse V2 like Graviton4), with
 every buffer confirmed 100% on 2 MiB pages in `/proc/self/smaps`:
 
-| Huge pages unless noted | C4 | C4A |
-| --- | --- | --- |
-| 1 GiB | 98 ns | 117 |
-| 4 GiB | 109 ns | 123 |
-| 16 GiB | 116 ns | 131 |
-| 16 GiB on 1 GiB pages | 105 ns | 115 |
-| 16 GiB on 4 KiB pages | 154 ns | 233 |
+| Huge pages unless noted | C4 | m8i | m8g | C4A |
+| --- | --- | --- | --- | --- |
+| 1 GiB | 98 ns | 132 | 115 | 117 |
+| 4 GiB | 109 ns | 140 | 117 | 123 |
+| 16 GiB | 116 ns | 145 | 124 | 131 |
+| 16 GiB on 1 GiB pages | 105 ns | 134 | 115 | 115 |
+| 16 GiB on 4 KiB pages | 154 ns | 199 | 231 | 233 |
 
-On 1 GiB pages, 16 GiB reads as fast as 1 GiB on Axion: there the whole 15 ns
-is page walks. On C4 the walks are 12 ns, and the other 7 are the 1 GiB
-chase's hits in its 300-500 MB L3. The 1 GiB-page row needs
+On 1 GiB pages, 16 GiB reads as fast as 1 GiB on both ARM machines: there the
+whole 9-15 ns is page walks. On x86 the walks are 11-12 ns, and the other 2-7
+are the 1 GiB chase's hits in its 300-500 MB L3. The 1 GiB-page row needs
 `echo 16 | sudo tee /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages`
 first, and is skipped without it.
 
@@ -220,6 +220,36 @@ Hyperdisk HA reads as fast as Hyperdisk. Reads of never-written blocks skip the 
 (pd-standard answered in 145 us), so write the range first. EBS st1 read in 5-13 ms
 up to 256 KiB even sequentially, and wrote in 1.2-1.9 ms; the README's network HDD
 rows are pd-standard. HDD durable writes reach 69 MiB/s with 1 MiB commits.
+
+Since November 10, 2026, the README's disk, network and service latencies are p99,
+like its blob storage rows; before that they were p50, or the mean for services. One
+request at a time, p50 / p99, from `storage --sweep` on November 10 (10 s per test),
+`storage_durable_write`, `network --sizes` on November 7 and `services` on November 9:
+
+| 8 KiB unless noted | Sequential read | Random read | Sequential write | Random write | README (p99) |
+| --- | --- | --- | --- | --- | --- |
+| c4-standard-48-lssd | 84 / 123 us | 94 / 133 | 39 / 48 | 40 / 50 | |
+| m8id.12xlarge | 40 / 270 us | 95 / 324 | 32 / 40 | 32 / 40 | |
+| m8gd.12xlarge | 17 / 88 us | 76 / 90 | 19 / 21 | 19 / 21 | 150 / 200 / 40 / 40 us |
+| Hyperdisk Balanced | 307 / 827 us | 152 / 617 | 342 / 883 | 405 / 1083 | |
+| EBS gp3 | 675 / 868 us | 677 / 927 | 1075 / 1372 | 1032 / 1300 | 1 ms each |
+| Hyperdisk Balanced HA | 300 / 897 us | 176 / 807 | 1309 / 1958 | 1360 / 2399 | 1 / 1 / 2 / 2 ms |
+| pd-standard, zonal | 420 / 1038 us | 21 / 70 ms (256 KiB: 25 / 96) | 431 / 597 us | 447 / 616 (256 KiB: 971 / 2141) | 1 ms / 100 ms / 600 us / 600 us |
+| pd-standard, regional | 433 / 1186 us | 21 / 71 ms (256 KiB: 21 / 67) | 1136 / 1368 us | 1166 / 1371 (256 KiB: 1687 / 2195) | 1 ms / 100 ms / 1.5 / 1.5 ms |
+| d3 HDD | 77 / 89 us | 12.6 / 25.8 ms (256 KiB: 13.8 / 23.8) | 71 / 86 us | 4.2 / 8.2 ms (256 KiB: 5.9 / 14.4) | 100 us / 25 ms / 100 us / 15 ms |
+
+A durable 8 KiB write, one at a time: Hyperdisk 337 / 870 us, Hyperdisk HA 1253 / 1725,
+pd-standard 505 / 953 zonal and 1125 / 1296 regional, d3 HDD 0.99 / 27 ms (most commits
+wait one flush, one in a hundred a lot longer). Local SSDs and gp3 have nothing to
+flush, so their durable rows are the write's p99.
+
+Network round trips: same zone at 32 KiB, GCP 74 / 102 us and AWS 129 / 399 (250 us);
+cross-zone at 64 KiB, 422 / 483 and 905 / 1426 (1 ms); across regions the p99 is within
+8% of the p50. Services, p99 net of the mean loopback echo, C4 / m8i / m8g: cache get
+32 / 35 / 5 us (25), primary-key query 27 / 52 / 31 (40), proxy 27 / 50 / 13 (30; its
+p99 through the proxy minus nginx's mean and one more echo). Tails are 1.1-1.3x the
+median on local SSD and gp3 writes, 2-4x on Hyperdisk and AWS's network, and 7x on
+m8id's sequential reads.
 
 Network round trips against size (`network --sizes`, November 7, p50, the size each way;
 1 B / 4 KiB / 8 KiB / 16 KiB / 32 KiB / 64 KiB / 128 KiB / 256 KiB / 1 MiB / 4 MiB):
@@ -409,7 +439,8 @@ actually lands on has 2x the test size free, and refuses to write to a mounted
 device or without `--destroy`. A file target includes the file system's cost; a
 raw device does not.
 
-The README uses the max-throughput results (1 MiB QD32) and the p50 at QD1 of the
+The README uses the max-throughput results (1 MiB QD32) and the p99 at QD1 (the p50 until
+November 10; the table of both is above) of the
 largest size that's about as fast as 4 KiB (`--sweep`, below). `--only
 seq_read_8k_qd1,...` runs a subset. Local NVMe writes land in
 the drive's DRAM cache, so they beat reads at QD1 (30 us against 90). For an

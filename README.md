@@ -54,13 +54,13 @@ machine, so trust the order of magnitude more than the digit. See
 | Memory Random Read (64 B), other socket, 1 thread‡                      | 250 ns  | 15 GiB/s   |
 | CPU Encode Bitpacked Integers (512 B), 1 thread                         | 50 ns   | 10 GiB/s   |
 | CPU Encrypt / Decrypt (AES-256-GCM, 64 B), 1 thread                     | 50 ns   | 10 GiB/s   |
-| SSD Sequential Read (8 KiB), 1 thread                                   | 50 μs   | 5 GiB/s    |
-| SSD Random Read (8 KiB), 1 thread                                       | 100 μs  | 5 GiB/s    |
-| SSD Random Write (8 KiB), 1 thread                                      | 30 μs   | 3 GiB/s    |
-| SSD Sequential Durable Write (8 KiB), 1 thread†                         | 30 μs   | 3 GiB/s    |
-| SSD Sequential Write (8 KiB), 1 thread                                  | 30 μs   | 3 GiB/s    |
-| Network Same-Zone (32 KiB)                                              | 100 μs  | 3 GiB/s    |
-| Network Cross-Zone (64 KiB)                                             | 500 μs  | 3 GiB/s    |
+| SSD Sequential Read (8 KiB), 1 thread                                   | 150 μs  | 5 GiB/s    |
+| SSD Random Read (8 KiB), 1 thread                                       | 200 μs  | 5 GiB/s    |
+| SSD Random Write (8 KiB), 1 thread                                      | 40 μs   | 3 GiB/s    |
+| SSD Sequential Durable Write (8 KiB), 1 thread†                         | 40 μs   | 3 GiB/s    |
+| SSD Sequential Write (8 KiB), 1 thread                                  | 40 μs   | 3 GiB/s    |
+| Network Same-Zone (32 KiB)                                              | 250 μs  | 3 GiB/s    |
+| Network Cross-Zone (64 KiB)                                             | 1 ms    | 3 GiB/s    |
 | Blob Storage, Zonal Read (128 KiB)                                      | 50 ms   | 3 GiB/s    |
 | Network Cross-Region, Same-Continent (1 MiB)\*                          | 50 ms   | 3 GiB/s    |
 | Blob Storage, Regional Read (128 KiB)                                   | 100 ms  | 3 GiB/s    |
@@ -72,36 +72,36 @@ machine, so trust the order of magnitude more than the digit. See
 | Blob Storage, Regional Write (128 KiB)                                  | 200 ms  | 2 GiB/s    |
 | Blob Storage, Zonal Write (128 KiB)                                     | 200 ms  | 2 GiB/s    |
 | CPU Serialize (JSON, Protobuf, 256 B), 1 thread                         | 200 ns  | 1 GiB/s    |
-| Network Disk, Regional Random Read (8 KiB), 1 thread                    | 500 μs  | 1 GiB/s    |
-| Network Disk, Regional Sequential Read (8 KiB), 1 thread                | 500 μs  | 1 GiB/s    |
-| Network Disk, Zonal Random Read (8 KiB), 1 thread                       | 500 μs  | 1 GiB/s    |
-| Network Disk, Zonal Random Write (8 KiB), 1 thread                      | 500 μs  | 1 GiB/s    |
-| Network Disk, Zonal Sequential Durable Write (8 KiB), 1 thread†         | 500 μs  | 1 GiB/s    |
-| Network Disk, Zonal Sequential Read (8 KiB), 1 thread                   | 500 μs  | 1 GiB/s    |
-| Network Disk, Zonal Sequential Write (8 KiB), 1 thread                  | 500 μs  | 1 GiB/s    |
-| Network Disk, Regional Random Write (8 KiB), 1 thread                   | 1 ms    | 1 GiB/s    |
-| Network Disk, Regional Sequential Durable Write (8 KiB), 1 thread†      | 1 ms    | 1 GiB/s    |
-| Network Disk, Regional Sequential Write (8 KiB), 1 thread               | 1 ms    | 1 GiB/s    |
+| Network Disk, Regional Random Read (8 KiB), 1 thread                    | 1 ms    | 1 GiB/s    |
+| Network Disk, Regional Sequential Read (8 KiB), 1 thread                | 1 ms    | 1 GiB/s    |
+| Network Disk, Zonal Random Read (8 KiB), 1 thread                       | 1 ms    | 1 GiB/s    |
+| Network Disk, Zonal Random Write (8 KiB), 1 thread                      | 1 ms    | 1 GiB/s    |
+| Network Disk, Zonal Sequential Durable Write (8 KiB), 1 thread†         | 1 ms    | 1 GiB/s    |
+| Network Disk, Zonal Sequential Read (8 KiB), 1 thread                   | 1 ms    | 1 GiB/s    |
+| Network Disk, Zonal Sequential Write (8 KiB), 1 thread                  | 1 ms    | 1 GiB/s    |
+| Network Disk, Regional Random Write (8 KiB), 1 thread                   | 2 ms    | 1 GiB/s    |
+| Network Disk, Regional Sequential Durable Write (8 KiB), 1 thread†      | 2 ms    | 1 GiB/s    |
+| Network Disk, Regional Sequential Write (8 KiB), 1 thread               | 2 ms    | 1 GiB/s    |
 | CPU Deserialize (JSON, Protobuf, 256 B), 1 thread                       | 500 ns  | 500 MiB/s  |
 | CPU Compress (lz4, zstd -1, 4 KiB), 1 thread                            | 10 μs   | 500 MiB/s  |
 | CPU Sort (64-bit integers, 4 KiB), 1 thread                             | 3 μs    | 300 MiB/s  |
 | CPU Encode Parquet (dictionary + zstd, 4 KiB page), 1 thread            | 50 μs   | 300 MiB/s  |
-| Network Disk, Regional, HDD Sequential Read (8 KiB), 1 thread           | 500 μs  | 250 MiB/s  |
-| Network Disk, Zonal, HDD Random Write (8 KiB), 1 thread                 | 500 μs  | 250 MiB/s  |
-| Network Disk, Zonal, HDD Sequential Read (8 KiB), 1 thread              | 500 μs  | 250 MiB/s  |
-| Network Disk, Zonal, HDD Sequential Write (8 KiB), 1 thread             | 500 μs  | 250 MiB/s  |
-| Network Disk, Regional, HDD Random Read (256 KiB), 1 thread             | 20 ms   | 250 MiB/s  |
-| Network Disk, Zonal, HDD Random Read (256 KiB), 1 thread                | 20 ms   | 250 MiB/s  |
-| HDD Sequential Write (8 KiB), 1 thread                                  | 50 μs   | 200 MiB/s  |
+| Network Disk, Zonal, HDD Random Write (8 KiB), 1 thread                 | 600 μs  | 250 MiB/s  |
+| Network Disk, Zonal, HDD Sequential Write (8 KiB), 1 thread             | 600 μs  | 250 MiB/s  |
+| Network Disk, Regional, HDD Sequential Read (8 KiB), 1 thread           | 1 ms    | 250 MiB/s  |
+| Network Disk, Zonal, HDD Sequential Read (8 KiB), 1 thread              | 1 ms    | 250 MiB/s  |
+| Network Disk, Regional, HDD Random Read (256 KiB), 1 thread             | 100 ms  | 250 MiB/s  |
+| Network Disk, Zonal, HDD Random Read (256 KiB), 1 thread                | 100 ms  | 250 MiB/s  |
 | HDD Sequential Read (8 KiB), 1 thread                                   | 100 μs  | 200 MiB/s  |
-| Network Disk, Zonal, HDD Sequential Durable Write (8 KiB), 1 thread†    | 500 μs  | 200 MiB/s  |
-| Network Disk, Regional, HDD Random Write (8 KiB), 1 thread              | 1 ms    | 200 MiB/s  |
-| Network Disk, Regional, HDD Sequential Durable Write (8 KiB), 1 thread† | 1 ms    | 200 MiB/s  |
-| Network Disk, Regional, HDD Sequential Write (8 KiB), 1 thread          | 1 ms    | 200 MiB/s  |
-| HDD Random Write (256 KiB), 1 thread                                    | 5 ms    | 100 MiB/s  |
-| HDD Random Read (256 KiB), 1 thread                                     | 10 ms   | 100 MiB/s  |
+| HDD Sequential Write (8 KiB), 1 thread                                  | 100 μs  | 200 MiB/s  |
+| Network Disk, Zonal, HDD Sequential Durable Write (8 KiB), 1 thread†    | 1 ms    | 200 MiB/s  |
+| Network Disk, Regional, HDD Random Write (8 KiB), 1 thread              | 1.5 ms  | 200 MiB/s  |
+| Network Disk, Regional, HDD Sequential Durable Write (8 KiB), 1 thread† | 1.5 ms  | 200 MiB/s  |
+| Network Disk, Regional, HDD Sequential Write (8 KiB), 1 thread          | 1.5 ms  | 200 MiB/s  |
+| HDD Random Write (256 KiB), 1 thread                                    | 15 ms   | 100 MiB/s  |
+| HDD Random Read (256 KiB), 1 thread                                     | 25 ms   | 100 MiB/s  |
 | Blob Storage, Regional Read (128 KiB), 1 connection                     | 100 ms  | 100 MiB/s  |
-| HDD Sequential Durable Write (8 KiB), 1 thread†                         | 1 ms    | 50 MiB/s   |
+| HDD Sequential Durable Write (8 KiB), 1 thread†                         | 30 ms   | 50 MiB/s   |
 | CPU Atomic Increment                                                    | 5 ns    |            |
 | CPU Mutex Lock + Unlock                                                 | 10 ns   |            |
 | CPU Atomic Increment, contended                                         | 30 ns   |            |
@@ -110,10 +110,10 @@ machine, so trust the order of magnitude more than the digit. See
 | CPU Context Switch                                                      | 1 μs    |            |
 | CPU Cross-core Wake-up                                                  | 2 μs    |            |
 | CPU TCP Connect (+1 RTT)                                                | 10 μs   |            |
-| Cache Get (Memcached, Redis) (+1 RTT)                                   | 10 μs   |            |
-| Proxy Request (HAProxy, Nginx) (+1 RTT)                                 | 20 μs   |            |
+| Cache Get (Memcached, Redis) (+1 RTT)                                   | 25 μs   |            |
 | CPU Thread Spawn                                                        | 30 μs   |            |
-| Database Query, primary key (MySQL, Postgres) (+1 RTT)                  | 30 μs   |            |
+| Proxy Request (HAProxy, Nginx) (+1 RTT)                                 | 30 μs   |            |
+| Database Query, primary key (MySQL, Postgres) (+1 RTT)                  | 40 μs   |            |
 | CPU Process Spawn                                                       | 300 μs  |            |
 | CPU TLS 1.3 Handshake (+1 RTT)                                          | 300 μs  |            |
 | Blob Storage, Regional Conditional Write (128 KiB)                      | 100 ms  |            |
@@ -124,7 +124,7 @@ machine, so trust the order of magnitude more than the digit. See
 † pwrite + fdatasync into a preallocated file; one thread keeps 32 in flight
 with io_uring, and the latency is one at a time. Cloud SSDs and most network
 disks have no write cache to flush (pd-standard and Azure Premium SSD flush in
-30-80 μs), so a durable write costs a write. HDDs flush theirs (~1 ms), which
+30-80 μs), so a durable write costs a write. HDDs flush theirs (~1 ms, 30 ms at p99), which
 32 in flight don't speed up. Appending instead costs ~150 μs on SSD and 1-4 ms on
 network disks, because the file system journals the new size. A local SSD is
 lost with its VM; a network disk isn't.
@@ -145,7 +145,8 @@ connections, which fill the VM's ~30 Gbit/s at any distance.
 Every row is one latency and one throughput. The latency is one request at a
 time, each waiting for the last, at the size in parentheses: a natural unit, a
 cache line or a block, that's as fast as anything smaller. HDD random I/O uses
-256 KiB, because the seek dwarfs the transfer. Throughput is the most we got at any size and any number of requests
+256 KiB, because the seek dwarfs the transfer. Disk, network, blob storage and
+service latencies are p99; CPU and memory rows time a tight loop, which has only a mean. Throughput is the most we got at any size and any number of requests
 in flight ([BENCHMARKING.md](BENCHMARKING.md) has the smallest size that reaches it), on a 48 vCPU VM and its disks: local NVMe SSDs striped together, EBS
 gp3 at 16k IOPS / 1000 MiB/s and Hyperdisk Balanced at 80k IOPS / 1600 MiB/s, 2 TB
 pd-standard for network HDDs. Large random requests are nearly sequential, so
@@ -170,7 +171,7 @@ one to its backend.
 
 One TCP flow gets the VM's bandwidth on GCP but 5 Gbit/s (600 MiB/s) on AWS
 outside a placement group, and 3 MiB / RTT across regions with default buffers (\*). Blob Storage
-latency is p99 from the same region; Zonal is S3 Express One Zone and GCS Rapid.
+latency is from the same region; Zonal is S3 Express One Zone and GCS Rapid.
 Conditional writes are compare-and-swap on one object, one at a time; regional
 GCS also allows only ~1 write per second to the same object. Region-to-region
 latencies: [cloudping](https://www.cloudping.co/).
